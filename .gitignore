@@ -1,0 +1,42 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/atask
+/bin/atask
+
+# Test
+*.test
+*.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Things database (reference only, not part of the project)
+*.thingsdatabase/
+
+# Superpowers brainstorm sessions
+.superpowers/
+
+# Environment
+.env
+.env.local
