@@ -16,37 +16,6 @@ const (
 	PaneDetail
 )
 
-// Stub types — will be fully implemented in separate files.
-// Sidebar is defined in sidebar.go.
-// Detail is defined in detail.go.
-
-// List is a stub for the task list pane.
-type List struct{ height, width int }
-
-// Palette is a stub for the command palette overlay.
-type Palette struct{}
-
-// Search is a stub for the search overlay.
-type Search struct{}
-
-// Help is a stub for the help overlay.
-type Help struct{}
-
-// Confirm is a stub for the confirmation dialog.
-type Confirm struct{}
-
-func (l List) View() string    { return "[list]" }
-func (p Palette) View() string { return "[palette]" }
-func (s Search) View() string  { return "[search]" }
-func (h Help) View() string    { return "[help]" }
-func (c Confirm) View() string { return "[confirm]" }
-
-func (l List) Update(msg tea.Msg) tea.Cmd    { return nil }
-func (p Palette) Update(msg tea.Msg) tea.Cmd { return nil }
-func (s Search) Update(msg tea.Msg) tea.Cmd  { return nil }
-func (h Help) Update(msg tea.Msg) tea.Cmd    { return nil }
-func (c Confirm) Update(msg tea.Msg) tea.Cmd { return nil }
-
 // App is the root bubbletea model coordinating three panes.
 type App struct {
 	client *client.Client
@@ -83,6 +52,7 @@ func NewApp(c *client.Client) App {
 		client:  c,
 		focus:   PaneSidebar,
 		sidebar: NewSidebar(),
+		list:    NewList(),
 		detail:  NewDetail(),
 		statusbar: StatusBar{
 			context: "Inbox",
@@ -114,30 +84,38 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		// Route to active overlay first.
 		if a.palette != nil {
-			cmd := a.palette.Update(msg)
-			if isEscape(msg) {
+			updated, cmd, closed := a.palette.Update(msg)
+			if closed {
 				a.palette = nil
+			} else {
+				*a.palette = updated
 			}
 			return a, cmd
 		}
 		if a.search != nil {
-			cmd := a.search.Update(msg)
-			if isEscape(msg) {
+			updated, cmd, closed := a.search.Update(msg)
+			if closed {
 				a.search = nil
+			} else {
+				*a.search = updated
 			}
 			return a, cmd
 		}
 		if a.help != nil {
-			cmd := a.help.Update(msg)
-			if isEscape(msg) {
+			updated, cmd, closed := a.help.Update(msg)
+			if closed {
 				a.help = nil
+			} else {
+				*a.help = updated
 			}
 			return a, cmd
 		}
 		if a.confirm != nil {
-			cmd := a.confirm.Update(msg)
-			if isEscape(msg) {
+			updated, cmd, closed := a.confirm.Update(msg)
+			if closed {
 				a.confirm = nil
+			} else {
+				*a.confirm = updated
 			}
 			return a, cmd
 		}
@@ -152,17 +130,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case isShiftTab(msg):
 			a.focus = (a.focus + 2) % 3
 			return a, nil
-		case isRune(msg, ':'):
-			p := &Palette{}
-			a.palette = p
+		case isRune(msg, ':') || isCtrl(msg, 'p'):
+			p := a.newPalette()
+			a.palette = &p
 			return a, nil
 		case isRune(msg, '/'):
-			s := &Search{}
-			a.search = s
+			s := NewSearch(a.list.width)
+			a.search = &s
 			return a, nil
 		case isRune(msg, '?'):
-			h := &Help{}
-			a.help = h
+			h := NewHelp(a.width, a.height)
+			a.help = &h
 			return a, nil
 		case isRune(msg, 'r'):
 			return a, a.cmdLoadInbox()
@@ -176,7 +154,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newSidebar, cmd = a.sidebar.Update(msg)
 			a.sidebar = newSidebar
 		case PaneList:
-			cmd = a.list.Update(msg)
+			var newList List
+			newList, cmd = a.list.Update(msg)
+			a.list = newList
 		case PaneDetail:
 			var detailCmd tea.Cmd
 			a.detail, detailCmd = a.detail.Update(msg)
@@ -203,7 +183,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case TasksLoadedMsg:
-		// Propagate tasks to list pane (stub: no-op for now).
+		a.list.SetTasks(msg.Tasks, a.statusbar.context)
 		return a, nil
 
 	// --- SSE messages ---
@@ -317,11 +297,10 @@ func (a App) renderOverlay(base, overlay string) string {
 		row := startRow + i
 		if row < len(lines) {
 			// Replace the center section of the base line with the overlay line.
-			base_line := lines[row]
-			base_runes := []rune(base_line)
-			overlay_runes := []rune(padding + ol)
-			if leftPad+len([]rune(ol)) <= len(base_runes) {
-				merged := string(base_runes[:leftPad]) + string(overlay_runes[leftPad:]) + string(base_runes[leftPad+len([]rune(ol)):])
+			baseRunes := []rune(lines[row])
+			overlayRunes := []rune(padding + ol)
+			if leftPad+len([]rune(ol)) <= len(baseRunes) {
+				merged := string(baseRunes[:leftPad]) + string(overlayRunes[leftPad:]) + string(baseRunes[leftPad+len([]rune(ol)):])
 				lines[row] = merged
 			} else {
 				lines[row] = padding + ol
@@ -353,12 +332,60 @@ func (a App) resizePanes() App {
 	detailWidth := remaining - listWidth
 
 	a.sidebar.SetSize(sidebarContentWidth, contentHeight)
-	a.list.width = listWidth
-	a.list.height = contentHeight
+	a.list.SetSize(listWidth, contentHeight)
 	a.detail.SetSize(detailWidth, contentHeight)
 	a.statusbar.width = a.width
 
 	return a
+}
+
+// newPalette builds a Palette pre-populated with context-aware commands.
+func (a App) newPalette() Palette {
+	cmds := []Command{
+		{
+			Name:     "Go to Inbox",
+			Category: "Navigation",
+			Action: func() tea.Cmd {
+				return func() tea.Msg { return ViewSelectedMsg{View: "inbox"} }
+			},
+		},
+		{
+			Name:     "Go to Today",
+			Category: "Navigation",
+			Action: func() tea.Cmd {
+				return func() tea.Msg { return ViewSelectedMsg{View: "today"} }
+			},
+		},
+		{
+			Name:     "Go to Upcoming",
+			Category: "Navigation",
+			Action: func() tea.Cmd {
+				return func() tea.Msg { return ViewSelectedMsg{View: "upcoming"} }
+			},
+		},
+		{
+			Name:     "Go to Someday",
+			Category: "Navigation",
+			Action: func() tea.Cmd {
+				return func() tea.Msg { return ViewSelectedMsg{View: "someday"} }
+			},
+		},
+		{
+			Name:     "Refresh",
+			Category: "System",
+			Action: func() tea.Cmd {
+				return a.cmdLoadInbox()
+			},
+		},
+		{
+			Name:     "Quit",
+			Category: "System",
+			Action: func() tea.Cmd {
+				return tea.Quit
+			},
+		},
+	}
+	return NewPalette(cmds, a.width, a.height)
 }
 
 // --- Commands ---
