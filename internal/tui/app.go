@@ -40,6 +40,10 @@ type App struct {
 	tags      []client.Tag
 	locations []client.Location
 
+	// Active view: one of "inbox", "today", "upcoming", "someday", "logbook",
+	// "project:<id>", or "area:<id>".
+	currentView string
+
 	// SSE channel
 	sseEvents <-chan client.DomainEvent
 
@@ -49,11 +53,12 @@ type App struct {
 // NewApp constructs an App with the given API client.
 func NewApp(c *client.Client) App {
 	return App{
-		client:  c,
-		focus:   PaneSidebar,
-		sidebar: NewSidebar(),
-		list:    NewList(),
-		detail:  NewDetail(),
+		client:      c,
+		focus:       PaneSidebar,
+		sidebar:     NewSidebar(),
+		list:        NewList(),
+		detail:      NewDetail(),
+		currentView: "inbox",
 		statusbar: StatusBar{
 			context: "Inbox",
 		},
@@ -186,21 +191,40 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.list.SetTasks(msg.Tasks, a.statusbar.context)
 		return a, nil
 
+	// --- Navigation messages ---
+
+	case ViewSelectedMsg:
+		a.currentView = msg.View
+		a.statusbar.context = strings.Title(msg.View) //nolint:staticcheck
+		return a, a.refreshCurrentView()
+
+	case ProjectSelectedMsg:
+		a.currentView = "project:" + msg.ID
+		// Find the project title for the status bar.
+		for _, p := range a.projects {
+			if p.ID == msg.ID {
+				a.statusbar.context = p.Title
+				break
+			}
+		}
+		return a, a.refreshCurrentView()
+
+	case AreaSelectedMsg:
+		a.currentView = "area:" + msg.ID
+		// Find the area title for the status bar.
+		for _, ar := range a.areas {
+			if ar.ID == msg.ID {
+				a.statusbar.context = ar.Title
+				break
+			}
+		}
+		return a, a.refreshCurrentView()
+
 	// --- SSE messages ---
 
 	case SSEEventMsg:
 		// Trigger a targeted refresh based on event type, then keep listening.
-		var refreshCmd tea.Cmd
-		switch {
-		case strings.HasPrefix(msg.Event.Type, "task."):
-			refreshCmd = a.cmdLoadInbox()
-		case strings.HasPrefix(msg.Event.Type, "project."):
-			refreshCmd = a.cmdLoadProjects()
-		case strings.HasPrefix(msg.Event.Type, "area."):
-			refreshCmd = a.cmdLoadAreas()
-		case strings.HasPrefix(msg.Event.Type, "tag."):
-			refreshCmd = a.cmdLoadTags()
-		}
+		refreshCmd := a.handleSSEEvent(msg.Event)
 		return a, tea.Batch(refreshCmd, a.cmdListenSSE())
 
 	case sseStartedMsg:
@@ -440,6 +464,66 @@ func (a App) cmdLoadInbox() tea.Cmd {
 	}
 }
 
+func (a App) cmdLoadToday() tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListToday(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
+func (a App) cmdLoadUpcoming() tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListUpcoming(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
+func (a App) cmdLoadSomeday() tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListSomeday(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
+func (a App) cmdLoadLogbook() tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListLogbook(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
+func (a App) cmdLoadProjectTasks(projectID string) tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListTasksByProject(context.Background(), projectID)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
+func (a App) cmdLoadAreaTasks(areaID string) tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := a.client.ListTasksByArea(context.Background(), areaID)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return TasksLoadedMsg{Tasks: tasks}
+	}
+}
+
 func (a App) cmdStartSSE() tea.Cmd {
 	return func() tea.Msg {
 		ch, err := a.client.SubscribeEvents(context.Background(), "tasks,projects,areas,tags")
@@ -448,6 +532,78 @@ func (a App) cmdStartSSE() tea.Cmd {
 		}
 		return sseStartedMsg{ch: ch}
 	}
+}
+
+// handleSSEEvent maps an incoming domain event to the appropriate refresh command(s).
+func (a *App) handleSSEEvent(evt client.DomainEvent) tea.Cmd {
+	prefix := strings.Split(evt.Type, ".")[0]
+	switch prefix {
+	case "task":
+		return a.refreshCurrentView()
+	case "project":
+		return tea.Batch(a.cmdLoadProjects(), a.refreshCurrentView())
+	case "area":
+		return tea.Batch(a.cmdLoadAreas(), a.refreshCurrentView())
+	case "checklist", "activity":
+		// Refresh the detail pane if a task is currently selected.
+		if a.list.SelectedTask() != nil {
+			return a.refreshDetail()
+		}
+	case "tag":
+		return a.cmdLoadTags()
+	case "location":
+		return a.cmdLoadLocations()
+	}
+	return nil
+}
+
+// refreshCurrentView reloads the task list for whichever view is active.
+func (a App) refreshCurrentView() tea.Cmd {
+	switch {
+	case a.currentView == "" || a.currentView == "inbox":
+		return a.cmdLoadInbox()
+	case a.currentView == "today":
+		return a.cmdLoadToday()
+	case a.currentView == "upcoming":
+		return a.cmdLoadUpcoming()
+	case a.currentView == "someday":
+		return a.cmdLoadSomeday()
+	case a.currentView == "logbook":
+		return a.cmdLoadLogbook()
+	case strings.HasPrefix(a.currentView, "project:"):
+		id := strings.TrimPrefix(a.currentView, "project:")
+		return a.cmdLoadProjectTasks(id)
+	case strings.HasPrefix(a.currentView, "area:"):
+		id := strings.TrimPrefix(a.currentView, "area:")
+		return a.cmdLoadAreaTasks(id)
+	default:
+		return a.cmdLoadInbox()
+	}
+}
+
+// refreshDetail reloads the checklist and activity log for the selected task.
+func (a App) refreshDetail() tea.Cmd {
+	task := a.list.SelectedTask()
+	if task == nil {
+		return nil
+	}
+	id := task.ID
+	return tea.Batch(
+		func() tea.Msg {
+			items, err := a.client.ListChecklistItems(context.Background(), id)
+			if err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return ChecklistLoadedMsg{TaskID: id, Items: items}
+		},
+		func() tea.Msg {
+			acts, err := a.client.ListActivities(context.Background(), id)
+			if err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return ActivitiesLoadedMsg{TaskID: id, Activities: acts}
+		},
+	)
 }
 
 // sseStartedMsg is an internal message carrying the SSE channel.
