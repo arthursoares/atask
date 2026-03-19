@@ -29,10 +29,11 @@ type App struct {
 	statusbar StatusBar
 
 	// Overlay state (nil = not shown)
-	palette *Palette
-	search  *Search
-	help    *Help
-	confirm *Confirm
+	palette  *Palette
+	search   *Search
+	help     *Help
+	confirm  *Confirm
+	schedule *Schedule
 
 	// Cached data
 	areas     []client.Area
@@ -121,6 +122,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.confirm = nil
 			} else {
 				*a.confirm = updated
+			}
+			return a, cmd
+		}
+		if a.schedule != nil {
+			updated, cmd, closed := a.schedule.Update(msg)
+			if closed {
+				a.schedule = nil
+			} else {
+				*a.schedule = updated
 			}
 			return a, cmd
 		}
@@ -256,6 +266,27 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.focus = msg.Pane
 		}
 		return a, nil
+
+	case ScheduleTaskSignal:
+		if t := a.list.SelectedTask(); t != nil {
+			s := NewSchedule(t.ID, a.width)
+			a.schedule = &s
+		}
+		return a, nil
+
+	case ScheduleSelectedMsg:
+		taskID := msg.TaskID
+		schedule := msg.Schedule
+		return a, func() tea.Msg {
+			err := a.client.UpdateTaskSchedule(context.Background(), taskID, schedule)
+			if err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return ScheduleUpdatedMsg{ID: taskID, Schedule: schedule}
+		}
+
+	case ScheduleUpdatedMsg:
+		return a, a.refreshCurrentView()
 	}
 
 	return a, nil
@@ -282,6 +313,9 @@ func (a App) View() tea.View {
 	}
 	if a.confirm != nil {
 		return tea.NewView(a.renderOverlay(full, a.confirm.View()))
+	}
+	if a.schedule != nil {
+		return tea.NewView(a.renderOverlay(full, a.schedule.View()))
 	}
 
 	return tea.NewView(full)
