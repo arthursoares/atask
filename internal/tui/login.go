@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -207,12 +208,12 @@ func (l Login) submit() tea.Cmd {
 			}
 		}
 		return func() tea.Msg {
-			_, err := l.client.Register(nil, email, password, name)
+			_, err := l.client.Register(context.Background(), email, password, name)
 			if err != nil {
 				return loginErrorMsg{err: fmt.Errorf("registration failed: %w", err)}
 			}
 			// After register, login to get token
-			token, err := l.client.Login(nil, email, password)
+			token, err := l.client.Login(context.Background(), email, password)
 			if err != nil {
 				return loginErrorMsg{err: fmt.Errorf("login after register failed: %w", err)}
 			}
@@ -221,7 +222,7 @@ func (l Login) submit() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		token, err := l.client.Login(nil, email, password)
+		token, err := l.client.Login(context.Background(), email, password)
 		if err != nil {
 			return loginErrorMsg{err: fmt.Errorf("login failed: %w", err)}
 		}
