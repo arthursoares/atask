@@ -10,10 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/atask/atask/internal/api"
+	"github.com/atask/atask/internal/client"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/service"
 	"github.com/atask/atask/internal/store"
+	"github.com/atask/atask/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,9 +27,9 @@ func main() {
 	}
 }
 
-func buildRootCmd() *cobra.Command {
-	var serverURL string
+var flagServer string
 
+func buildRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "atask",
 		Short: "atask - task management CLI",
@@ -35,7 +38,7 @@ func buildRootCmd() *cobra.Command {
 		},
 	}
 
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "http://localhost:8080", "atask server URL")
+	rootCmd.PersistentFlags().StringVar(&flagServer, "server", "http://localhost:8080", "atask server URL")
 
 	serveCmd := buildServeCmd()
 	rootCmd.AddCommand(serveCmd)
@@ -66,8 +69,29 @@ func buildServeCmd() *cobra.Command {
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {
-	fmt.Println("TUI coming soon. Use 'atask serve'.")
-	return nil
+	c := client.New(flagServer, "")
+
+	// Auth: check ATASK_TOKEN env first, then prompt
+	token := os.Getenv("ATASK_TOKEN")
+	if token == "" {
+		fmt.Print("Email: ")
+		var email string
+		fmt.Scanln(&email)
+		fmt.Print("Password: ")
+		var password string
+		fmt.Scanln(&password)
+		var err error
+		token, err = c.Login(context.Background(), email, password)
+		if err != nil {
+			return fmt.Errorf("login failed: %w", err)
+		}
+	}
+	c.SetToken(token)
+
+	app := tui.NewApp(c)
+	p := tea.NewProgram(app)
+	_, err := p.Run()
+	return err
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
