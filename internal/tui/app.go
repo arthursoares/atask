@@ -17,23 +17,35 @@ const (
 )
 
 // Stub types — will be fully implemented in separate files.
+// Sidebar is defined in sidebar.go.
+// Detail is defined in detail.go.
+
+// List is a stub for the task list pane.
 type List struct{ height, width int }
+
+// Palette is a stub for the command palette overlay.
 type Palette struct{}
+
+// Search is a stub for the search overlay.
 type Search struct{}
+
+// Help is a stub for the help overlay.
 type Help struct{}
+
+// Confirm is a stub for the confirmation dialog.
 type Confirm struct{}
 
-func (l List) View() string     { return "[list]" }
-func (p Palette) View() string  { return "[palette]" }
-func (s Search) View() string   { return "[search]" }
-func (h Help) View() string     { return "[help]" }
-func (c Confirm) View() string  { return "[confirm]" }
+func (l List) View() string    { return "[list]" }
+func (p Palette) View() string { return "[palette]" }
+func (s Search) View() string  { return "[search]" }
+func (h Help) View() string    { return "[help]" }
+func (c Confirm) View() string { return "[confirm]" }
 
-func (l List) Update(msg tea.Msg) tea.Cmd     { return nil }
-func (p Palette) Update(msg tea.Msg) tea.Cmd  { return nil }
-func (s Search) Update(msg tea.Msg) tea.Cmd   { return nil }
-func (h Help) Update(msg tea.Msg) tea.Cmd     { return nil }
-func (c Confirm) Update(msg tea.Msg) tea.Cmd  { return nil }
+func (l List) Update(msg tea.Msg) tea.Cmd    { return nil }
+func (p Palette) Update(msg tea.Msg) tea.Cmd { return nil }
+func (s Search) Update(msg tea.Msg) tea.Cmd  { return nil }
+func (h Help) Update(msg tea.Msg) tea.Cmd    { return nil }
+func (c Confirm) Update(msg tea.Msg) tea.Cmd { return nil }
 
 // App is the root bubbletea model coordinating three panes.
 type App struct {
