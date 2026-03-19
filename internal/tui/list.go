@@ -363,11 +363,6 @@ func (l List) renderTaskRow(t *client.Task, selected bool, width int) string {
 func (l List) renderEditRow(t *client.Task, width int) string {
 	// Show "☐ " prefix + text input.
 	prefix := "☐ "
-	prefixWidth := lipgloss.Width(prefix)
-	inputWidth := width - prefixWidth
-	if inputWidth < 4 {
-		inputWidth = 4
-	}
 	return SelectedTask.Width(width).Render(prefix + l.editInput.View())
 }
 
