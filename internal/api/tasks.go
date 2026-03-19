@@ -64,7 +64,33 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
-	tasks, err := h.tasks.List(r.Context())
+	q := r.URL.Query()
+
+	var (
+		tasks []*domain.Task
+		err   error
+	)
+
+	switch {
+	case q.Get("project_id") != "":
+		tasks, err = h.tasks.ListByProject(r.Context(), q.Get("project_id"))
+	case q.Get("area_id") != "":
+		tasks, err = h.tasks.ListByArea(r.Context(), q.Get("area_id"))
+	case q.Get("section_id") != "":
+		tasks, err = h.tasks.ListBySection(r.Context(), q.Get("section_id"))
+	case q.Get("location_id") != "":
+		tasks, err = h.tasks.ListByLocation(r.Context(), q.Get("location_id"))
+	case q.Get("schedule") != "":
+		schedule, parseErr := domain.ParseSchedule(q.Get("schedule"))
+		if parseErr != nil {
+			RespondError(w, http.StatusBadRequest, parseErr.Error())
+			return
+		}
+		tasks, err = h.tasks.ListBySchedule(r.Context(), schedule)
+	default:
+		tasks, err = h.tasks.List(r.Context())
+	}
+
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

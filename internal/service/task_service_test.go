@@ -349,6 +349,62 @@ func TestTaskService_SetRecurrence(t *testing.T) {
 	}
 }
 
+func TestTaskService_ListByProject(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	task1, err := svc.Create(ctx, "Task in project", "user-1")
+	if err != nil {
+		t.Fatalf("Create task 1: %v", err)
+	}
+	projectID := "project-1"
+	if err := svc.MoveToProject(ctx, task1.ID, &projectID, "user-1"); err != nil {
+		t.Fatalf("MoveToProject: %v", err)
+	}
+
+	// Create a task NOT in the project
+	if _, err := svc.Create(ctx, "Task without project", "user-1"); err != nil {
+		t.Fatalf("Create task 2: %v", err)
+	}
+
+	tasks, err := svc.ListByProject(ctx, projectID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Errorf("expected 1 task, got %d", len(tasks))
+	}
+	if tasks[0].ID != task1.ID {
+		t.Errorf("expected task %s, got %s", task1.ID, tasks[0].ID)
+	}
+}
+
+func TestTaskService_ListBySchedule(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	task1, err := svc.Create(ctx, "Someday task", "user-1")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := svc.UpdateSchedule(ctx, task1.ID, domain.ScheduleSomeday, "user-1"); err != nil {
+		t.Fatalf("UpdateSchedule: %v", err)
+	}
+
+	// task2 stays in inbox (default)
+	if _, err := svc.Create(ctx, "Inbox task", "user-1"); err != nil {
+		t.Fatalf("Create task 2: %v", err)
+	}
+
+	tasks, err := svc.ListBySchedule(ctx, domain.ScheduleSomeday)
+	if err != nil {
+		t.Fatalf("ListBySchedule: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Errorf("expected 1 someday task, got %d", len(tasks))
+	}
+}
+
 func TestTaskService_Reorder(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
