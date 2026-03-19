@@ -30,6 +30,12 @@ func (rw *responseWriter) Flush() {
 	}
 }
 
+// Unwrap returns the underlying ResponseWriter, allowing http.ResponseController
+// to access connection-level features like SetWriteDeadline.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 // Logging wraps a handler and logs each request with method, path, status
 // code, and duration using slog.
 func Logging(next http.Handler) http.Handler {

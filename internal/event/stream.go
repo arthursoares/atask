@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/atask/atask/internal/domain"
 )
@@ -34,7 +36,7 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if topicsParam == "" {
 		topics = []string{"*"}
 	} else {
-		for _, t := range strings.Split(topicsParam, ",") {
+		for t := range strings.SplitSeq(topicsParam, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
 				topics = append(topics, t)
@@ -43,6 +45,12 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(topics) == 0 {
 			topics = []string{"*"}
 		}
+	}
+
+	// Disable write deadline for this long-lived SSE connection.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		slog.Warn("SSE: failed to clear write deadline", "error", err)
 	}
 
 	// Set SSE headers
@@ -57,7 +65,6 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Subscribe to each topic and track IDs for cleanup
 	subIDs := make([]int, 0, len(topics))
 	for _, topic := range topics {
-		topic := topic // capture loop variable
 		id := sm.bus.Subscribe(topic, func(e *domain.DomainEvent) {
 			select {
 			case ch <- e:
@@ -84,7 +91,14 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case e := <-ch:
-			payload, err := json.Marshal(e.Payload)
+			// Merge standard event fields into payload so SSE clients
+			// always know which entity the event refers to.
+			data := make(map[string]any, len(e.Payload)+3)
+			data["entity_type"] = e.EntityType
+			data["entity_id"] = e.EntityID
+			data["actor_id"] = e.ActorID
+			maps.Copy(data, e.Payload)
+			payload, err := json.Marshal(data)
 			if err != nil {
 				slog.Warn("SSE failed to marshal event payload", "error", err)
 				payload = []byte("{}")
