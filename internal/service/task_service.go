@@ -199,11 +199,60 @@ func (s *TaskService) List(ctx context.Context) ([]*domain.Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	return tasksFromRows(rows), nil
+}
+
+// ListByProject returns non-deleted tasks belonging to the given project.
+func (s *TaskService) ListByProject(ctx context.Context, projectID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByProject(ctx, sql.NullString{String: projectID, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return tasksFromRows(rows), nil
+}
+
+// ListByArea returns non-deleted tasks belonging to the given area.
+func (s *TaskService) ListByArea(ctx context.Context, areaID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByArea(ctx, sql.NullString{String: areaID, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return tasksFromRows(rows), nil
+}
+
+// ListBySection returns non-deleted tasks belonging to the given section.
+func (s *TaskService) ListBySection(ctx context.Context, sectionID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksBySection(ctx, sql.NullString{String: sectionID, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return tasksFromRows(rows), nil
+}
+
+// ListBySchedule returns non-deleted tasks with the given schedule.
+func (s *TaskService) ListBySchedule(ctx context.Context, schedule domain.Schedule) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksBySchedule(ctx, int64(schedule))
+	if err != nil {
+		return nil, err
+	}
+	return tasksFromRows(rows), nil
+}
+
+// ListByLocation returns non-deleted tasks at the given location.
+func (s *TaskService) ListByLocation(ctx context.Context, locationID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByLocation(ctx, sql.NullString{String: locationID, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return tasksFromRows(rows), nil
+}
+
+func tasksFromRows(rows []sqlc.Task) []*domain.Task {
 	tasks := make([]*domain.Task, len(rows))
 	for i, row := range rows {
 		tasks[i] = taskFromRow(row)
 	}
-	return tasks, nil
+	return tasks
 }
 
 // Complete sets a task's status to completed and emits task.completed.
