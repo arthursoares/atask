@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -70,28 +72,90 @@ func buildServeCmd() *cobra.Command {
 
 func runTUI(cmd *cobra.Command, args []string) error {
 	c := client.New(flagServer, "")
+	ctx := context.Background()
 
-	// Auth: check ATASK_TOKEN env first, then prompt
+	// Auth priority: env var → stored credentials → interactive prompt
 	token := os.Getenv("ATASK_TOKEN")
+
 	if token == "" {
-		fmt.Print("Email: ")
-		var email string
-		fmt.Scanln(&email)
-		fmt.Print("Password: ")
-		var password string
-		fmt.Scanln(&password)
-		var err error
-		token, err = c.Login(context.Background(), email, password)
-		if err != nil {
-			return fmt.Errorf("login failed: %w", err)
+		token, _ = loadStoredToken()
+	}
+
+	if token != "" {
+		// Validate stored/env token by hitting /auth/me
+		c.SetToken(token)
+		if _, err := c.GetMe(ctx); err != nil {
+			fmt.Println("Stored credentials expired, please login again.")
+			token = ""
 		}
 	}
-	c.SetToken(token)
+
+	if token == "" {
+		token, err := interactiveLogin(c, ctx)
+		if err != nil {
+			return err
+		}
+		c.SetToken(token)
+		_ = saveToken(token)
+	}
 
 	app := tui.NewApp(c)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
+}
+
+func interactiveLogin(c *client.Client, ctx context.Context) (string, error) {
+	fmt.Print("Email: ")
+	var email string
+	fmt.Scanln(&email)
+	fmt.Print("Password: ")
+	var password string
+	fmt.Scanln(&password)
+	token, err := c.Login(ctx, email, password)
+	if err != nil {
+		return "", fmt.Errorf("login failed: %w", err)
+	}
+	return token, nil
+}
+
+func credentialsPath() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configDir = os.Getenv("HOME")
+	}
+	return filepath.Join(configDir, "atask", "credentials.json")
+}
+
+func loadStoredToken() (string, error) {
+	data, err := os.ReadFile(credentialsPath())
+	if err != nil {
+		return "", err
+	}
+	var creds struct {
+		Token  string `json:"token"`
+		Server string `json:"server"`
+	}
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return "", err
+	}
+	// Only use token if it's for the same server
+	if creds.Server != "" && creds.Server != flagServer {
+		return "", fmt.Errorf("token is for a different server")
+	}
+	return creds.Token, nil
+}
+
+func saveToken(token string) error {
+	path := credentialsPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	creds, _ := json.Marshal(struct {
+		Token  string `json:"token"`
+		Server string `json:"server"`
+	}{Token: token, Server: flagServer})
+	return os.WriteFile(path, creds, 0600)
 }
 
 func runServe(cmd *cobra.Command, args []string) error {

@@ -233,6 +233,15 @@ func (c *Client) Login(ctx context.Context, email, password string) (string, err
 	return resp.Token, nil
 }
 
+// GetMe returns the current user profile. Useful for validating stored tokens.
+func (c *Client) GetMe(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.doJSON(ctx, http.MethodGet, "/auth/me", nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // --- Views ---
 
 // ListInbox returns tasks in the inbox view.
