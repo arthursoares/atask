@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,26 +14,89 @@ import (
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/service"
 	"github.com/atask/atask/internal/store"
+	"github.com/spf13/cobra"
 )
 
 func main() {
+	rootCmd := buildRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func buildRootCmd() *cobra.Command {
+	var serverURL string
+
+	rootCmd := &cobra.Command{
+		Use:   "atask",
+		Short: "atask - task management CLI",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTUI(cmd, args)
+		},
+	}
+
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "http://localhost:8080", "atask server URL")
+
+	serveCmd := buildServeCmd()
+	rootCmd.AddCommand(serveCmd)
+
+	return rootCmd
+}
+
+func buildServeCmd() *cobra.Command {
+	var (
+		addr      string
+		dbPath    string
+		jwtSecret string
+	)
+
+	serveCmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the atask HTTP server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runServe(cmd, args)
+		},
+	}
+
+	serveCmd.Flags().StringVar(&addr, "addr", "", "listen address (env: ADDR, default: :8080)")
+	serveCmd.Flags().StringVar(&dbPath, "db", "", "database file path (env: DB_PATH, default: atask.db)")
+	serveCmd.Flags().StringVar(&jwtSecret, "jwt-secret", "", "JWT signing secret (env: JWT_SECRET)")
+
+	return serveCmd
+}
+
+func runTUI(cmd *cobra.Command, args []string) error {
+	fmt.Println("TUI coming soon. Use 'atask serve'.")
+	return nil
+}
+
+func runServe(cmd *cobra.Command, args []string) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
-	// Config from environment
-	dbPath := os.Getenv("DB_PATH")
+	// Config from flags then environment
+	dbPath, _ := cmd.Flags().GetString("db")
+	if dbPath == "" {
+		dbPath = os.Getenv("DB_PATH")
+	}
 	if dbPath == "" {
 		dbPath = "atask.db"
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret, _ := cmd.Flags().GetString("jwt-secret")
+	if jwtSecret == "" {
+		jwtSecret = os.Getenv("JWT_SECRET")
+	}
 	if jwtSecret == "" {
 		jwtSecret = "change-me-in-production"
 	}
 
-	addr := os.Getenv("ADDR")
+	addr, _ := cmd.Flags().GetString("addr")
+	if addr == "" {
+		addr = os.Getenv("ADDR")
+	}
 	if addr == "" {
 		addr = ":8080"
 	}
@@ -41,14 +105,14 @@ func main() {
 	db, err := store.NewDB(dbPath)
 	if err != nil {
 		slog.Error("failed to open database", "err", err)
-		os.Exit(1)
+		return err
 	}
 	defer db.Close()
 
 	// Run migrations
 	if err := db.Migrate(); err != nil {
 		slog.Error("failed to run migrations", "err", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Create event infrastructure
@@ -126,8 +190,9 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("server shutdown error", "err", err)
-		os.Exit(1)
+		return err
 	}
 
 	slog.Info("server stopped")
+	return nil
 }
