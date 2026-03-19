@@ -118,7 +118,7 @@ Authenticate with `Authorization: Bearer <jwt>` or `Authorization: ApiKey <key>`
 
 ```
 POST   /tasks                         Create task (lands in inbox)
-GET    /tasks                         List all tasks
+GET    /tasks                         List all tasks (filterable, see below)
 GET    /tasks/{id}                    Get task
 DELETE /tasks/{id}                    Delete task
 
@@ -140,6 +140,16 @@ DELETE /tasks/{id}/tags/{tagId}       Remove tag
 POST   /tasks/{id}/links/{taskId}     Link to another task
 DELETE /tasks/{id}/links/{taskId}     Remove link
 ```
+
+**Task list filters** — `GET /tasks` supports optional query parameters (one at a time):
+
+| Parameter     | Example                              | Description                  |
+|---------------|--------------------------------------|------------------------------|
+| `project_id`  | `?project_id=<uuid>`                 | Tasks in a project           |
+| `area_id`     | `?area_id=<uuid>`                    | Tasks in an area             |
+| `section_id`  | `?section_id=<uuid>`                 | Tasks in a section           |
+| `location_id` | `?location_id=<uuid>`                | Tasks at a location          |
+| `schedule`    | `?schedule=inbox\|anytime\|someday`  | Tasks with a given schedule  |
 
 ### Checklist Items
 
