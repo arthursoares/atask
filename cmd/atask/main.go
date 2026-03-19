@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -82,11 +83,15 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	}
 
 	if token != "" {
-		// Validate stored/env token by hitting /auth/me
 		c.SetToken(token)
+		// Validate stored token — only clear if we get a definite auth error,
+		// not a connection error (server might not be running yet)
 		if _, err := c.GetMe(ctx); err != nil {
-			fmt.Println("Stored credentials expired, please login again.")
-			token = ""
+			// Check if it's a connection error vs auth error
+			if isAuthError(err) {
+				token = ""
+			}
+			// If it's a connection error, keep the token and let the TUI handle it
 		}
 	}
 
@@ -150,6 +155,11 @@ func saveToken(token string) error {
 		Server string `json:"server"`
 	}{Token: token, Server: flagServer})
 	return os.WriteFile(path, creds, 0600)
+}
+
+func isAuthError(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "401") || strings.Contains(s, "unauthorized") || strings.Contains(s, "Unauthorized")
 }
 
 func runServe(cmd *cobra.Command, args []string) error {

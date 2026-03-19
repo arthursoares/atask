@@ -371,13 +371,13 @@ func (c *Client) RemoveTaskTag(ctx context.Context, taskID, tagID string) error 
 // ListTasksByProject returns tasks belonging to a project.
 func (c *Client) ListTasksByProject(ctx context.Context, projectID string) ([]Task, error) {
 	var tasks []Task
-	return tasks, c.doJSON(ctx, http.MethodGet, "/tasks?project="+projectID, nil, &tasks)
+	return tasks, c.doJSON(ctx, http.MethodGet, "/tasks?project_id="+projectID, nil, &tasks)
 }
 
 // ListTasksByArea returns tasks belonging to an area.
 func (c *Client) ListTasksByArea(ctx context.Context, areaID string) ([]Task, error) {
 	var tasks []Task
-	return tasks, c.doJSON(ctx, http.MethodGet, "/tasks?area="+areaID, nil, &tasks)
+	return tasks, c.doJSON(ctx, http.MethodGet, "/tasks?area_id="+areaID, nil, &tasks)
 }
 
 // --- Projects ---
