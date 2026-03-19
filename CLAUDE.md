@@ -35,6 +35,23 @@ internal/
 - `service/` orchestrates: validate domain rules → persist via sqlc → emit events
 - Every mutation emits both delta events (sync) and domain events (intelligence)
 
+## TUI (internal/tui/)
+
+Three-pane Bubbletea v2 TUI consuming the REST API as a thin client.
+
+- Root model in app.go coordinates sidebar, list, detail sub-models
+- Each pane has its own Update/View, root routes messages to focused pane
+- API calls via internal/client/ return tea.Cmd producing typed messages
+- SSE events arrive as SSEEventMsg and trigger targeted refreshes
+- Overlays (palette, search, help, confirm, picker, schedule) render over the layout
+- Styles in styles.go, key bindings in keys.go, messages in messages.go
+
+### Adding a new action
+
+1. Define the signal/result message type in messages.go
+2. Emit the signal from the pane's Update (list.go, detail.go, sidebar.go)
+3. Handle the signal in app.go Update — call the client, return refresh cmd
+
 ## Key Patterns
 
 ### Adding a new endpoint

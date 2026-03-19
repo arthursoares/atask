@@ -36,6 +36,15 @@ The server starts on `:8080` by default. Configure with environment variables:
 docker compose up -d
 ```
 
+### CLI commands
+
+```bash
+atask                              # Start TUI (connects to localhost:8080)
+atask --server http://host:8080    # TUI pointing at remote server
+atask serve                        # Headless API server
+atask serve --addr :9090           # Custom address
+```
+
 ### Verify it works
 
 ```bash
@@ -62,6 +71,28 @@ curl -X POST http://localhost:8080/tasks \
 curl http://localhost:8080/views/inbox \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+### Terminal UI
+
+Start the API server first, then launch the TUI:
+
+```bash
+# Start the server
+atask serve &
+
+# Option 1: Set token via environment
+export ATASK_TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"secret"}' | jq -r .token)
+atask
+
+# Option 2: Interactive login
+atask  # prompts for email and password
+```
+
+Three-pane layout: sidebar (views/areas/tags) + task list + detail (notes/checklist/activity).
+
+Key shortcuts: `Tab` (panes), `j/k` (navigate), `n` (new), `x` (complete), `e` (edit), `:` (command palette), `/` (search), `?` (help), `q` (quit).
 
 ## Architecture
 
