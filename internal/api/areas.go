@@ -49,7 +49,15 @@ func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) List(w http.ResponseWriter, r *http.Request) {
-	areas, err := h.areas.List(r.Context())
+	var areas []*domain.Area
+	var err error
+
+	if r.URL.Query().Get("include_archived") == "true" {
+		areas, err = h.areas.ListAll(r.Context())
+	} else {
+		areas, err = h.areas.List(r.Context())
+	}
+
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

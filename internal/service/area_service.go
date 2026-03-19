@@ -131,6 +131,19 @@ func (s *AreaService) List(ctx context.Context) ([]*domain.Area, error) {
 	return areas, nil
 }
 
+// ListAll returns all non-deleted areas including archived ones.
+func (s *AreaService) ListAll(ctx context.Context) ([]*domain.Area, error) {
+	rows, err := s.queries.ListAllAreas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	areas := make([]*domain.Area, len(rows))
+	for i, row := range rows {
+		areas[i] = areaFromRow(row)
+	}
+	return areas, nil
+}
+
 // Rename validates and updates the area title, then emits events.
 func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) error {
 	if title == "" {

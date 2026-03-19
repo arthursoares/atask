@@ -60,6 +60,33 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Filter by status (default: pending only)
+	statusFilter := r.URL.Query().Get("status")
+	if statusFilter == "" {
+		statusFilter = "pending"
+	}
+	if statusFilter != "all" {
+		var filtered []*domain.Project
+		for _, p := range projects {
+			switch statusFilter {
+			case "pending":
+				if p.Status == domain.StatusPending {
+					filtered = append(filtered, p)
+				}
+			case "completed":
+				if p.Status == domain.StatusCompleted {
+					filtered = append(filtered, p)
+				}
+			case "cancelled":
+				if p.Status == domain.StatusCancelled {
+					filtered = append(filtered, p)
+				}
+			}
+		}
+		projects = filtered
+	}
+
 	RespondJSON(w, http.StatusOK, projects)
 }
 

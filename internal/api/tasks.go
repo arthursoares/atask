@@ -95,6 +95,33 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Filter by status (default: pending only)
+	statusFilter := q.Get("status")
+	if statusFilter == "" {
+		statusFilter = "pending"
+	}
+	if statusFilter != "all" {
+		var filtered []*domain.Task
+		for _, t := range tasks {
+			switch statusFilter {
+			case "pending":
+				if t.Status == domain.StatusPending {
+					filtered = append(filtered, t)
+				}
+			case "completed":
+				if t.Status == domain.StatusCompleted {
+					filtered = append(filtered, t)
+				}
+			case "cancelled":
+				if t.Status == domain.StatusCancelled {
+					filtered = append(filtered, t)
+				}
+			}
+		}
+		tasks = filtered
+	}
+
 	RespondJSON(w, http.StatusOK, tasks)
 }
 
