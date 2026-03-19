@@ -89,7 +89,9 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				slog.Warn("SSE failed to marshal event payload", "error", err)
 				payload = []byte("{}")
 			}
-			fmt.Fprintf(w, "event: %s\ndata: %s\nid: %d\n\n", e.Type, payload, e.ID)
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\nid: %d\n\n", e.Type, payload, e.ID); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

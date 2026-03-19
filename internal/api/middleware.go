@@ -22,6 +22,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Flush delegates to the underlying ResponseWriter if it supports http.Flusher
+// (required for SSE streaming).
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Logging wraps a handler and logs each request with method, path, status
 // code, and duration using slog.
 func Logging(next http.Handler) http.Handler {
