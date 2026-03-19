@@ -42,3 +42,5 @@ Thumbs.db
 .env.local
 .worktrees/
 migrate_things.py
+.playwright-mcp/
+probe
