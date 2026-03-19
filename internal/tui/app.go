@@ -245,14 +245,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AreasLoadedMsg:
 		a.areas = msg.Areas
+		a.sidebar.SetData(a.areas, a.projects, a.tags, nil)
 		return a, nil
 
 	case ProjectsLoadedMsg:
 		a.projects = msg.Projects
+		a.sidebar.SetData(a.areas, a.projects, a.tags, nil)
 		return a, nil
 
 	case TagsLoadedMsg:
 		a.tags = msg.Tags
+		a.sidebar.SetData(a.areas, a.projects, a.tags, nil)
 		return a, nil
 
 	case LocationsLoadedMsg:
@@ -612,22 +615,26 @@ func (a App) renderOverlay(base, overlay string) string {
 func (a App) resizePanes() App {
 	// Status bar height is 1 line.
 	const statusBarHeight = 1
-	// Each border adds 2 (top + bottom) rows and 2 (left + right) columns.
-	const borderSize = 2
+	// Each pane border adds 2 rows (top + bottom) and 2 cols (left + right).
+	const borderCols = 2
+	const borderRows = 2
+	const numPanes = 3
 
-	contentHeight := a.height - statusBarHeight - borderSize
+	contentHeight := a.height - statusBarHeight - borderRows
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
 
 	// Sidebar has a fixed width; list and detail share the rest equally.
+	// Total border overhead: 3 panes × 2 cols each = 6 columns.
 	sidebarContentWidth := SidebarWidth
-	remaining := a.width - (sidebarContentWidth + borderSize) - borderSize*2
+	totalBorderCols := numPanes * borderCols
+	remaining := a.width - sidebarContentWidth - totalBorderCols
 	if remaining < 0 {
 		remaining = 0
 	}
-	listWidth := remaining / 2
-	detailWidth := remaining - listWidth
+	listWidth := remaining * 3 / 10   // ~30%
+	detailWidth := remaining - listWidth  // ~70%
 
 	a.sidebar.SetSize(sidebarContentWidth, contentHeight)
 	a.list.SetSize(listWidth, contentHeight)

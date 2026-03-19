@@ -255,15 +255,8 @@ func (s Sidebar) View() string {
 		return ""
 	}
 
-	var border lipgloss.Style
-	if s.focused {
-		border = FocusedBorder
-	} else {
-		border = BlurredBorder
-	}
-
-	// Inner width: subtract border (1 char each side).
-	innerWidth := s.width - 2
+	// Width is the content width — borders are applied by app.paneView().
+	innerWidth := s.width
 	if innerWidth < 1 {
 		innerWidth = 1
 	}
@@ -291,7 +284,7 @@ func (s Sidebar) View() string {
 	}
 
 	content := strings.Join(lines, "\n")
-	return border.
+	return lipgloss.NewStyle().
 		Width(innerWidth).
 		Height(s.height).
 		Render(content)
