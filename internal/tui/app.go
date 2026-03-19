@@ -4,11 +4,53 @@ import (
 	"context"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/atask/atask/internal/client"
 )
+
+// inputOverlay is a lightweight single-line text-input overlay used for
+// prompts like "New task title".
+type inputOverlay struct {
+	prompt string
+	input  textinput.Model
+	onDone func(value string) tea.Cmd
+}
+
+func newInputOverlay(prompt string, onDone func(string) tea.Cmd) inputOverlay {
+	ti := textinput.New()
+	ti.Placeholder = "…"
+	ti.Focus()
+	return inputOverlay{prompt: prompt, input: ti, onDone: onDone}
+}
+
+// Update handles key presses. Returns updated overlay, a command, and whether
+// it was closed.
+func (o inputOverlay) Update(msg tea.KeyPressMsg) (inputOverlay, tea.Cmd, bool) {
+	switch {
+	case isEscape(msg):
+		return o, nil, true
+	case isEnter(msg):
+		val := strings.TrimSpace(o.input.Value())
+		var cmd tea.Cmd
+		if val != "" && o.onDone != nil {
+			cmd = o.onDone(val)
+		}
+		return o, cmd, true
+	default:
+		var cmd tea.Cmd
+		o.input, cmd = o.input.Update(msg)
+		return o, cmd, false
+	}
+}
+
+// View renders the input overlay content.
+func (o inputOverlay) View() string {
+	promptStyle := lipgloss.NewStyle().Bold(true)
+	return promptStyle.Render(o.prompt) + "\n\n" + o.input.View()
+}
 
 const (
 	PaneSidebar = iota
@@ -29,11 +71,13 @@ type App struct {
 	statusbar StatusBar
 
 	// Overlay state (nil = not shown)
-	palette  *Palette
-	search   *Search
-	help     *Help
-	confirm  *Confirm
-	schedule *Schedule
+	palette      *Palette
+	search       *Search
+	help         *Help
+	confirm      *Confirm
+	schedule     *Schedule
+	picker       *Picker
+	inputOverlay *inputOverlay
 
 	// Cached data
 	areas     []client.Area
@@ -134,6 +178,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, cmd
 		}
+		if a.picker != nil {
+			updated, cmd, closed := a.picker.Update(msg)
+			if closed {
+				a.picker = nil
+			} else {
+				*a.picker = updated
+			}
+			return a, cmd
+		}
+		if a.inputOverlay != nil {
+			updated, cmd, closed := a.inputOverlay.Update(msg)
+			if closed {
+				a.inputOverlay = nil
+			} else {
+				*a.inputOverlay = updated
+			}
+			return a, cmd
+		}
 
 		// Global keys.
 		switch {
@@ -201,6 +263,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.list.SetTasks(msg.Tasks, a.statusbar.context)
 		return a, nil
 
+	case ChecklistLoadedMsg:
+		a.detail.SetChecklist(msg.Items)
+		return a, nil
+
+	case ActivitiesLoadedMsg:
+		a.detail.SetActivities(msg.Activities)
+		return a, nil
+
 	// --- Navigation messages ---
 
 	case ViewSelectedMsg:
@@ -229,6 +299,166 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, a.refreshCurrentView()
+
+	// --- Task action messages from list pane ---
+
+	case TaskSelectedMsg:
+		id := msg.ID
+		// Find the task in the list and populate the detail pane.
+		for i := range a.list.tasks {
+			if a.list.tasks[i].ID == id {
+				a.detail.SetTask(&a.list.tasks[i])
+				break
+			}
+		}
+		a.focus = PaneDetail
+		return a, a.refreshDetailByID(id)
+
+	case TaskCompletedMsg:
+		id := msg.ID
+		return a, func() tea.Msg {
+			if err := a.client.CompleteTask(context.Background(), id); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return RefreshMsg{}
+		}
+
+	case TitleUpdatedMsg:
+		id, title := msg.ID, msg.Title
+		return a, func() tea.Msg {
+			if err := a.client.UpdateTaskTitle(context.Background(), id, title); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return RefreshMsg{}
+		}
+
+	case CreateTaskSignal:
+		overlay := newInputOverlay("New task title:", func(title string) tea.Cmd {
+			return func() tea.Msg {
+				task, err := a.client.CreateTask(context.Background(), title)
+				if err != nil {
+					return ErrorMsg{Err: err}
+				}
+				return TaskCreatedMsg{Task: *task}
+			}
+		})
+		a.inputOverlay = &overlay
+		return a, nil
+
+	case TaskCreatedMsg:
+		return a, a.refreshCurrentView()
+
+	case CancelTaskSignal:
+		if t := a.list.SelectedTask(); t != nil {
+			id := t.ID
+			return a, func() tea.Msg {
+				if err := a.client.CancelTask(context.Background(), id); err != nil {
+					return ErrorMsg{Err: err}
+				}
+				return RefreshMsg{}
+			}
+		}
+		return a, nil
+
+	case DeleteTaskSignal:
+		if t := a.list.SelectedTask(); t != nil {
+			id := t.ID
+			c := NewConfirm("Delete task? This cannot be undone.", a.width, func() tea.Cmd {
+				return func() tea.Msg {
+					if err := a.client.DeleteTask(context.Background(), id); err != nil {
+						return ErrorMsg{Err: err}
+					}
+					return RefreshMsg{}
+				}
+			})
+			a.confirm = &c
+		}
+		return a, nil
+
+	case MoveTaskSignal:
+		if t := a.list.SelectedTask(); t != nil {
+			taskID := t.ID
+			items := make([]PickerItem, 0, len(a.projects)+1)
+			items = append(items, PickerItem{ID: "", Label: "(no project / inbox)"})
+			for _, p := range a.projects {
+				items = append(items, PickerItem{ID: p.ID, Label: p.Title})
+			}
+			p := NewPicker("Move to project", items, a.width, a.height, func(projectID string) tea.Cmd {
+				return func() tea.Msg {
+					var pid *string
+					if projectID != "" {
+						pid = &projectID
+					}
+					if err := a.client.MoveTaskToProject(context.Background(), taskID, pid); err != nil {
+						return ErrorMsg{Err: err}
+					}
+					return RefreshMsg{}
+				}
+			})
+			a.picker = &p
+		}
+		return a, nil
+
+	case RefreshMsg:
+		return a, a.refreshCurrentView()
+
+	// --- Detail pane messages ---
+
+	case EditNotesMsg:
+		// v0: flash a status hint; full $EDITOR integration is deferred.
+		a.statusbar.flash = "Edit notes via API not yet implemented"
+		return a, nil
+
+	case ToggleChecklistItemMsg:
+		taskID, itemID, done := msg.TaskID, msg.ItemID, msg.Done
+		return a, func() tea.Msg {
+			var err error
+			if done {
+				err = a.client.CompleteChecklistItem(context.Background(), taskID, itemID)
+			} else {
+				err = a.client.UncompleteChecklistItem(context.Background(), taskID, itemID)
+			}
+			if err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return detailRefreshMsg{taskID: taskID}
+		}
+
+	case AddChecklistItemMsg:
+		taskID, title := msg.TaskID, msg.Title
+		return a, func() tea.Msg {
+			if _, err := a.client.AddChecklistItem(context.Background(), taskID, title); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return detailRefreshMsg{taskID: taskID}
+		}
+
+	case DeleteChecklistItemMsg:
+		taskID, itemID := msg.TaskID, msg.ItemID
+		return a, func() tea.Msg {
+			if err := a.client.DeleteChecklistItem(context.Background(), taskID, itemID); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return detailRefreshMsg{taskID: taskID}
+		}
+
+	case AddCommentMsg:
+		taskID, content := msg.TaskID, msg.Content
+		return a, func() tea.Msg {
+			if _, err := a.client.AddActivity(context.Background(), taskID, "human", "comment", content); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return detailRefreshMsg{taskID: taskID}
+		}
+
+	case detailRefreshMsg:
+		return a, a.refreshDetailByID(msg.taskID)
+
+	// --- Search overlay messages ---
+
+	case SearchQueryMsg:
+		a.list.SetFilter(msg.Query)
+		return a, nil
 
 	// --- SSE messages ---
 
@@ -316,6 +546,12 @@ func (a App) View() tea.View {
 	}
 	if a.schedule != nil {
 		return tea.NewView(a.renderOverlay(full, a.schedule.View()))
+	}
+	if a.picker != nil {
+		return tea.NewView(a.renderOverlay(full, a.picker.View()))
+	}
+	if a.inputOverlay != nil {
+		return tea.NewView(a.renderOverlay(full, a.inputOverlay.View()))
 	}
 
 	return tea.NewView(full)
@@ -615,13 +851,24 @@ func (a App) refreshCurrentView() tea.Cmd {
 	}
 }
 
-// refreshDetail reloads the checklist and activity log for the selected task.
+// detailRefreshMsg is an internal message to reload detail pane data for a
+// specific task ID.
+type detailRefreshMsg struct {
+	taskID string
+}
+
+// refreshDetail reloads the checklist and activity log for the currently
+// selected task (determined from the list pane).
 func (a App) refreshDetail() tea.Cmd {
 	task := a.list.SelectedTask()
 	if task == nil {
 		return nil
 	}
-	id := task.ID
+	return a.refreshDetailByID(task.ID)
+}
+
+// refreshDetailByID reloads checklist and activities for a specific task ID.
+func (a App) refreshDetailByID(id string) tea.Cmd {
 	return tea.Batch(
 		func() tea.Msg {
 			items, err := a.client.ListChecklistItems(context.Background(), id)
