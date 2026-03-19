@@ -91,10 +91,18 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	}
 
 	if token == "" {
-		token, err := interactiveLogin(c, ctx)
+		// Run TUI login screen
+		loginModel := tui.NewLogin(c)
+		p := tea.NewProgram(loginModel)
+		finalModel, err := p.Run()
 		if err != nil {
-			return err
+			return fmt.Errorf("login screen: %w", err)
 		}
+		result := finalModel.(tui.Login).Result()
+		if result == nil {
+			return nil // user pressed Esc
+		}
+		token = result.Token
 		c.SetToken(token)
 		_ = saveToken(token)
 	}
@@ -103,20 +111,6 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
-}
-
-func interactiveLogin(c *client.Client, ctx context.Context) (string, error) {
-	fmt.Print("Email: ")
-	var email string
-	fmt.Scanln(&email)
-	fmt.Print("Password: ")
-	var password string
-	fmt.Scanln(&password)
-	token, err := c.Login(ctx, email, password)
-	if err != nil {
-		return "", fmt.Errorf("login failed: %w", err)
-	}
-	return token, nil
 }
 
 func credentialsPath() string {
