@@ -275,7 +275,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ViewSelectedMsg:
 		a.currentView = msg.View
-		a.statusbar.context = strings.Title(msg.View) //nolint:staticcheck
+		if len(msg.View) > 0 {
+			a.statusbar.context = strings.ToUpper(msg.View[:1]) + msg.View[1:]
+		} else {
+			a.statusbar.context = msg.View
+		}
 		return a, a.refreshCurrentView()
 
 	case ProjectSelectedMsg:
