@@ -47,8 +47,10 @@ dependencies = [
 name = "atask"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "dioxus",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
@@ -3252,6 +3254,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -3273,12 +3276,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 

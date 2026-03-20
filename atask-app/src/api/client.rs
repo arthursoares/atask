@@ -157,6 +157,14 @@ impl ApiClient {
         self.token.is_some()
     }
 
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
+
     // -- Auth ---------------------------------------------------------------
 
     pub async fn login(&self, email: &str, password: &str) -> Result<String, ApiError> {
