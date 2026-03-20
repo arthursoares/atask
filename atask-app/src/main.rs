@@ -6,6 +6,7 @@ mod state;
 mod views;
 
 use components::sidebar::Sidebar;
+use components::toolbar::Toolbar;
 use state::navigation::ActiveView;
 
 fn main() {
@@ -24,11 +25,16 @@ fn App() -> Element {
         div { class: "app-frame",
             Sidebar {}
             div { class: "app-main",
-                div { class: "app-toolbar",
-                    span { class: "app-view-title", "Today" }
-                }
+                Toolbar {}
                 div { class: "app-content",
-                    p { "Tasks will appear here." }
+                    match *active_view.read() {
+                        ActiveView::Today => rsx! { views::today::TodayView {} },
+                        _ => rsx! {
+                            div { class: "empty-state",
+                                p { "This view is not implemented yet." }
+                            }
+                        },
+                    }
                 }
             }
         }

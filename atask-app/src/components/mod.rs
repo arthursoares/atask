@@ -6,3 +6,4 @@ pub mod tag_pill;
 pub mod section_header;
 pub mod new_task_inline;
 pub mod button;
+pub mod toolbar;
