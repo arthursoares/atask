@@ -487,6 +487,20 @@ html, body {
     background: var(--sidebar-selected);
 }
 
+.task-grip {
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-quaternary);
+    opacity: 0;
+    flex-shrink: 0;
+}
+
+.task-item:hover .task-grip {
+    opacity: 1;
+}
+
 .task-content {
     flex: 1;
     min-width: 0;
@@ -955,6 +969,7 @@ html, body {
 .tag-accent   { background: var(--accent-subtle);   color: var(--accent); }
 .tag-today    { background: var(--today-bg);         color: var(--today-star); }
 .tag-deadline { background: var(--deadline-bg);      color: var(--deadline-red); }
+.tag-overdue  { background: var(--deadline-bg);      color: var(--deadline-red); font-weight: 700; }
 .tag-agent    { background: var(--agent-bg);         color: var(--agent-tint); }
 .tag-success  { background: var(--success-bg);       color: var(--success); }
 
