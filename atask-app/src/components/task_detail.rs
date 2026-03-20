@@ -32,14 +32,13 @@ fn find_task(
 pub fn TaskDetail() -> Element {
     let mut selected: SelectedTaskSignal = use_context();
     let api: ApiSignal = use_context();
-    let mut inbox: InboxTasks = use_context();
-    let mut today: TodayTasks = use_context();
-    let mut upcoming: UpcomingTasks = use_context();
-    let mut someday: SomedayTasks = use_context();
-    let mut logbook: LogbookTasks = use_context();
+    let inbox: InboxTasks = use_context();
+    let today: TodayTasks = use_context();
+    let upcoming: UpcomingTasks = use_context();
+    let someday: SomedayTasks = use_context();
+    let logbook: LogbookTasks = use_context();
     let project_tasks: ProjectTasks = use_context();
     let projects: ProjectList = use_context();
-    let active_view: ViewSignal = use_context();
 
     let mut last_loaded_id: Signal<Option<String>> = use_signal(|| None);
     let mut title_draft: Signal<String> = use_signal(|| String::new());
@@ -142,19 +141,8 @@ pub fn TaskDetail() -> Element {
                                                     let title = title_draft.read().clone();
                                                     let api_clone = api.0.read().clone();
                                                     let tid = tid.clone();
-                                                    println!("[DETAIL] Blur: saving title: {title}");
                                                     spawn(async move {
-                                                        match api_clone.update_task_title(&tid, &title).await {
-                                                            Ok(_) => println!("[DETAIL] Title saved via blur"),
-                                                            Err(e) => println!("[DETAIL] Title save error: {e}"),
-                                                        }
-                                                        // Refetch active views so task list shows updated title
-                                                        let (i, t) = tokio::join!(
-                                                            api_clone.list_inbox(),
-                                                            api_clone.list_today(),
-                                                        );
-                                                        if let Ok(tasks) = i { inbox.0.set(tasks); }
-                                                        if let Ok(tasks) = t { today.0.set(tasks); }
+                                                        let _ = api_clone.update_task_title(&tid, &title).await;
                                                     });
                                                 }
                                             },
@@ -201,15 +189,7 @@ pub fn TaskDetail() -> Element {
                                                                 Ok(_) => println!("[DETAIL] Schedule saved"),
                                                                 Err(e) => println!("[DETAIL] Schedule save error: {e}"),
                                                             }
-                                                            // Refetch all views since task may have moved
-                                                            let (i, t, s) = tokio::join!(
-                                                                api_clone.list_inbox(),
-                                                                api_clone.list_today(),
-                                                                api_clone.list_someday(),
-                                                            );
-                                                            if let Ok(tasks) = i { inbox.0.set(tasks); }
-                                                            if let Ok(tasks) = t { today.0.set(tasks); }
-                                                            if let Ok(tasks) = s { someday.0.set(tasks); }
+                                                            // SSE will handle view sync when wired up
                                                         });
                                                     }
                                                 },
