@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use dioxus::prelude::*;
 use crate::api::client::ApiClient;
-use crate::api::types::{Task, Project, Area, Tag};
+use crate::api::types::{Task, Project, Area, Tag, Section};
 
 // ── Navigation ──
 
@@ -62,3 +63,9 @@ pub struct TagList(pub Signal<Vec<Tag>>);
 
 #[derive(Clone, Copy)]
 pub struct LoadingSignal(pub Signal<bool>);
+
+#[derive(Clone, Copy)]
+pub struct ProjectTasks(pub Signal<HashMap<String, Vec<Task>>>);
+
+#[derive(Clone, Copy)]
+pub struct ProjectSections(pub Signal<HashMap<String, Vec<Section>>>);

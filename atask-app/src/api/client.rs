@@ -311,6 +311,14 @@ impl ApiClient {
         .await
     }
 
+    pub async fn move_task_to_section(&self, id: &str, section_id: Option<&str>) -> Result<(), ApiError> {
+        self.put_json(
+            &format!("/tasks/{id}/section"),
+            &serde_json::json!({"id": section_id}),
+        )
+        .await
+    }
+
     pub async fn set_today_index(&self, id: &str, index: Option<i32>) -> Result<(), ApiError> {
         self.put_json(
             &format!("/tasks/{id}/today-index"),

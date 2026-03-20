@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use dioxus::prelude::*;
 
 mod api;
@@ -38,6 +39,8 @@ fn App() -> Element {
     let mut areas = AreaList(use_signal(|| Vec::new()));
     let mut tags = TagList(use_signal(|| Vec::new()));
     let mut loading = LoadingSignal(use_signal(|| false));
+    let project_tasks = ProjectTasks(use_signal(|| HashMap::new()));
+    let project_sections = ProjectSections(use_signal(|| HashMap::new()));
 
     // Provide ALL via context
     use_context_provider(|| api);
@@ -53,6 +56,8 @@ fn App() -> Element {
     use_context_provider(|| areas);
     use_context_provider(|| tags);
     use_context_provider(|| loading);
+    use_context_provider(|| project_tasks);
+    use_context_provider(|| project_sections);
 
     // Load data when token becomes available
     use_effect(move || {
@@ -101,11 +106,7 @@ fn App() -> Element {
                             ActiveView::Upcoming => rsx! { views::upcoming::UpcomingView {} },
                             ActiveView::Someday => rsx! { views::someday::SomedayView {} },
                             ActiveView::Logbook => rsx! { views::logbook::LogbookView {} },
-                            _ => rsx! {
-                                div { class: "empty-state",
-                                    p { class: "empty-state-text", "View coming soon." }
-                                }
-                            },
+                            ActiveView::Project(ref id) => rsx! { views::project::ProjectView { project_id: id.clone() } },
                         }
                     }
                 }
