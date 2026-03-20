@@ -6,6 +6,8 @@ use crate::state::navigation::ActiveView;
 pub fn Toolbar() -> Element {
     let active_view: Signal<ActiveView> = use_context();
 
+    let is_project = matches!(&*active_view.read(), ActiveView::Project(_));
+
     let (icon, title, subtitle) = match &*active_view.read() {
         ActiveView::Today => {
             let now = chrono::Local::now();
@@ -84,52 +86,79 @@ pub fn Toolbar() -> Element {
             (icon, "Logbook".to_string(), None)
         }
         ActiveView::Project(id) => {
-            let project_name = match id.as_str() {
-                "p1" => "atask",
-                "p2" => "Homelab",
-                "p3" => "Roon Display",
-                _ => "Project",
+            let (project_name, color) = match id.as_str() {
+                "p1" => ("atask v0", "#5B9BD5"),
+                "p2" => ("Homelab", "#6BBF6A"),
+                "p3" => ("Roon Display", "#C77DBA"),
+                _ => ("Project", "#5B9BD5"),
             };
             let icon = rsx! {
                 svg {
                     class: "toolbar-icon",
                     view_box: "0 0 16 16",
-                    circle { cx: "8", cy: "8", r: "5", fill: "#5B9BD5" }
+                    circle { cx: "8", cy: "8", r: "5", fill: color }
                 }
             };
             (icon, project_name.to_string(), None)
         }
     };
 
+    // Hardcoded progress for project p1: 4 completed out of 12 total
+    let (completed, total) = if is_project {
+        (4u32, 12u32)
+    } else {
+        (0, 0)
+    };
+    let progress_pct = if total > 0 {
+        format!("{}%", (completed as f64 / total as f64 * 100.0) as u32)
+    } else {
+        "0%".to_string()
+    };
+
     rsx! {
-        div { class: "app-toolbar",
-            div { class: "app-toolbar-left",
-                {icon}
-                span { class: "app-view-title", "{title}" }
-                if let Some(sub) = subtitle {
-                    span { class: "toolbar-subtitle", "{sub}" }
+        div { class: "toolbar-wrapper",
+            div { class: "app-toolbar",
+                div { class: "app-toolbar-left",
+                    {icon}
+                    span { class: "app-view-title", "{title}" }
+                    if let Some(sub) = subtitle {
+                        span { class: "toolbar-subtitle", "{sub}" }
+                    }
+                    if is_project {
+                        span { class: "toolbar-progress-label", "{completed} / {total}" }
+                    }
+                }
+                div { class: "app-toolbar-right",
+                    if is_project {
+                        button { class: "btn btn-ghost btn-sm",
+                            "+ Add Section"
+                        }
+                    }
+                    button { class: "toolbar-btn",
+                        svg {
+                            view_box: "0 0 16 16",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "1.4",
+                            circle { cx: "7", cy: "7", r: "4.5" }
+                            line { x1: "10.2", y1: "10.2", x2: "14", y2: "14" }
+                        }
+                    }
+                    button { class: "toolbar-btn",
+                        svg {
+                            view_box: "0 0 16 16",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "2",
+                            line { x1: "8", y1: "3", x2: "8", y2: "13" }
+                            line { x1: "3", y1: "8", x2: "13", y2: "8" }
+                        }
+                    }
                 }
             }
-            div { class: "app-toolbar-right",
-                button { class: "toolbar-btn",
-                    svg {
-                        view_box: "0 0 16 16",
-                        fill: "none",
-                        stroke: "currentColor",
-                        stroke_width: "1.4",
-                        circle { cx: "7", cy: "7", r: "4.5" }
-                        line { x1: "10.2", y1: "10.2", x2: "14", y2: "14" }
-                    }
-                }
-                button { class: "toolbar-btn",
-                    svg {
-                        view_box: "0 0 16 16",
-                        fill: "none",
-                        stroke: "currentColor",
-                        stroke_width: "2",
-                        line { x1: "8", y1: "3", x2: "8", y2: "13" }
-                        line { x1: "3", y1: "8", x2: "13", y2: "8" }
-                    }
+            if is_project {
+                div { class: "toolbar-progress-bar",
+                    div { class: "toolbar-progress-fill", width: progress_pct }
                 }
             }
         }

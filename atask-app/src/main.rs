@@ -33,10 +33,8 @@ fn App() -> Element {
                         ActiveView::Upcoming => rsx! { views::upcoming::UpcomingView {} },
                         ActiveView::Someday => rsx! { views::someday::SomedayView {} },
                         ActiveView::Logbook => rsx! { views::logbook::LogbookView {} },
-                        ActiveView::Project(_) => rsx! {
-                            div { class: "empty-state",
-                                p { "Project view coming soon." }
-                            }
+                        ActiveView::Project(ref id) => rsx! {
+                            views::project::ProjectView { project_id: id.clone() }
                         },
                     }
                 }

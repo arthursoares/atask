@@ -1174,4 +1174,35 @@ html, body {
 
 
 
+/* ═══════════════════════════════════════════
+   Toolbar Wrapper & Progress
+   ═══════════════════════════════════════════ */
+
+.toolbar-wrapper {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--separator);
+}
+
+.toolbar-wrapper .app-toolbar {
+    border-bottom: none;
+}
+
+.toolbar-progress-label {
+    font-size: var(--text-sm);
+    color: var(--ink-tertiary);
+    font-weight: 700;
+}
+
+.toolbar-progress-bar {
+    height: 2px;
+    background: var(--canvas-sunken);
+}
+
+.toolbar-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: var(--radius-full);
+}
+
+
 /* No animations. All state changes are instant. */
