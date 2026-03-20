@@ -291,6 +291,14 @@ impl ApiClient {
         .await
     }
 
+    pub async fn reorder_task(&self, id: &str, new_index: i32) -> Result<(), ApiError> {
+        self.put_json(
+            &format!("/tasks/{id}/reorder"),
+            &serde_json::json!({"index": new_index}),
+        )
+        .await
+    }
+
     pub async fn move_task_to_project(
         &self,
         id: &str,

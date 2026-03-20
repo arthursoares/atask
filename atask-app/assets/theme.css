@@ -493,6 +493,18 @@ html, body {
     background: var(--sidebar-selected);
 }
 
+.task-item[draggable="true"] {
+    cursor: grab;
+}
+
+.task-item.dragging {
+    opacity: 0.5;
+}
+
+.task-item.drag-over {
+    border-top: 2px solid var(--accent);
+}
+
 .task-content {
     flex: 1;
     min-width: 0;

@@ -22,6 +22,8 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
 
     let mut loading = use_signal(|| false);
     let mut collapsed_sections: Signal<Vec<String>> = use_signal(|| Vec::new());
+    let mut dragging_id: Signal<Option<String>> = use_signal(|| None);
+    let mut drag_over_id: Signal<Option<String>> = use_signal(|| None);
 
     // Fetch project data when project_id changes
     let pid = project_id.clone();
@@ -91,6 +93,7 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                     let is_selected = task.id == selected_id;
                     let is_today = task.today_index.is_some();
                     let pid = project_id.clone();
+                    let is_drag_over = drag_over_id.read().as_deref() == Some(&task.id);
                     rsx! {
                         TaskItem {
                             key: "{task_id}",
@@ -98,8 +101,54 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                             selected: is_selected,
                             today_view: is_today,
                             show_project: false,
+                            draggable: true,
+                            drag_over: is_drag_over,
                             on_select: move |id: String| {
                                 selected_task_id.set(Some(id));
+                            },
+                            on_drag_start: move |id: String| {
+                                dragging_id.set(Some(id));
+                            },
+                            on_drop_target: {
+                                let task_id_drop = task_id.clone();
+                                let pid = pid.clone();
+                                move |_target_id: String| {
+                                    drag_over_id.set(None);
+                                    let dragged = dragging_id.read().clone();
+                                    dragging_id.set(None);
+                                    if let Some(dragged) = dragged {
+                                        if dragged != task_id_drop {
+                                            let mut tasks = project_state
+                                                .read()
+                                                .project_tasks
+                                                .read()
+                                                .get(&pid)
+                                                .cloned()
+                                                .unwrap_or_default();
+                                            if let (Some(from), Some(to)) = (
+                                                tasks.iter().position(|t| t.id == dragged),
+                                                tasks.iter().position(|t| t.id == task_id_drop),
+                                            ) {
+                                                let item = tasks.remove(from);
+                                                tasks.insert(to, item);
+                                                project_state
+                                                    .write()
+                                                    .project_tasks
+                                                    .write()
+                                                    .insert(pid.clone(), tasks);
+
+                                                let api_clone = api.read().clone();
+                                                let dragged_id = dragged.clone();
+                                                let new_index = to as i32;
+                                                spawn(async move {
+                                                    if let Err(e) = api_clone.reorder_task(&dragged_id, new_index).await {
+                                                        eprintln!("Failed to reorder task: {e}");
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
                             },
                             on_complete: move |_id: String| {
                                 // Optimistic: remove from view immediately

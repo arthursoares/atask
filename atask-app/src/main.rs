@@ -221,6 +221,36 @@ fn get_current_task_list(
     }
 }
 
+fn set_current_task_list(
+    mut task_state: Signal<TaskState>,
+    mut project_state: Signal<ProjectState>,
+    active_view: Signal<ActiveView>,
+    tasks: Vec<crate::api::types::Task>,
+) {
+    let view = active_view.read().clone();
+    match view {
+        ActiveView::Today => task_state.write().today.set(tasks),
+        ActiveView::Someday => task_state.write().someday.set(tasks),
+        ActiveView::Project(ref id) => {
+            project_state
+                .write()
+                .project_tasks
+                .write()
+                .insert(id.clone(), tasks);
+        }
+        // Inbox, Upcoming, Logbook don't support reordering
+        _ => {}
+    }
+}
+
+/// Returns true if the current active view supports manual reordering.
+fn view_supports_reorder(active_view: Signal<ActiveView>) -> bool {
+    matches!(
+        *active_view.read(),
+        ActiveView::Today | ActiveView::Someday | ActiveView::Project(_)
+    )
+}
+
 fn handle_global_keydown(
     evt: Event<KeyboardData>,
     mut command_state: Signal<CommandState>,
@@ -352,6 +382,40 @@ fn handle_global_keydown(
                 let _ = api_clone.complete_task(&task_id).await;
             });
             return;
+        }
+    }
+
+    // ⌘↑/⌘↓ — reorder task in list
+    if meta && (key == Key::ArrowUp || key == Key::ArrowDown) {
+        if let Some(ref tid) = selected_task_id.read().clone() {
+            if view_supports_reorder(active_view) {
+                let mut tasks = get_current_task_list(task_state, project_state, active_view);
+                if let Some(idx) = tasks.iter().position(|t| t.id == *tid) {
+                    let can_move = if key == Key::ArrowUp {
+                        idx > 0
+                    } else {
+                        idx + 1 < tasks.len()
+                    };
+                    if can_move {
+                        evt.prevent_default();
+                        let new_idx = if key == Key::ArrowUp { idx - 1 } else { idx + 1 };
+                        tasks.swap(idx, new_idx);
+                        set_current_task_list(task_state, project_state, active_view, tasks);
+                        selected_list_index.set(Some(new_idx));
+
+                        // Fire API call
+                        let api_clone = api.read().clone();
+                        let task_id = tid.clone();
+                        let api_index = new_idx as i32;
+                        spawn(async move {
+                            if let Err(e) = api_clone.reorder_task(&task_id, api_index).await {
+                                eprintln!("Failed to reorder task: {e}");
+                            }
+                        });
+                        return;
+                    }
+                }
+            }
         }
     }
 
