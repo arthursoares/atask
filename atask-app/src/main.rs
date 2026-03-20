@@ -29,9 +29,13 @@ fn App() -> Element {
                 div { class: "app-content",
                     match *active_view.read() {
                         ActiveView::Today => rsx! { views::today::TodayView {} },
-                        _ => rsx! {
+                        ActiveView::Inbox => rsx! { views::inbox::InboxView {} },
+                        ActiveView::Upcoming => rsx! { views::upcoming::UpcomingView {} },
+                        ActiveView::Someday => rsx! { views::someday::SomedayView {} },
+                        ActiveView::Logbook => rsx! { views::logbook::LogbookView {} },
+                        ActiveView::Project(_) => rsx! {
                             div { class: "empty-state",
-                                p { "This view is not implemented yet." }
+                                p { "Project view coming soon." }
                             }
                         },
                     }
