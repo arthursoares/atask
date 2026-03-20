@@ -90,6 +90,8 @@ fn App() -> Element {
                     components::toolbar::Toolbar {}
                     div { class: "app-content",
                         match *active_view.0.read() {
+                            ActiveView::Inbox => rsx! { views::inbox::InboxView {} },
+                            ActiveView::Today => rsx! { views::today::TodayView {} },
                             _ => rsx! {
                                 div { class: "empty-state",
                                     p { class: "empty-state-text", "View coming soon." }

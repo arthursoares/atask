@@ -1117,6 +1117,10 @@ html, body {
     color: var(--ink-tertiary);
 }
 
+.empty-state-success {
+    color: var(--success);
+}
+
 
 
 /* ═══════════════════════════════════════════
@@ -1190,6 +1194,20 @@ html, body {
 
 .login-link:hover {
     color: var(--accent-hover);
+}
+
+
+/* ═══════════════════════════════════════════
+   View Content & Task List
+   ═══════════════════════════════════════════ */
+
+.view-content {
+    padding: var(--sp-4) var(--sp-6);
+}
+
+.task-list {
+    display: flex;
+    flex-direction: column;
 }
 
 
