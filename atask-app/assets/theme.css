@@ -242,28 +242,9 @@ html, body {
 
 .sidebar-toolbar {
     height: var(--toolbar-height);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--sp-4);
     -webkit-app-region: drag;
+    flex-shrink: 0;
 }
-
-.sidebar-traffic-lights {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.traffic-light {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    -webkit-app-region: no-drag;
-}
-
-.traffic-light.close  { background: #ff5f57; }
-.traffic-light.min    { background: #febc2e; }
-.traffic-light.max    { background: #28c840; }
 
 .sidebar-group {
     padding: var(--sp-1) var(--sp-3);
@@ -1341,23 +1322,25 @@ html, body {
 }
 
 .schedule-option {
-    padding: 2px 10px;
-    border-radius: var(--radius-full);
-    font-size: var(--text-xs);
-    font-weight: 700;
-    background: var(--canvas-sunken);
-    color: var(--ink-secondary);
-    border: none;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    background: transparent;
+    color: var(--ink-tertiary);
+    border: 1px solid var(--border);
     cursor: pointer;
 }
 
 .schedule-option:hover {
-    background: var(--sidebar-hover);
+    background: var(--canvas-sunken);
+    color: var(--ink-secondary);
 }
 
 .schedule-option.active {
-    background: var(--accent-subtle);
-    color: var(--accent);
+    background: var(--accent);
+    color: var(--ink-on-accent);
+    border-color: var(--accent);
 }
 
 

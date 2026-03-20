@@ -17,14 +17,8 @@ pub fn Sidebar() -> Element {
 
     rsx! {
         div { class: "sidebar",
-            // Traffic lights drag region
-            div { class: "sidebar-toolbar",
-                div { class: "sidebar-traffic-lights",
-                    div { class: "traffic-light close" }
-                    div { class: "traffic-light min" }
-                    div { class: "traffic-light max" }
-                }
-            }
+            // Drag region (space for native traffic lights)
+            div { class: "sidebar-toolbar" }
 
             // Nav items
             div { class: "sidebar-group",

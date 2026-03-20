@@ -124,14 +124,36 @@ pub fn TaskDetail() -> Element {
                                             class: "input input-ghost detail-title-input",
                                             value: "{title_draft}",
                                             oninput: move |e: Event<FormData>| title_draft.set(e.value()),
+                                            onkeydown: {
+                                                let tid = task_id.clone();
+                                                move |e: Event<KeyboardData>| {
+                                                    if e.key() == Key::Enter {
+                                                        e.prevent_default();
+                                                        let title = title_draft.read().clone();
+                                                        let api_clone = api.0.read().clone();
+                                                        let tid = tid.clone();
+                                                        println!("[DETAIL] Saving title: {title}");
+                                                        spawn(async move {
+                                                            match api_clone.update_task_title(&tid, &title).await {
+                                                                Ok(_) => println!("[DETAIL] Title saved"),
+                                                                Err(e) => println!("[DETAIL] Title save error: {e}"),
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            },
                                             onblur: {
                                                 let tid = task_id.clone();
                                                 move |_| {
                                                     let title = title_draft.read().clone();
                                                     let api_clone = api.0.read().clone();
                                                     let tid = tid.clone();
+                                                    println!("[DETAIL] Blur: saving title: {title}");
                                                     spawn(async move {
-                                                        let _ = api_clone.update_task_title(&tid, &title).await;
+                                                        match api_clone.update_task_title(&tid, &title).await {
+                                                            Ok(_) => println!("[DETAIL] Title saved via blur"),
+                                                            Err(e) => println!("[DETAIL] Title save error: {e}"),
+                                                        }
                                                     });
                                                 }
                                             },
@@ -160,10 +182,15 @@ pub fn TaskDetail() -> Element {
                                                 on_change: {
                                                     let tid = task_id.clone();
                                                     move |schedule: String| {
+                                                        println!("[DETAIL] Changing schedule to: {schedule}");
                                                         let api_clone = api.0.read().clone();
                                                         let tid = tid.clone();
+                                                        let sched = schedule.clone();
                                                         spawn(async move {
-                                                            let _ = api_clone.update_task_schedule(&tid, &schedule).await;
+                                                            match api_clone.update_task_schedule(&tid, &sched).await {
+                                                                Ok(_) => println!("[DETAIL] Schedule saved"),
+                                                                Err(e) => println!("[DETAIL] Schedule save error: {e}"),
+                                                            }
                                                         });
                                                     }
                                                 },
@@ -203,14 +230,36 @@ pub fn TaskDetail() -> Element {
                                             value: "{notes_draft}",
                                             placeholder: "Add notes...",
                                             oninput: move |e: Event<FormData>| notes_draft.set(e.value()),
+                                            onkeydown: {
+                                                let tid = task_id.clone();
+                                                move |e: Event<KeyboardData>| {
+                                                    if e.modifiers().meta() && e.key() == Key::Enter {
+                                                        e.prevent_default();
+                                                        let notes = notes_draft.read().clone();
+                                                        let api_clone = api.0.read().clone();
+                                                        let tid = tid.clone();
+                                                        println!("[DETAIL] Cmd+Enter: saving notes");
+                                                        spawn(async move {
+                                                            match api_clone.update_task_notes(&tid, &notes).await {
+                                                                Ok(_) => println!("[DETAIL] Notes saved"),
+                                                                Err(e) => println!("[DETAIL] Notes save error: {e}"),
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            },
                                             onblur: {
                                                 let tid = task_id.clone();
                                                 move |_| {
                                                     let notes = notes_draft.read().clone();
                                                     let api_clone = api.0.read().clone();
                                                     let tid = tid.clone();
+                                                    println!("[DETAIL] Blur: saving notes");
                                                     spawn(async move {
-                                                        let _ = api_clone.update_task_notes(&tid, &notes).await;
+                                                        match api_clone.update_task_notes(&tid, &notes).await {
+                                                            Ok(_) => println!("[DETAIL] Notes saved via blur"),
+                                                            Err(e) => println!("[DETAIL] Notes save error: {e}"),
+                                                        }
                                                     });
                                                 }
                                             },
