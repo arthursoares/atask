@@ -33,7 +33,7 @@ fn App() -> Element {
     let mut today = TodayTasks(use_signal(|| Vec::new()));
     let mut upcoming = UpcomingTasks(use_signal(|| Vec::new()));
     let mut someday = SomedayTasks(use_signal(|| Vec::new()));
-    let logbook = LogbookTasks(use_signal(|| Vec::new()));
+    let mut logbook = LogbookTasks(use_signal(|| Vec::new()));
     let mut projects = ProjectList(use_signal(|| Vec::new()));
     let mut areas = AreaList(use_signal(|| Vec::new()));
     let mut tags = TagList(use_signal(|| Vec::new()));
@@ -61,11 +61,12 @@ fn App() -> Element {
             let api_clone = api.0.read().clone();
             spawn(async move {
                 loading.0.set(true);
-                let (inbox_r, today_r, upcoming_r, someday_r, projects_r, areas_r, tags_r) = tokio::join!(
+                let (inbox_r, today_r, upcoming_r, someday_r, logbook_r, projects_r, areas_r, tags_r) = tokio::join!(
                     api_clone.list_inbox(),
                     api_clone.list_today(),
                     api_clone.list_upcoming(),
                     api_clone.list_someday(),
+                    api_clone.list_logbook(),
                     api_clone.list_projects(),
                     api_clone.list_areas(),
                     api_clone.list_tags(),
@@ -74,6 +75,7 @@ fn App() -> Element {
                 if let Ok(t) = today_r { today.0.set(t); }
                 if let Ok(t) = upcoming_r { upcoming.0.set(t); }
                 if let Ok(t) = someday_r { someday.0.set(t); }
+                if let Ok(t) = logbook_r { logbook.0.set(t); }
                 if let Ok(p) = projects_r { projects.0.set(p); }
                 if let Ok(a) = areas_r { areas.0.set(a); }
                 if let Ok(t) = tags_r { tags.0.set(t); }
@@ -98,6 +100,7 @@ fn App() -> Element {
                             ActiveView::Today => rsx! { views::today::TodayView {} },
                             ActiveView::Upcoming => rsx! { views::upcoming::UpcomingView {} },
                             ActiveView::Someday => rsx! { views::someday::SomedayView {} },
+                            ActiveView::Logbook => rsx! { views::logbook::LogbookView {} },
                             _ => rsx! {
                                 div { class: "empty-state",
                                     p { class: "empty-state-text", "View coming soon." }
