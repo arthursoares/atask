@@ -8,49 +8,49 @@ The shell is built (13 tasks complete) but interactive editing is largely missin
 
 ## Priority Order
 
-### P0: Core Task Actions (blocking basic usage)
+### P0: Core Task Actions — DONE
+- [x] Fix task creation (NewTaskInline wired in all views, Today auto-schedules anytime)
+- [x] Detail panel: title editing (ghost input, blur/Enter saves)
+- [x] Detail panel: notes editing (textarea, blur saves)
+- [x] Detail panel: schedule picker (Inbox/Today/Someday pills)
+- [x] Detail panel: checklist item creation (input at bottom)
 
-- [ ] **Fix task creation** — NewTaskInline must call API and refresh view. Test in Today, Inbox, Someday, Project views.
-- [ ] **Detail panel: title editing** — ghost input, on blur/Enter calls `update_task_title`
-- [ ] **Detail panel: notes editing** — textarea, on blur calls `update_task_notes`
-- [ ] **Detail panel: schedule picker** — Inbox/Today/Someday selector, calls `update_task_schedule`
+### P1: Picker Components — DONE
+- [x] Schedule picker (inline pills in detail panel)
+- [x] Project picker (`project_picker.rs` — dropdown with search)
+- [x] Date picker (`date_picker.rs` — native date input + clear)
+- [x] Tag picker (`tag_picker.rs` — toggle list with add/remove)
 
-### P1: Picker Components (needed for detail panel + inbox triage)
+### P2: Inbox Triage — DONE
+- [x] Hover quick-actions (★ Today, 💤 Someday, 📁 Project)
+- [x] Optimistic removal + API call + refetch
 
-- [ ] **Schedule picker component** (`src/components/schedule_picker.rs`) — dropdown/popover with 3 options: Inbox, Today (Anytime), Someday. Used in detail panel and inbox hover actions.
-- [ ] **Project picker component** (`src/components/project_picker.rs`) — searchable list of projects from ProjectState. On select calls `move_task_to_project`. Used in detail panel and inbox hover.
-- [ ] **Date picker component** (`src/components/date_picker.rs`) — simple date input or calendar. Used for start date and deadline in detail panel.
-- [ ] **Tag picker component** (`src/components/tag_picker.rs`) — list of tags from state, toggle on/off. Used in detail panel.
+### P3: Detail Panel Full Editing — DONE
+- [x] Project field (click to open picker, API call)
+- [x] Start date field (date picker, API call)
+- [x] Deadline field (date picker, API call)
+- [x] Tags field (pills + add/remove via tag picker)
+- [ ] Recurrence display — deferred (read-only, low priority)
 
-### P2: Inbox Triage (key workflow)
+### P4: Project View Enhancements — PARTIALLY DONE
+- [x] Add section (toolbar button → inline input → API)
+- [ ] Drag tasks between sections — deferred
 
-- [ ] **Inbox hover quick-actions** — on task hover, show action buttons:
-  - ★ Schedule Today → `PUT /tasks/{id}/schedule {"schedule":"anytime"}`
-  - 💤 Someday → `PUT /tasks/{id}/schedule {"schedule":"someday"}`
-  - 📁 Move to Project → open project picker
-  - 📅 Set Date → open date picker for start_date
-- [ ] After any triage action, remove task from inbox and refetch
+### P5: UX Polish — DONE
+- [x] Confirmation dialog (for task deletion)
+- [x] Error toasts (flash message on API failures)
+- [x] Empty states (per view with proper messages)
+- [ ] Loading indicators — deferred (low priority, data loads fast)
 
-### P3: Detail Panel Full Editing
+### Testing — DONE
+- [x] Rust API integration tests (7 tests)
+- [x] Playwright e2e test suite (8 tests)
 
-- [ ] **Project field** — click to open project picker, display current project with colored dot
-- [ ] **Start date field** — click to open date picker, display formatted date or "None"
-- [ ] **Deadline field** — click to open date picker
-- [ ] **Tags field** — show tag pills + "Add" button opening tag picker, click × to remove
-- [ ] **Checklist add item** — input at bottom of checklist, Enter to add via API
-- [ ] **Recurrence display** — read-only for now (rule summary)
-
-### P4: Project View Enhancements
-
-- [ ] **Add section** — toolbar button opens inline input, calls `POST /projects/{id}/sections`
-- [ ] **Drag tasks between sections** — drop on section header moves task to that section
-
-### P5: UX Polish
-
-- [ ] **Confirmation dialog** — for task/project deletion (⌫)
-- [ ] **Error toasts** — flash message on API failures
-- [ ] **Empty states** — proper empty state messages per view (match mockup)
-- [ ] **Loading indicators** — subtle spinner or skeleton while fetching
+### Remaining (deferred)
+- [ ] Recurrence display in detail panel
+- [ ] Drag tasks between sections in project view
+- [ ] Loading skeleton/spinner
+- [ ] Dark mode
 
 ## API Endpoints Used
 
