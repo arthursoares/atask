@@ -240,6 +240,12 @@ html, body {
     -webkit-user-select: none;
 }
 
+.sidebar-drag-region {
+    height: var(--toolbar-height);
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+}
+
 .sidebar-toolbar {
     height: var(--toolbar-height);
     display: flex;

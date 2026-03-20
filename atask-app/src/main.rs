@@ -5,6 +5,7 @@ mod components;
 mod state;
 mod views;
 
+use components::sidebar::Sidebar;
 use state::navigation::ActiveView;
 
 fn main() {
@@ -21,10 +22,7 @@ fn App() -> Element {
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("/assets/theme.css") }
         div { class: "app-frame",
-            div { class: "sidebar",
-                div { class: "sidebar-drag-region" }
-                p { class: "sidebar-group-label", "atask" }
-            }
+            Sidebar {}
             div { class: "app-main",
                 div { class: "app-toolbar",
                     span { class: "app-view-title", "Today" }
