@@ -487,20 +487,6 @@ html, body {
     background: var(--sidebar-selected);
 }
 
-.task-grip {
-    width: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink-quaternary);
-    opacity: 0;
-    flex-shrink: 0;
-}
-
-.task-item:hover .task-grip {
-    opacity: 1;
-}
-
 .task-content {
     flex: 1;
     min-width: 0;
@@ -586,34 +572,24 @@ html, body {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
-    padding: var(--sp-4) 0 var(--sp-2);
-    cursor: pointer;
-    user-select: none;
+    padding: var(--sp-3) var(--sp-4);
+    margin-top: var(--sp-3);
 }
 
-.section-header-chevron {
-    width: 16px;
-    height: 16px;
-    color: var(--ink-tertiary);
-    transition: transform var(--dur-normal) var(--ease-out);
-}
-
-.section-header-chevron.collapsed {
-    transform: rotate(-90deg);
-}
-
-.section-header-title {
+.section-title {
     font-size: var(--text-base);
     font-weight: 700;
     color: var(--ink-primary);
+    flex-shrink: 0;
 }
 
-.section-header-count {
-    font-size: var(--text-xs);
+.section-count {
+    font-size: var(--text-sm);
     color: var(--ink-tertiary);
+    flex-shrink: 0;
 }
 
-.section-header-line {
+.section-line {
     flex: 1;
     height: 1px;
     background: var(--separator);
