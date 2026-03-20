@@ -12,3 +12,6 @@ pub mod checklist_item;
 pub mod activity_entry;
 pub mod task_detail;
 pub mod command_palette;
+pub mod project_picker;
+pub mod date_picker;
+pub mod tag_picker;

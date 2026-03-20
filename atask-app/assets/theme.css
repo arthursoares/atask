@@ -1291,4 +1291,85 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Picker Dropdown
+   ═══════════════════════════════════════════ */
+
+.picker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--canvas-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: 100;
+    padding: var(--sp-1) 0;
+}
+.picker-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--text-sm);
+    color: var(--ink-primary);
+    cursor: pointer;
+}
+.picker-item:hover {
+    background: var(--sidebar-hover);
+}
+.picker-item.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 700;
+}
+.picker-search {
+    padding: var(--sp-1) var(--sp-3);
+    margin-bottom: var(--sp-1);
+}
+.picker-search input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
+    font-size: var(--text-sm);
+    outline: none;
+}
+.picker-search input:focus {
+    border-color: var(--accent);
+}
+
+
+/* ═══════════════════════════════════════════
+   Date Picker
+   ═══════════════════════════════════════════ */
+
+.date-picker-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.date-picker-input {
+    flex: 1;
+    font-size: var(--text-sm);
+    padding: var(--sp-1) var(--sp-2);
+}
+
+.date-picker-clear {
+    font-size: var(--text-xs);
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.date-picker-clear:hover {
+    text-decoration: underline;
+}
+
+
 /* No animations. All state changes are instant. */
