@@ -1,75 +1,50 @@
 package tui
 
-import tea "charm.land/bubbletea/v2"
+import "charm.land/bubbles/v2/key"
 
-// isRune reports whether the key message corresponds to the given rune.
-// In bubbletea v2, printable character keys have their rune in Key.Code.
-func isRune(msg tea.KeyPressMsg, r rune) bool {
-	return msg.Code == r
-}
+var Keys = struct {
+	Up, Down      key.Binding
+	Enter, Escape key.Binding
+	Tab, ShiftTab key.Binding
+	Top, Bottom   key.Binding
 
-// isKey reports whether the key message matches the given special key code.
-// Use this for non-printable keys (Enter, Escape, Tab, arrow keys, etc.).
-func isKey(msg tea.KeyPressMsg, code rune) bool {
-	return msg.Code == code
-}
+	New, Edit, Complete key.Binding
+	Cancel, Delete      key.Binding
+	Schedule, Move, Tag key.Binding
+	Location, Comment   key.Binding
 
-// isCtrl reports whether the key message is Ctrl+r for the given rune.
-func isCtrl(msg tea.KeyPressMsg, r rune) bool {
-	return msg.Code == r && msg.Mod&tea.ModCtrl != 0
-}
+	Palette, Search, Help key.Binding
+	Refresh, Quit         key.Binding
 
-// isEnter reports whether the key message is the Enter key.
-func isEnter(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyEnter
-}
+	Tab1, Tab2, Tab3 key.Binding
+}{
+	Up:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("↑/k", "up")),
+	Down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("↓/j", "down")),
+	Enter:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "select")),
+	Escape:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	Tab:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
+	ShiftTab: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("S-tab", "prev pane")),
+	Top:      key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
+	Bottom:   key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
 
-// isEscape reports whether the key message is the Escape key.
-func isEscape(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyEscape
-}
+	New:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+	Edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
+	Complete: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "complete")),
+	Cancel:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "cancel")),
+	Delete:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+	Schedule: key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "schedule")),
+	Move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
+	Tag:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "tag")),
+	Location: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "location")),
+	Comment:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "comment")),
 
-// isTab reports whether the key message is the Tab key.
-func isTab(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyTab
-}
+	Palette: key.NewBinding(key.WithKeys(":", "ctrl+p"), key.WithHelp(":/^P", "commands")),
+	Search:  key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+	Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	Refresh: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+	Quit:    key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 
-// isShiftTab reports whether the key message is Shift+Tab.
-func isShiftTab(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyTab && msg.Mod&tea.ModShift != 0
-}
-
-// isBackspace reports whether the key message is the Backspace key.
-func isBackspace(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyBackspace
-}
-
-// isUp reports whether the key message is the Up arrow key.
-func isUp(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyUp
-}
-
-// isDown reports whether the key message is the Down arrow key.
-func isDown(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyDown
-}
-
-// isLeft reports whether the key message is the Left arrow key.
-func isLeft(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyLeft
-}
-
-// isRight reports whether the key message is the Right arrow key.
-func isRight(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyRight
-}
-
-// isDelete reports whether the key message is the Delete key.
-func isDelete(msg tea.KeyPressMsg) bool {
-	return msg.Code == tea.KeyDelete
-}
-
-// isQuit reports whether the key message is q or Ctrl+c.
-func isQuit(msg tea.KeyPressMsg) bool {
-	return msg.Code == 'q' || (msg.Code == 'c' && msg.Mod&tea.ModCtrl != 0)
+	Tab1: key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "notes")),
+	Tab2: key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "checklist")),
+	Tab3: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "activity")),
 }
