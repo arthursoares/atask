@@ -228,6 +228,10 @@ impl ApiClient {
 
     // -- Tasks --------------------------------------------------------------
 
+    pub async fn get_task(&self, id: &str) -> Result<Task, ApiError> {
+        self.get_json(&format!("/tasks/{id}")).await
+    }
+
     pub async fn create_task(&self, title: &str) -> Result<Task, ApiError> {
         let envelope: EventEnvelope<Task> = self
             .post_json("/tasks", &serde_json::json!({"title": title}))

@@ -26,7 +26,9 @@ pub fn TagPicker(props: TagPickerProps) -> Element {
                                 let on_add = props.on_add.clone();
                                 let on_remove = props.on_remove.clone();
                                 let tag_id = tag_id.clone();
+                                let tag_title_log = tag_title.clone();
                                 move |_| {
+                                    println!("[TAG_PICKER] Clicked tag: {tag_title_log} (active={is_active})");
                                     if is_active {
                                         on_remove.call(tag_id.clone());
                                     } else {

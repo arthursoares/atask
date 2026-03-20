@@ -52,8 +52,9 @@ pub fn TaskDetail() -> Element {
     let mut checklist_input: Signal<String> = use_signal(|| String::new());
     let mut show_project_picker: Signal<bool> = use_signal(|| false);
     let mut show_tag_picker: Signal<bool> = use_signal(|| false);
+    let mut task_tags_draft: Signal<Vec<String>> = use_signal(|| Vec::new());
 
-    // Fetch checklist when selected task changes
+    // Fetch checklist + tags when selected task changes
     use_effect(move || {
         let id = selected.0.read().clone();
         if let Some(ref tid) = id {
@@ -61,18 +62,28 @@ pub fn TaskDetail() -> Element {
                 let api_clone = api.0.read().clone();
                 let tid = tid.clone();
                 spawn(async move {
-                    match api_clone.list_checklist(&tid).await {
+                    // Fetch checklist and task (for hydrated tags) in parallel
+                    let (cl_result, task_result) = tokio::join!(
+                        api_clone.list_checklist(&tid),
+                        api_clone.get_task(&tid),
+                    );
+                    match cl_result {
                         Ok(items) => checklist.set(items),
                         Err(_) => checklist.set(Vec::new()),
                     }
+                    // Get hydrated tags from individual task fetch
+                    match task_result {
+                        Ok(task) => task_tags_draft.set(task.tags.unwrap_or_default()),
+                        Err(_) => task_tags_draft.set(Vec::new()),
+                    }
                 });
                 last_loaded_id.set(id);
-                // Close pickers on task switch
                 show_project_picker.set(false);
                 show_tag_picker.set(false);
             }
         } else {
             checklist.set(Vec::new());
+            task_tags_draft.set(Vec::new());
             last_loaded_id.set(None);
         }
     });
@@ -112,7 +123,7 @@ pub fn TaskDetail() -> Element {
                                 projects.0.read().iter().find(|p| p.id == *pid).map(|p| p.title.clone())
                             });
 
-                            let task_tags: Vec<String> = task.tags.clone().unwrap_or_default();
+                            let task_tags: Vec<String> = task_tags_draft.read().clone();
                             let tag_pills: Vec<(String, String)> = task_tags.iter().filter_map(|tid| {
                                 tags.0.read().iter().find(|t| t.id == *tid).map(|t| (t.id.clone(), t.title.clone()))
                             }).collect();
@@ -295,6 +306,13 @@ pub fn TaskDetail() -> Element {
                                                     on_add: {
                                                         let tid = task_id.clone();
                                                         move |tag_id: String| {
+                                                            // Optimistic: add to local draft
+                                                            let mut current = task_tags_draft.read().clone();
+                                                            if !current.contains(&tag_id) {
+                                                                current.push(tag_id.clone());
+                                                                task_tags_draft.set(current);
+                                                            }
+                                                            // Fire API
                                                             let api_clone = api.0.read().clone();
                                                             let tid = tid.clone();
                                                             let tag_id = tag_id.clone();
@@ -306,6 +324,14 @@ pub fn TaskDetail() -> Element {
                                                     on_remove: {
                                                         let tid = task_id.clone();
                                                         move |tag_id: String| {
+                                                            // Optimistic: remove from local draft
+                                                            let current: Vec<String> = task_tags_draft.read()
+                                                                .iter()
+                                                                .filter(|id| **id != tag_id)
+                                                                .cloned()
+                                                                .collect();
+                                                            task_tags_draft.set(current);
+                                                            // Fire API
                                                             let api_clone = api.0.read().clone();
                                                             let tid = tid.clone();
                                                             let tag_id = tag_id.clone();
