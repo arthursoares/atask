@@ -6,3 +6,6 @@ pub mod task_meta;
 pub mod task_item;
 pub mod section_header;
 pub mod new_task_inline;
+pub mod checklist_item;
+pub mod schedule_picker;
+pub mod task_detail;

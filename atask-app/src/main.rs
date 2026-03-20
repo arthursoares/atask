@@ -110,6 +110,9 @@ fn App() -> Element {
                         }
                     }
                 }
+                if selected_task.0.read().is_some() {
+                    components::task_detail::TaskDetail {}
+                }
             }
         }
     }
