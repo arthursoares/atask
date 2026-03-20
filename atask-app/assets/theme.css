@@ -1104,4 +1104,78 @@ html, body {
 
 
 
+/* ═══════════════════════════════════════════
+   Login
+   ═══════════════════════════════════════════ */
+
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    background: var(--canvas);
+}
+
+.login-card {
+    width: 360px;
+    padding: var(--sp-8);
+    background: var(--canvas-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.login-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin-bottom: var(--sp-6);
+}
+
+.login-field {
+    margin-bottom: var(--sp-4);
+}
+
+.login-label {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--sp-1);
+}
+
+.login-error {
+    padding: var(--sp-2) var(--sp-3);
+    margin-bottom: var(--sp-4);
+    background: var(--deadline-bg);
+    color: var(--deadline-red);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+}
+
+.login-btn {
+    width: 100%;
+    margin-top: var(--sp-2);
+}
+
+.login-toggle {
+    text-align: center;
+    margin-top: var(--sp-4);
+    font-size: var(--text-sm);
+    color: var(--ink-tertiary);
+}
+
+.login-link {
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.login-link:hover {
+    color: var(--accent-hover);
+}
+
+
 /* No animations. All state changes are instant. */
