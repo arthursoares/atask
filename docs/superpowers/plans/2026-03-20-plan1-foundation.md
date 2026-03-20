@@ -22,7 +22,7 @@
 All verified working against live server.
 
 **Lessons from v1 (MUST follow):**
-1. Every task ends with a verification step — either a test or a manual check with exact expected output
+1. Every task ends with a verification step — preferably a test or a manual check with exact expected output. Think about saving time in the future
 2. Signal reads MUST be inside `rsx!` for Dioxus reactivity
 3. Use newtype wrappers for signals shared via context (e.g., `SelectedTask(Signal<Option<String>>)`)
 4. Writes from `spawn` async blocks may not trigger parent re-renders — use newtypes
