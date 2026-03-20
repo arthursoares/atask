@@ -256,26 +256,25 @@ func (m Model) cmdDeleteCheckItem(taskID, itemID string) tea.Cmd {
 // --- Routing ---
 
 // refreshCurrentView dispatches to the correct load command based on m.currentView.
+// Project views are encoded as "project:{id}" and area views as "area:{id}".
 func (m Model) refreshCurrentView() tea.Cmd {
-	switch m.currentView {
-	case viewInbox:
+	switch {
+	case m.currentView == viewInbox:
 		return m.cmdLoadInbox()
-	case viewToday:
+	case m.currentView == viewToday:
 		return m.cmdLoadToday()
-	case viewUpcoming:
+	case m.currentView == viewUpcoming:
 		return m.cmdLoadUpcoming()
-	case viewSomeday:
+	case m.currentView == viewSomeday:
 		return m.cmdLoadSomeday()
-	case viewLogbook:
+	case m.currentView == viewLogbook:
 		return m.cmdLoadLogbook()
-	case viewProject:
-		if m.selectedProject != nil {
-			return m.cmdLoadProjectTasks(m.selectedProject.ID)
-		}
-	case viewArea:
-		if m.selectedArea != nil {
-			return m.cmdLoadAreaTasks(m.selectedArea.ID)
-		}
+	case strings.HasPrefix(m.currentView, viewProject+":"):
+		id := strings.TrimPrefix(m.currentView, viewProject+":")
+		return m.cmdLoadProjectTasks(id)
+	case strings.HasPrefix(m.currentView, viewArea+":"):
+		id := strings.TrimPrefix(m.currentView, viewArea+":")
+		return m.cmdLoadAreaTasks(id)
 	}
 	return nil
 }
