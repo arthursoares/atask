@@ -112,7 +112,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		_ = saveToken(token)
 	}
 
-	app := tui.NewApp(c)
+	app := tui.NewModel(c)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err

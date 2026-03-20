@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	"github.com/atask/atask/internal/client"
@@ -93,12 +94,12 @@ func (l Login) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		l.err = "" // clear error on any key
 
-		if isEscape(msg) {
+		if key.Matches(msg, Keys.Escape) {
 			return l, tea.Quit
 		}
 
-		if isTab(msg) || isShiftTab(msg) {
-			if isTab(msg) {
+		if key.Matches(msg, Keys.Tab) || key.Matches(msg, Keys.ShiftTab) {
+			if key.Matches(msg, Keys.Tab) {
 				l = l.nextField()
 			} else {
 				l = l.prevField()
@@ -118,7 +119,7 @@ func (l Login) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return l, nil
 		}
 
-		if isEnter(msg) {
+		if key.Matches(msg, Keys.Enter) {
 			return l, l.submit()
 		}
 
@@ -134,14 +135,14 @@ func (l Login) View() tea.View {
 
 	// Title
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Cyan).Render("atask")
-	subtitle := DimmedItem.Render("AI-first task manager")
+	subtitle := MutedStyle.Render("AI-first task manager")
 
 	// Mode toggle
 	var modeText string
 	if l.mode == modeLogin {
-		modeText = ActiveTab.Render("Login") + "  " + InactiveTab.Render("Register")
+		modeText = ActiveTabStyle.Render("Login") + "  " + InactiveTabStyle.Render("Register")
 	} else {
-		modeText = InactiveTab.Render("Login") + "  " + ActiveTab.Render("Register")
+		modeText = InactiveTabStyle.Render("Login") + "  " + ActiveTabStyle.Render("Register")
 	}
 
 	// Fields
@@ -151,7 +152,7 @@ func (l Login) View() tea.View {
 	// Error
 	var errLine string
 	if l.err != "" {
-		errLine = "\n" + ErrorStyle.Render("  "+l.err)
+		errLine = "\n" + ErrorTextStyle.Render("  "+l.err)
 	}
 
 	// Build form
@@ -168,9 +169,9 @@ func (l Login) View() tea.View {
 	}
 
 	b.WriteString(errLine + "\n\n")
-	b.WriteString(DimmedItem.Render("  [Enter] submit  [Tab] next field  [Ctrl+R] toggle login/register  [Esc] quit"))
+	b.WriteString(MutedStyle.Render("  [Enter] submit  [Tab] next field  [Ctrl+R] toggle login/register  [Esc] quit"))
 
-	content := OverlayStyle.Width(50).Render(b.String())
+	content := OverlayBorder.Width(50).Render(b.String())
 
 	// Center on screen
 	contentWidth := lipgloss.Width(content)

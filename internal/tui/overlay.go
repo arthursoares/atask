@@ -80,7 +80,7 @@ func (m *Model) openPalette() {
 				items := make([]PickerItem, 0, len(m.projects))
 				items = append(items, PickerItem{ID: "", Label: "No project (Inbox)"})
 				for _, p := range m.projects {
-					items = append(items, PickerItem{ID: p.ID, Label: p.Name})
+					items = append(items, PickerItem{ID: p.ID, Label: p.Title})
 				}
 				m.openPicker("Move to Project", items, func(id string) tea.Cmd {
 					if id == "" {
