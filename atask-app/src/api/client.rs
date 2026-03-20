@@ -338,6 +338,32 @@ impl ApiClient {
             .await
     }
 
+    pub async fn create_section(
+        &self,
+        project_id: &str,
+        title: &str,
+    ) -> Result<Section, ApiError> {
+        let envelope: EventEnvelope<Section> = self
+            .post_json(
+                &format!("/projects/{project_id}/sections"),
+                &serde_json::json!({"title": title}),
+            )
+            .await?;
+        Ok(envelope.data)
+    }
+
+    // -- Task Tags ----------------------------------------------------------
+
+    pub async fn add_task_tag(&self, task_id: &str, tag_id: &str) -> Result<(), ApiError> {
+        self.post_action(&format!("/tasks/{task_id}/tags/{tag_id}"))
+            .await
+    }
+
+    pub async fn remove_task_tag(&self, task_id: &str, tag_id: &str) -> Result<(), ApiError> {
+        self.delete_action(&format!("/tasks/{task_id}/tags/{tag_id}"))
+            .await
+    }
+
     // -- Areas & Tags -------------------------------------------------------
 
     pub async fn list_areas(&self) -> Result<Vec<Area>, ApiError> {

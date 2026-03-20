@@ -700,6 +700,21 @@ html, body {
     margin-bottom: var(--sp-4);
 }
 
+.detail-field--picker {
+    position: relative;
+}
+
+.detail-field-value.clickable {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    padding: 2px var(--sp-1);
+    margin: -2px calc(-1 * var(--sp-1));
+}
+
+.detail-field-value.clickable:hover {
+    background: var(--sidebar-hover);
+}
+
 .detail-field-label {
     font-size: var(--text-xs);
     font-weight: 700;

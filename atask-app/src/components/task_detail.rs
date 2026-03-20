@@ -3,6 +3,9 @@ use dioxus::prelude::*;
 use crate::api::client::ApiClient;
 use crate::api::types::{Activity, ChecklistItem as ChecklistItemData, Task};
 use crate::components::checklist_item::ChecklistItem;
+use crate::components::date_picker::DatePicker;
+use crate::components::project_picker::ProjectPicker;
+use crate::components::tag_picker::TagPicker;
 use crate::components::tag_pill::TagPill;
 use crate::state::projects::ProjectState;
 use crate::state::tasks::TaskState;
@@ -44,6 +47,8 @@ pub fn TaskDetail() -> Element {
     let mut title_draft: Signal<String> = use_signal(|| String::new());
     let mut notes_draft: Signal<String> = use_signal(|| String::new());
     let mut checklist_input: Signal<String> = use_signal(|| String::new());
+    let mut show_project_picker: Signal<bool> = use_signal(|| false);
+    let mut show_tag_picker: Signal<bool> = use_signal(|| false);
 
     // Fetch checklist + activity when selected task changes.
     // We read selected_task_id inside the effect so Dioxus tracks it.
@@ -52,8 +57,12 @@ pub fn TaskDetail() -> Element {
         let Some(tid) = selected_id else {
             checklist.set(Vec::new());
             activity.set(Vec::new());
+            show_project_picker.set(false);
+            show_tag_picker.set(false);
             return;
         };
+        show_project_picker.set(false);
+        show_tag_picker.set(false);
         let api_clone = api.read().clone();
         spawn(async move {
             let (cl_result, act_result) = tokio::join!(
@@ -105,18 +114,6 @@ pub fn TaskDetail() -> Element {
                             });
 
                             let task_schedule = task.schedule;
-
-                            let start_date_label = task
-                                .start_date
-                                .as_deref()
-                                .unwrap_or("None")
-                                .to_string();
-
-                            let deadline_label = task
-                                .deadline
-                                .as_deref()
-                                .unwrap_or("None")
-                                .to_string();
 
                             let tags = task.tags.clone().unwrap_or_default();
 
@@ -201,12 +198,40 @@ pub fn TaskDetail() -> Element {
                                     }
                                     div { class: "detail-body",
                                         // PROJECT
-                                        if let Some(ref pname) = project_name {
-                                            div { class: "detail-field",
-                                                div { class: "detail-field-label", "PROJECT" }
-                                                div { class: "detail-field-value",
-                                                    span { class: "detail-project-dot" }
-                                                    "\u{25cf} {pname}"
+                                        {
+                                            let task_id_project = task.id.clone();
+                                            let current_pid = task.project_id.clone();
+                                            rsx! {
+                                                div { class: "detail-field detail-field--picker",
+                                                    div { class: "detail-field-label", "PROJECT" }
+                                                    div {
+                                                        class: "detail-field-value clickable",
+                                                        onclick: move |_| {
+                                                            let current = *show_project_picker.read();
+                                                            show_project_picker.set(!current);
+                                                        },
+                                                        if let Some(ref pname) = project_name {
+                                                            span { class: "sidebar-project-dot" }
+                                                            " {pname}"
+                                                        } else {
+                                                            "None"
+                                                        }
+                                                    }
+                                                    if *show_project_picker.read() {
+                                                        ProjectPicker {
+                                                            current_project_id: current_pid,
+                                                            on_select: move |pid: Option<String>| {
+                                                                show_project_picker.set(false);
+                                                                let api_clone = api.read().clone();
+                                                                let tid = task_id_project.clone();
+                                                                spawn(async move {
+                                                                    if let Err(e) = api_clone.move_task_to_project(&tid, pid.as_deref()).await {
+                                                                        eprintln!("Failed to move task to project: {e}");
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -265,22 +290,90 @@ pub fn TaskDetail() -> Element {
                                             }
                                         }
                                         // START DATE
-                                        div { class: "detail-field",
-                                            div { class: "detail-field-label", "START DATE" }
-                                            div { class: "detail-field-value", "{start_date_label}" }
+                                        {
+                                            let task_id_start = task.id.clone();
+                                            let start_val = task.start_date.clone();
+                                            rsx! {
+                                                DatePicker {
+                                                    label: "START DATE".to_string(),
+                                                    value: start_val,
+                                                    on_change: move |date: Option<String>| {
+                                                        let api_clone = api.read().clone();
+                                                        let tid = task_id_start.clone();
+                                                        spawn(async move {
+                                                            if let Err(e) = api_clone.set_task_start_date(&tid, date.as_deref()).await {
+                                                                eprintln!("Failed to set start date: {e}");
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            }
                                         }
                                         // DEADLINE
-                                        div { class: "detail-field",
-                                            div { class: "detail-field-label", "DEADLINE" }
-                                            div { class: "detail-field-value", "{deadline_label}" }
+                                        {
+                                            let task_id_deadline = task.id.clone();
+                                            let deadline_val = task.deadline.clone();
+                                            rsx! {
+                                                DatePicker {
+                                                    label: "DEADLINE".to_string(),
+                                                    value: deadline_val,
+                                                    on_change: move |date: Option<String>| {
+                                                        let api_clone = api.read().clone();
+                                                        let tid = task_id_deadline.clone();
+                                                        spawn(async move {
+                                                            if let Err(e) = api_clone.set_task_deadline(&tid, date.as_deref()).await {
+                                                                eprintln!("Failed to set deadline: {e}");
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            }
                                         }
                                         // TAGS
-                                        if !tags.is_empty() {
-                                            div { class: "detail-field",
-                                                div { class: "detail-field-label", "TAGS" }
-                                                div { class: "detail-field-value detail-tags-row",
-                                                    for tag in &tags {
-                                                        TagPill { label: tag.clone(), variant: "default".to_string() }
+                                        {
+                                            let task_id_tag_add = task.id.clone();
+                                            let task_id_tag_remove = task.id.clone();
+                                            let task_id_tag_picker = task.id.clone();
+                                            let current_tags = tags.clone();
+                                            rsx! {
+                                                div { class: "detail-field detail-field--picker",
+                                                    div { class: "detail-field-label", "TAGS" }
+                                                    div { class: "detail-field-value detail-tags-row",
+                                                        for tag in &tags {
+                                                            TagPill { label: tag.clone(), variant: "default".to_string() }
+                                                        }
+                                                        span {
+                                                            class: "detail-add-tag",
+                                                            onclick: move |_| {
+                                                                let current = *show_tag_picker.read();
+                                                                show_tag_picker.set(!current);
+                                                            },
+                                                            "+ Add"
+                                                        }
+                                                    }
+                                                    if *show_tag_picker.read() {
+                                                        TagPicker {
+                                                            task_id: task_id_tag_picker,
+                                                            current_tags: current_tags,
+                                                            on_add: move |tag_id: String| {
+                                                                let api_clone = api.read().clone();
+                                                                let tid = task_id_tag_add.clone();
+                                                                spawn(async move {
+                                                                    if let Err(e) = api_clone.add_task_tag(&tid, &tag_id).await {
+                                                                        eprintln!("Failed to add tag: {e}");
+                                                                    }
+                                                                });
+                                                            },
+                                                            on_remove: move |tag_id: String| {
+                                                                let api_clone = api.read().clone();
+                                                                let tid = task_id_tag_remove.clone();
+                                                                spawn(async move {
+                                                                    if let Err(e) = api_clone.remove_task_tag(&tid, &tag_id).await {
+                                                                        eprintln!("Failed to remove tag: {e}");
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
