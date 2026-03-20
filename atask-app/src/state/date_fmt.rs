@@ -1,8 +1,26 @@
-use chrono::{Local, NaiveDate, Datelike};
+use chrono::{Local, NaiveDate, NaiveDateTime, Datelike};
 
-/// Format a date string (YYYY-MM-DD) as a relative human-readable label.
+/// Parse a date string that may be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SSZ" (ISO datetime).
+fn parse_date(date_str: &str) -> Option<NaiveDate> {
+    // Try YYYY-MM-DD first
+    if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        return Some(d);
+    }
+    // Try ISO datetime (2026-03-22T00:00:00Z)
+    let trimmed = date_str.trim_end_matches('Z');
+    if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
+        return Some(dt.date());
+    }
+    // Try with fractional seconds (2026-03-20T19:31:29.028844Z)
+    if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S%.f") {
+        return Some(dt.date());
+    }
+    None
+}
+
+/// Format a date string as a relative human-readable label.
 pub fn format_relative(date_str: &str) -> String {
-    let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+    let Some(date) = parse_date(date_str) else {
         return date_str.to_string();
     };
     let today = Local::now().date_naive();
@@ -22,7 +40,7 @@ pub fn format_relative(date_str: &str) -> String {
 /// Format a deadline date with severity indication.
 /// Returns (label, css_variant) where variant is "normal", "today", or "overdue".
 pub fn format_deadline(date_str: &str) -> (String, &'static str) {
-    let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+    let Some(date) = parse_date(date_str) else {
         return (date_str.to_string(), "normal");
     };
     let today = Local::now().date_naive();
@@ -40,7 +58,7 @@ pub fn format_deadline(date_str: &str) -> (String, &'static str) {
 
 /// Format a section header date for Upcoming/Logbook grouping.
 pub fn format_section_date(date_str: &str) -> String {
-    let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+    let Some(date) = parse_date(date_str) else {
         return date_str.to_string();
     };
     let today = Local::now().date_naive();
@@ -143,5 +161,29 @@ mod tests {
     #[test]
     fn test_invalid_date() {
         assert_eq!(format_relative("not-a-date"), "not-a-date");
+    }
+
+    #[test]
+    fn test_iso_datetime_format() {
+        // The Go API returns dates as "2026-03-22T00:00:00Z"
+        let today = Local::now().date_naive();
+        let iso = format!("{}T00:00:00Z", today.format("%Y-%m-%d"));
+        assert_eq!(format_relative(&iso), "Today");
+    }
+
+    #[test]
+    fn test_iso_datetime_with_fractional() {
+        // CreatedAt format: "2026-03-20T19:31:29.028844Z"
+        let today = Local::now().date_naive();
+        let iso = format!("{}T19:31:29.028844Z", today.format("%Y-%m-%d"));
+        assert_eq!(format_relative(&iso), "Today");
+    }
+
+    #[test]
+    fn test_deadline_iso_format() {
+        let tomorrow = Local::now().date_naive() + chrono::Duration::days(1);
+        let iso = format!("{}T00:00:00Z", tomorrow.format("%Y-%m-%d"));
+        let (label, _) = format_deadline(&iso);
+        assert_eq!(label, "Due Tomorrow");
     }
 }
