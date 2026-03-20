@@ -313,6 +313,13 @@ impl ApiClient {
 
     // -- Projects -----------------------------------------------------------
 
+    pub async fn create_project(&self, title: &str) -> Result<Project, ApiError> {
+        let envelope: EventEnvelope<Project> = self
+            .post_json("/projects", &serde_json::json!({"title": title}))
+            .await?;
+        Ok(envelope.data)
+    }
+
     pub async fn list_projects(&self) -> Result<Vec<Project>, ApiError> {
         self.get_json("/projects").await
     }
