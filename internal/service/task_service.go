@@ -7,11 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // TaskService implements business logic for Tasks.
@@ -184,13 +184,30 @@ func (s *TaskService) Create(ctx context.Context, title, actorID string) (*domai
 	return task, nil
 }
 
-// Get fetches a task by ID.
+// hydrateTags queries and populates the Tags field on a task.
+func (s *TaskService) hydrateTags(ctx context.Context, task *domain.Task) error {
+	tags, err := s.queries.ListTaskTags(ctx, task.ID)
+	if err != nil {
+		return err
+	}
+	task.Tags = make([]string, len(tags))
+	for i, t := range tags {
+		task.Tags[i] = t.ID
+	}
+	return nil
+}
+
+// Get fetches a task by ID, including its tags.
 func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) {
 	row, err := s.queries.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return taskFromRow(row), nil
+	task := taskFromRow(row)
+	if err := s.hydrateTags(ctx, task); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // List returns all non-deleted tasks.
@@ -651,6 +668,49 @@ func (s *TaskService) Reorder(ctx context.Context, id string, newIndex int, acto
 	payload := map[string]any{"index": newIndex}
 	idxJSON, _ := json.Marshal(newIndex)
 	return s.publishEvent(ctx, domain.TaskReordered, id, actorID, now, payload, domain.DeltaModified, strPtr("index"), idxJSON)
+}
+
+// SetTodayIndex sets or clears the today_index for a task and emits task.today_index_set.
+func (s *TaskService) SetTodayIndex(ctx context.Context, id string, todayIndex *int, actorID string) error {
+	now := timeNow()
+
+	var todayIndexNull sql.NullInt64
+	if todayIndex != nil {
+		todayIndexNull = sql.NullInt64{Int64: int64(*todayIndex), Valid: true}
+	}
+
+	_, err := s.queries.UpdateTaskTodayIndex(ctx, sqlc.UpdateTaskTodayIndexParams{
+		TodayIndex: todayIndexNull,
+		UpdatedAt:  now,
+		ID:         id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{}
+	if todayIndex != nil {
+		payload["today_index"] = *todayIndex
+	}
+	idxJSON, _ := json.Marshal(todayIndex)
+	return s.publishEvent(ctx, domain.TaskTodayIndexSet, id, actorID, now, payload, domain.DeltaModified, strPtr("today_index"), idxJSON)
+}
+
+// Reopen sets a completed or cancelled task back to pending and emits task.reopened.
+func (s *TaskService) Reopen(ctx context.Context, id, actorID string) error {
+	now := timeNow()
+	_, err := s.queries.UpdateTaskStatus(ctx, sqlc.UpdateTaskStatusParams{
+		Status:      int64(domain.StatusPending),
+		CompletedAt: sql.NullTime{},
+		UpdatedAt:   now,
+		ID:          id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{}
+	return s.publishEvent(ctx, domain.TaskReopened, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
 }
 
 // Delete soft-deletes the task and emits task.deleted.

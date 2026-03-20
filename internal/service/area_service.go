@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // AreaService implements business logic for Areas.

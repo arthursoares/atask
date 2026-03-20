@@ -73,6 +73,8 @@ const (
 	TaskRecurrenceSet      EventType = "task.recurrence_set"
 	TaskRecurrenceRemoved  EventType = "task.recurrence_removed"
 	TaskReordered          EventType = "task.reordered"
+	TaskTodayIndexSet      EventType = "task.today_index_set"
+	TaskReopened           EventType = "task.reopened"
 )
 
 // Project events.
@@ -89,6 +91,7 @@ const (
 	ProjectRemovedFromArea EventType = "project.removed_from_area"
 	ProjectDeadlineSet     EventType = "project.deadline_set"
 	ProjectDeadlineRemoved EventType = "project.deadline_removed"
+	ProjectColorChanged    EventType = "project.color_changed"
 )
 
 // Checklist events.
@@ -107,9 +110,10 @@ const (
 
 // Section events.
 const (
-	SectionCreated EventType = "section.created"
-	SectionDeleted EventType = "section.deleted"
-	SectionRenamed EventType = "section.renamed"
+	SectionCreated   EventType = "section.created"
+	SectionDeleted   EventType = "section.deleted"
+	SectionRenamed   EventType = "section.renamed"
+	SectionReordered EventType = "section.reordered"
 )
 
 // Area events.

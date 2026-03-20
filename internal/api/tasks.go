@@ -43,6 +43,8 @@ func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/{id}/links/{taskId}", h.AddLink)
 	mux.HandleFunc("DELETE /tasks/{id}/links/{taskId}", h.RemoveLink)
 	mux.HandleFunc("PUT /tasks/{id}/reorder", h.Reorder)
+	mux.HandleFunc("PUT /tasks/{id}/today-index", h.SetTodayIndex)
+	mux.HandleFunc("POST /tasks/{id}/reopen", h.Reopen)
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -512,4 +514,41 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.TaskReordered), map[string]string{"id": id})
+}
+
+func (h *TaskHandler) SetTodayIndex(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Index *int `json:"index"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.tasks.SetTodayIndex(r.Context(), id, body.Index, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "task not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.TaskTodayIndexSet), map[string]string{"id": id})
+}
+
+func (h *TaskHandler) Reopen(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if err := h.tasks.Reopen(r.Context(), id, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "task not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.TaskReopened), map[string]string{"id": id})
 }

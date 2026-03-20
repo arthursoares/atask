@@ -7,11 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // SectionService implements business logic for Sections.
@@ -173,6 +173,24 @@ func (s *SectionService) Rename(ctx context.Context, id, title, actorID string) 
 	payload := map[string]any{"title": title}
 	titleJSON, _ := json.Marshal(title)
 	return s.publishSectionEvent(ctx, domain.SectionRenamed, id, actorID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
+}
+
+// Reorder sets the section index and emits section.reordered.
+func (s *SectionService) Reorder(ctx context.Context, id string, newIndex int, actorID string) error {
+	now := timeNow()
+
+	_, err := s.queries.UpdateSectionIndex(ctx, sqlc.UpdateSectionIndexParams{
+		Index:     int64(newIndex),
+		UpdatedAt: now,
+		ID:        id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{"index": newIndex}
+	idxJSON, _ := json.Marshal(newIndex)
+	return s.publishSectionEvent(ctx, domain.SectionReordered, id, actorID, now, payload, domain.DeltaModified, strPtr("index"), idxJSON)
 }
 
 // Delete soft-deletes the section. If cascade is true, it tombstones all tasks in the section;
