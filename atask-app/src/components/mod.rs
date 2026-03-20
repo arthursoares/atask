@@ -11,3 +11,4 @@ pub mod text_input;
 pub mod checklist_item;
 pub mod activity_entry;
 pub mod task_detail;
+pub mod command_palette;
