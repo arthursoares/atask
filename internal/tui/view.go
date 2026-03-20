@@ -147,10 +147,10 @@ func (m Model) renderSidebar(width, height int) string {
 			line = padRight(truncate(chevron+" "+item.Label, width), width)
 
 		case "project":
-			line = padRight(truncate("  📁 "+item.Label, width), width)
+			line = padRight(truncate("  "+IconProject+" "+item.Label, width), width)
 
 		case "tag":
-			line = padRight(truncate("🏷 "+item.Label, width), width)
+			line = padRight(truncate(IconTag+" "+item.Label, width), width)
 
 		default:
 			line = padRight(truncate(item.Label, width), width)
@@ -212,7 +212,7 @@ func (m Model) renderList(width, height int) string {
 					right = MutedStyle.Render(dl)
 				}
 			} else if task.ProjectID != nil && *task.ProjectID != "" {
-				right = MutedStyle.Render("📁")
+				right = IconFolder
 			}
 
 			iconWidth := lipgloss.Width(icon)
@@ -286,17 +286,17 @@ func (m Model) renderDetail(width, height int) string {
 	// 2. Metadata line.
 	var meta []string
 	if task.ProjectID != nil && *task.ProjectID != "" {
-		meta = append(meta, "📁 "+m.projectTitle(*task.ProjectID))
+		meta = append(meta, IconFolder+" "+m.projectTitle(*task.ProjectID))
 	}
 	for _, tagID := range task.Tags {
-		meta = append(meta, "🏷 "+m.tagTitle(tagID))
+		meta = append(meta, IconTag+" "+m.tagTitle(tagID))
 	}
 	if task.Deadline != nil && *task.Deadline != "" {
 		dl := formatDeadline(*task.Deadline)
 		if isOverdue(*task.Deadline) {
-			meta = append(meta, OverdueStyle.Render("⏰ "+dl))
+			meta = append(meta, OverdueStyle.Render("due:"+dl))
 		} else {
-			meta = append(meta, MutedStyle.Render("⏰ "+dl))
+			meta = append(meta, MutedStyle.Render("due:"+dl))
 		}
 	}
 	if task.LocationID != nil && *task.LocationID != "" {
@@ -431,13 +431,13 @@ func (m Model) renderDetailTabContent(width, height int) string {
 }
 
 // renderActivityEntry formats one Activity into a single line ≤ width.
-// Actor icon: 🤖 for agent/bot, 👤 for human. Then type + content + time.
+// renderActivityEntry formats one activity entry for display.
 func renderActivityEntry(a client.Activity, width int) string {
 	var actorIcon string
 	if a.ActorType == "agent" || a.ActorType == "bot" {
-		actorIcon = AgentStyle.Render("🤖")
+		actorIcon = AgentStyle.Render("»")
 	} else {
-		actorIcon = HumanStyle.Render("👤")
+		actorIcon = HumanStyle.Render("›")
 	}
 
 	ts := ""

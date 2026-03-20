@@ -52,7 +52,19 @@ var (
 	CheckCancel = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorError)).Render("✗")
 )
 
-// View icons
+// View icons — using styled single-width chars for reliable terminal rendering.
 var ViewIcons = map[string]string{
-	"inbox": "📥", "today": "⭐", "upcoming": "📅", "someday": "💤", "logbook": "📓",
+	"inbox":    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWarning)).Render("●"),
+	"today":    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWarning)).Render("★"),
+	"upcoming": lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSecondary)).Render("◆"),
+	"someday":  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorMuted)).Render("○"),
+	"logbook":  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorMuted)).Render("▪"),
 }
+
+// Entity icons.
+var (
+	IconArea    = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPrimary)).Render("●")
+	IconProject = MutedStyle.Render("▸")
+	IconTag     = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWarning)).Render("◆")
+	IconFolder  = MutedStyle.Render("[P]")
+)
