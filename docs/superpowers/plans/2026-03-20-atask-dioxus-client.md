@@ -13,6 +13,16 @@
 **Reference Mockup:** `docs/design_specs/atask-screens-validation.html` — open in browser to see target.
 **CSS:** `docs/design_specs/theme.css` — copy to `atask-app/assets/theme.css` before starting.
 
+## Status (2026-03-20)
+
+All 13 tasks implemented. Login reactivity bug found and fixed (Dioxus signal reads must be inside `rsx!`). Credential persistence added. Remaining polish:
+- [ ] Detail panel: fetch real checklist + activity from API
+- [ ] Verify task completion works end-to-end in all views
+- [ ] Verify NewTaskInline creates tasks via API
+- [ ] Sidebar badges: real counts from state
+- [ ] Project view: load real sections + tasks
+- [ ] Visual polish pass against reference mockup
+
 ---
 
 ## File Structure
