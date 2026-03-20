@@ -111,6 +111,8 @@ pub struct Project {
     pub area_id: Option<String>,
     #[serde(rename = "Tags", default)]
     pub tags: Option<Vec<String>>,
+    #[serde(rename = "Color", default)]
+    pub color: String,
     #[serde(rename = "AutoComplete", default)]
     pub auto_complete: bool,
 }
