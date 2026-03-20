@@ -9,3 +9,6 @@ pub mod new_task_inline;
 pub mod checklist_item;
 pub mod schedule_picker;
 pub mod task_detail;
+pub mod project_picker;
+pub mod date_picker;
+pub mod tag_picker;

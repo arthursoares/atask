@@ -85,6 +85,7 @@ dependencies = [
 name = "atask"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "dioxus",
  "futures-util",

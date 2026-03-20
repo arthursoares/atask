@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use dioxus::prelude::*;
+use futures_util::StreamExt;
 
 mod api;
 mod state;
@@ -7,6 +8,7 @@ mod components;
 mod views;
 
 use api::client::ApiClient;
+use api::sse::connect_sse;
 use state::app::*;
 
 fn main() {
@@ -39,8 +41,8 @@ fn App() -> Element {
     let mut areas = AreaList(use_signal(|| Vec::new()));
     let mut tags = TagList(use_signal(|| Vec::new()));
     let mut loading = LoadingSignal(use_signal(|| false));
-    let project_tasks = ProjectTasks(use_signal(|| HashMap::new()));
-    let project_sections = ProjectSections(use_signal(|| HashMap::new()));
+    let mut project_tasks = ProjectTasks(use_signal(|| HashMap::new()));
+    let mut project_sections = ProjectSections(use_signal(|| HashMap::new()));
 
     // Provide ALL via context
     use_context_provider(|| api);
@@ -86,6 +88,90 @@ fn App() -> Element {
                 if let Ok(t) = tags_r { tags.0.set(t); }
                 loading.0.set(false);
             });
+        }
+    });
+
+    // SSE coroutine: reconnects on disconnect, refetches on events
+    use_coroutine(move |_: UnboundedReceiver<()>| {
+        async move {
+            loop {
+                // Wait until we have a token
+                let (base, tok) = loop {
+                    let tok_val = token.0.read().clone();
+                    if let Some(t) = tok_val {
+                        let base = api.0.read().base_url().to_string();
+                        break (base, t);
+                    }
+                    // Poll every 500ms until token is available
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                };
+
+                println!("[SSE] Connecting to {base}/events/stream...");
+                match connect_sse(&base, &tok, None).await {
+                    Ok(mut stream) => {
+                        println!("[SSE] Connected");
+                        while let Some(result) = stream.next().await {
+                            match result {
+                                Ok(evt) => {
+                                    println!("[SSE] event: {} data: {}", evt.event_type, &evt.data[..evt.data.len().min(80)]);
+                                    let api_clone = api.0.read().clone();
+                                    let view = active_view.0.read().clone();
+
+                                    if evt.event_type.starts_with("task.") {
+                                        // Refetch active view
+                                        match view {
+                                            ActiveView::Inbox => {
+                                                if let Ok(t) = api_clone.list_inbox().await { inbox.0.set(t); }
+                                            }
+                                            ActiveView::Today => {
+                                                if let Ok(t) = api_clone.list_today().await { today.0.set(t); }
+                                            }
+                                            ActiveView::Upcoming => {
+                                                if let Ok(t) = api_clone.list_upcoming().await { upcoming.0.set(t); }
+                                            }
+                                            ActiveView::Someday => {
+                                                if let Ok(t) = api_clone.list_someday().await { someday.0.set(t); }
+                                            }
+                                            ActiveView::Logbook => {
+                                                if let Ok(t) = api_clone.list_logbook().await { logbook.0.set(t); }
+                                            }
+                                            ActiveView::Project(ref pid) => {
+                                                if let Ok(t) = api_clone.list_tasks_by_project(pid).await {
+                                                    let mut map = project_tasks.0.read().clone();
+                                                    map.insert(pid.clone(), t);
+                                                    project_tasks.0.set(map);
+                                                }
+                                            }
+                                        }
+                                    } else if evt.event_type.starts_with("project.") {
+                                        if let Ok(p) = api_clone.list_projects().await {
+                                            projects.0.set(p);
+                                        }
+                                    } else if evt.event_type.starts_with("section.") {
+                                        // Refetch sections for active project
+                                        if let ActiveView::Project(ref pid) = view {
+                                            if let Ok(s) = api_clone.list_sections(pid).await {
+                                                let mut map = project_sections.0.read().clone();
+                                                map.insert(pid.clone(), s);
+                                                project_sections.0.set(map);
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("[SSE] Stream error: {e}");
+                                    break;
+                                }
+                            }
+                        }
+                        println!("[SSE] Stream ended, reconnecting in 2s...");
+                    }
+                    Err(e) => {
+                        println!("[SSE] Connection failed: {e}, retrying in 2s...");
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
         }
     });
 

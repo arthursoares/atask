@@ -1344,4 +1344,100 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Picker Dropdowns
+   ═══════════════════════════════════════════ */
+
+.picker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--canvas-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: 100;
+    padding: var(--sp-1) 0;
+}
+
+.picker-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+    color: var(--ink-primary);
+    cursor: pointer;
+}
+
+.picker-item:hover {
+    background: var(--sidebar-hover);
+}
+
+.picker-item.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.detail-field-picker {
+    position: relative;
+}
+
+
+/* ═══════════════════════════════════════════
+   Date Picker
+   ═══════════════════════════════════════════ */
+
+.date-picker-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.date-picker-input {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
+    font-size: var(--text-sm);
+    font-family: inherit;
+    color: var(--ink-primary);
+    background: var(--canvas-elevated);
+}
+
+.date-picker-clear {
+    font-size: var(--text-xs);
+    color: var(--accent);
+    cursor: pointer;
+}
+
+
+/* ═══════════════════════════════════════════
+   Detail Tag Pills
+   ═══════════════════════════════════════════ */
+
+.detail-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1);
+}
+
+.detail-tag-add-btn {
+    font-size: var(--text-xs);
+    color: var(--accent);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    border: 1px dashed var(--border);
+}
+
+.detail-tag-add-btn:hover {
+    background: var(--accent-subtle);
+}
+
+
 /* No animations. All state changes are instant. */

@@ -5,6 +5,9 @@ use crate::api::types::{Task, ChecklistItem};
 use crate::state::app::*;
 use super::checklist_item::ChecklistItemComponent;
 use super::schedule_picker::SchedulePicker;
+use super::project_picker::ProjectPicker;
+use super::date_picker::DatePicker;
+use super::tag_picker::TagPicker;
 
 fn find_task(
     id: &str,
@@ -39,6 +42,7 @@ pub fn TaskDetail() -> Element {
     let logbook: LogbookTasks = use_context();
     let project_tasks: ProjectTasks = use_context();
     let projects: ProjectList = use_context();
+    let tags: TagList = use_context();
 
     let mut last_loaded_id: Signal<Option<String>> = use_signal(|| None);
     let mut title_draft: Signal<String> = use_signal(|| String::new());
@@ -46,6 +50,8 @@ pub fn TaskDetail() -> Element {
     let mut schedule_draft: Signal<i64> = use_signal(|| 0);
     let mut checklist: Signal<Vec<ChecklistItem>> = use_signal(|| Vec::new());
     let mut checklist_input: Signal<String> = use_signal(|| String::new());
+    let mut show_project_picker: Signal<bool> = use_signal(|| false);
+    let mut show_tag_picker: Signal<bool> = use_signal(|| false);
 
     // Fetch checklist when selected task changes
     use_effect(move || {
@@ -61,6 +67,9 @@ pub fn TaskDetail() -> Element {
                     }
                 });
                 last_loaded_id.set(id);
+                // Close pickers on task switch
+                show_project_picker.set(false);
+                show_tag_picker.set(false);
             }
         } else {
             checklist.set(Vec::new());
@@ -102,6 +111,11 @@ pub fn TaskDetail() -> Element {
                             let project_name = task.project_id.as_ref().and_then(|pid| {
                                 projects.0.read().iter().find(|p| p.id == *pid).map(|p| p.title.clone())
                             });
+
+                            let task_tags: Vec<String> = task.tags.clone().unwrap_or_default();
+                            let tag_pills: Vec<(String, String)> = task_tags.iter().filter_map(|tid| {
+                                tags.0.read().iter().find(|t| t.id == *tid).map(|t| (t.id.clone(), t.title.clone()))
+                            }).collect();
 
                             rsx! {
                                 div { class: "detail-panel",
@@ -152,13 +166,36 @@ pub fn TaskDetail() -> Element {
                                     // Fields
                                     div { class: "detail-fields",
                                         // PROJECT
-                                        div { class: "detail-field",
+                                        div { class: "detail-field detail-field-picker",
                                             div { class: "detail-field-label", "PROJECT" }
-                                            div { class: "detail-field-value",
+                                            div {
+                                                class: "detail-field-value",
+                                                onclick: move |_| {
+                                                    let current = *show_project_picker.read();
+                                                    show_project_picker.set(!current);
+                                                    show_tag_picker.set(false);
+                                                },
                                                 if let Some(ref name) = project_name {
                                                     "{name}"
                                                 } else {
                                                     "None"
+                                                }
+                                            }
+                                            if *show_project_picker.read() {
+                                                ProjectPicker {
+                                                    current_project_id: task.project_id.clone(),
+                                                    on_select: {
+                                                        let tid = task_id.clone();
+                                                        move |project_id: Option<String>| {
+                                                            show_project_picker.set(false);
+                                                            let api_clone = api.0.read().clone();
+                                                            let tid = tid.clone();
+                                                            let pid = project_id.clone();
+                                                            spawn(async move {
+                                                                let _ = api_clone.move_task_to_project(&tid, pid.as_deref()).await;
+                                                            });
+                                                        }
+                                                    },
                                                 }
                                             }
                                         }
@@ -172,7 +209,6 @@ pub fn TaskDetail() -> Element {
                                                     let tid = task_id.clone();
                                                     move |schedule: String| {
                                                         println!("[DETAIL] Changing schedule to: {schedule}");
-                                                        // Update draft immediately for UI feedback
                                                         let new_val = match schedule.as_str() {
                                                             "inbox" => 0,
                                                             "anytime" => 1,
@@ -180,7 +216,6 @@ pub fn TaskDetail() -> Element {
                                                             _ => 0,
                                                         };
                                                         schedule_draft.set(new_val);
-                                                        // API call + refetch all views
                                                         let api_clone = api.0.read().clone();
                                                         let tid = tid.clone();
                                                         let sched = schedule.clone();
@@ -189,7 +224,6 @@ pub fn TaskDetail() -> Element {
                                                                 Ok(_) => println!("[DETAIL] Schedule saved"),
                                                                 Err(e) => println!("[DETAIL] Schedule save error: {e}"),
                                                             }
-                                                            // SSE will handle view sync when wired up
                                                         });
                                                     }
                                                 },
@@ -199,23 +233,87 @@ pub fn TaskDetail() -> Element {
                                         // START DATE
                                         div { class: "detail-field",
                                             div { class: "detail-field-label", "START DATE" }
-                                            div { class: "detail-field-value",
-                                                if let Some(ref d) = task.start_date {
-                                                    "{crate::state::date_fmt::format_relative(d)}"
-                                                } else {
-                                                    "None"
-                                                }
+                                            DatePicker {
+                                                value: task.start_date.clone(),
+                                                on_change: {
+                                                    let tid = task_id.clone();
+                                                    move |date: Option<String>| {
+                                                        let api_clone = api.0.read().clone();
+                                                        let tid = tid.clone();
+                                                        let d = date.clone();
+                                                        spawn(async move {
+                                                            let _ = api_clone.set_task_start_date(&tid, d.as_deref()).await;
+                                                        });
+                                                    }
+                                                },
                                             }
                                         }
 
                                         // DEADLINE
                                         div { class: "detail-field",
                                             div { class: "detail-field-label", "DEADLINE" }
-                                            div { class: "detail-field-value",
-                                                if let Some(ref d) = task.deadline {
-                                                    "{crate::state::date_fmt::format_relative(d)}"
-                                                } else {
-                                                    "None"
+                                            DatePicker {
+                                                value: task.deadline.clone(),
+                                                on_change: {
+                                                    let tid = task_id.clone();
+                                                    move |date: Option<String>| {
+                                                        let api_clone = api.0.read().clone();
+                                                        let tid = tid.clone();
+                                                        let d = date.clone();
+                                                        spawn(async move {
+                                                            let _ = api_clone.set_task_deadline(&tid, d.as_deref()).await;
+                                                        });
+                                                    }
+                                                },
+                                            }
+                                        }
+
+                                        // TAGS
+                                        div { class: "detail-field detail-field-picker",
+                                            div { class: "detail-field-label", "TAGS" }
+                                            div { class: "detail-tags-row",
+                                                for (tag_id, tag_title) in tag_pills.iter() {
+                                                    span {
+                                                        class: "tag tag-default",
+                                                        key: "{tag_id}",
+                                                        "{tag_title}"
+                                                    }
+                                                }
+                                                span {
+                                                    class: "detail-tag-add-btn",
+                                                    onclick: move |_| {
+                                                        let current = *show_tag_picker.read();
+                                                        show_tag_picker.set(!current);
+                                                        show_project_picker.set(false);
+                                                    },
+                                                    "+ Add"
+                                                }
+                                            }
+                                            if *show_tag_picker.read() {
+                                                TagPicker {
+                                                    current_tags: task_tags.clone(),
+                                                    on_add: {
+                                                        let tid = task_id.clone();
+                                                        move |tag_id: String| {
+                                                            let api_clone = api.0.read().clone();
+                                                            let tid = tid.clone();
+                                                            let tag_id = tag_id.clone();
+                                                            spawn(async move {
+                                                                let _ = api_clone.add_task_tag(&tid, &tag_id).await;
+                                                            });
+                                                        }
+                                                    },
+                                                    on_remove: {
+                                                        let tid = task_id.clone();
+                                                        move |tag_id: String| {
+                                                            let api_clone = api.0.read().clone();
+                                                            let tid = tid.clone();
+                                                            let tag_id = tag_id.clone();
+                                                            spawn(async move {
+                                                                let _ = api_clone.remove_task_tag(&tid, &tag_id).await;
+                                                            });
+                                                        }
+                                                    },
                                                 }
                                             }
                                         }
