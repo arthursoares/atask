@@ -7,3 +7,7 @@ pub mod section_header;
 pub mod new_task_inline;
 pub mod button;
 pub mod toolbar;
+pub mod text_input;
+pub mod checklist_item;
+pub mod activity_entry;
+pub mod task_detail;

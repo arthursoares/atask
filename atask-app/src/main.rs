@@ -41,6 +41,9 @@ fn App() -> Element {
                     }
                 }
             }
+            if selected_task_id.read().is_some() {
+                components::task_detail::TaskDetail {}
+            }
         }
     }
 }
