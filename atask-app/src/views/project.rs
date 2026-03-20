@@ -67,43 +67,62 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                 } else {
                     rsx! {
                         // Sectionless tasks at top
-                        if !sectionless.is_empty() {
-                            div { class: "task-list",
-                                for task in sectionless.iter() {
-                                    {
-                                        let task_id = task.id.clone();
-                                        let is_selected = *selected.0.read() == Some(task_id.clone());
-                                        rsx! {
-                                            TaskItem {
-                                                key: "{task_id}",
-                                                task: task.clone(),
-                                                selected: is_selected,
-                                                today_view: false,
-                                                show_project: false,
-                                                on_select: move |id: String| {
-                                                    selected.0.set(Some(id));
-                                                },
-                                                on_complete: {
-                                                    let task_id = task_id.clone();
+                        div { class: "task-list",
+                            for task in sectionless.iter() {
+                                {
+                                    let task_id = task.id.clone();
+                                    let is_selected = *selected.0.read() == Some(task_id.clone());
+                                    rsx! {
+                                        TaskItem {
+                                            key: "{task_id}",
+                                            task: task.clone(),
+                                            selected: is_selected,
+                                            today_view: false,
+                                            show_project: false,
+                                            on_select: move |id: String| {
+                                                selected.0.set(Some(id));
+                                            },
+                                            on_complete: {
+                                                let task_id = task_id.clone();
+                                                let pid = pid.clone();
+                                                move |_id: String| {
+                                                    let api_clone = api.0.read().clone();
+                                                    let tid = task_id.clone();
                                                     let pid = pid.clone();
-                                                    move |_id: String| {
-                                                        let api_clone = api.0.read().clone();
-                                                        let tid = task_id.clone();
-                                                        let pid = pid.clone();
-                                                        spawn(async move {
-                                                            let _ = api_clone.complete_task(&tid).await;
-                                                            if let Ok(fresh) = api_clone.list_tasks_by_project(&pid).await {
-                                                                let mut map = project_tasks.0.read().clone();
-                                                                map.insert(pid, fresh);
-                                                                project_tasks.0.set(map);
-                                                            }
-                                                        });
-                                                    }
-                                                },
-                                            }
+                                                    spawn(async move {
+                                                        let _ = api_clone.complete_task(&tid).await;
+                                                        if let Ok(fresh) = api_clone.list_tasks_by_project(&pid).await {
+                                                            let mut map = project_tasks.0.read().clone();
+                                                            map.insert(pid, fresh);
+                                                            project_tasks.0.set(map);
+                                                        }
+                                                    });
+                                                }
+                                            },
                                         }
                                     }
                                 }
+                            }
+
+                            // New task for sectionless area
+                            NewTaskInline {
+                                on_create: {
+                                    let pid = pid.clone();
+                                    move |title: String| {
+                                        let api_clone = api.0.read().clone();
+                                        let pid = pid.clone();
+                                        spawn(async move {
+                                            if let Ok(task) = api_clone.create_task(&title).await {
+                                                let _ = api_clone.move_task_to_project(&task.id, Some(&pid)).await;
+                                            }
+                                            if let Ok(fresh) = api_clone.list_tasks_by_project(&pid).await {
+                                                let mut map = project_tasks.0.read().clone();
+                                                map.insert(pid, fresh);
+                                                project_tasks.0.set(map);
+                                            }
+                                        });
+                                    }
+                                },
                             }
                         }
 
@@ -132,26 +151,6 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                 }
             }
 
-            // New task inline for sectionless tasks
-            NewTaskInline {
-                on_create: {
-                    let pid = project_id.clone();
-                    move |title: String| {
-                        let api_clone = api.0.read().clone();
-                        let pid = pid.clone();
-                        spawn(async move {
-                            if let Ok(task) = api_clone.create_task(&title).await {
-                                let _ = api_clone.move_task_to_project(&task.id, Some(&pid)).await;
-                            }
-                            if let Ok(fresh) = api_clone.list_tasks_by_project(&pid).await {
-                                let mut map = project_tasks.0.read().clone();
-                                map.insert(pid, fresh);
-                                project_tasks.0.set(map);
-                            }
-                        });
-                    }
-                },
-            }
         }
     }
 }
