@@ -3,10 +3,15 @@ use dioxus::prelude::*;
 use crate::state::navigation::ActiveView;
 use crate::state::projects::ProjectState;
 
+/// Signal that, when set to true, shows the new-section input in the project view.
+#[derive(Clone, Copy)]
+pub struct AddSectionTrigger(pub Signal<bool>);
+
 #[component]
 pub fn Toolbar() -> Element {
     let active_view: Signal<ActiveView> = use_context();
     let project_state: Signal<ProjectState> = use_context();
+    let mut add_section_trigger: AddSectionTrigger = use_context();
 
     let is_project = matches!(&*active_view.read(), ActiveView::Project(_));
 
@@ -142,7 +147,11 @@ pub fn Toolbar() -> Element {
                 }
                 div { class: "app-toolbar-right",
                     if is_project {
-                        button { class: "btn btn-ghost btn-sm",
+                        button {
+                            class: "btn btn-ghost btn-sm",
+                            onclick: move |_| {
+                                add_section_trigger.0.set(true);
+                            },
                             "+ Add Section"
                         }
                     }

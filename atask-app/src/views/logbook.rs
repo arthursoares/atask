@@ -69,7 +69,7 @@ pub fn LogbookView() -> Element {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { "Nothing completed yet. Get started!" }
+                    p { class: "empty-state-text", "Nothing completed yet. Get started!" }
                 }
             }
         };

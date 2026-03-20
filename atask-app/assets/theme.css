@@ -1554,4 +1554,86 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Empty State — Success variant
+   ═══════════════════════════════════════════ */
+
+.empty-state-success {
+    color: var(--success);
+}
+
+
+/* ═══════════════════════════════════════════
+   Confirm Dialog
+   ═══════════════════════════════════════════ */
+
+.confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.confirm-dialog {
+    width: 360px;
+    background: var(--canvas-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-popover);
+    padding: var(--sp-6);
+}
+
+.confirm-message {
+    font-size: var(--text-base);
+    color: var(--ink-primary);
+    margin-bottom: var(--sp-6);
+    line-height: var(--leading-normal);
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+}
+
+
+/* ═══════════════════════════════════════════
+   Toast
+   ═══════════════════════════════════════════ */
+
+.toast {
+    position: fixed;
+    bottom: var(--sp-6);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--deadline-red);
+    color: var(--ink-on-accent);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    padding: var(--sp-2) var(--sp-5);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: 300;
+    white-space: nowrap;
+}
+
+
+/* ═══════════════════════════════════════════
+   New Section Input
+   ═══════════════════════════════════════════ */
+
+.new-section-input-row {
+    padding: var(--sp-4) 0 var(--sp-2);
+}
+
+.new-section-input-row .input {
+    max-width: 300px;
+}
+
+
 /* No animations. All state changes are instant. */

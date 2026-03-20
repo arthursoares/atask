@@ -31,7 +31,7 @@ pub fn InboxView() -> Element {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { "Inbox Zero" }
+                    p { class: "empty-state-text empty-state-success", "Inbox Zero \u{2713}" }
                 }
                 NewTaskInline {
                     on_create: move |title: String| {

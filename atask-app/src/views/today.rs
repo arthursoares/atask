@@ -33,7 +33,7 @@ pub fn TodayView() -> Element {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { class: "empty-state-text", "Nothing planned for today." }
+                    p { class: "empty-state-text", "Your day is clear." }
                 }
                 NewTaskInline {
                     on_create: move |title: String| {

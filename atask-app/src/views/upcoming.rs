@@ -48,7 +48,7 @@ pub fn UpcomingView() -> Element {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { "Nothing scheduled ahead." }
+                    p { class: "empty-state-text", "Nothing scheduled ahead." }
                 }
             }
         };

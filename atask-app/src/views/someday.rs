@@ -33,7 +33,7 @@ pub fn SomedayView() -> Element {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { "No someday tasks. Everything is decided." }
+                    p { class: "empty-state-text", "No someday tasks. Everything is decided." }
                 }
                 NewTaskInline {
                     on_create: move |title: String| {

@@ -5,6 +5,7 @@ use crate::api::types::Task;
 use crate::components::new_task_inline::NewTaskInline;
 use crate::components::section_header::SectionHeader;
 use crate::components::task_item::TaskItem;
+use crate::components::toolbar::AddSectionTrigger;
 use crate::state::projects::ProjectState;
 
 #[derive(Clone, PartialEq, Props)]
@@ -20,10 +21,22 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
     let mut selected_task_id: Signal<Option<String>> = use_context();
     let selected_id = selected_task_id.read().clone().unwrap_or_default();
 
+    let mut add_section_trigger: AddSectionTrigger = use_context();
+    let mut show_section_input = use_signal(|| false);
+    let mut section_input_value = use_signal(|| String::new());
+
     let mut loading = use_signal(|| false);
     let mut collapsed_sections: Signal<Vec<String>> = use_signal(|| Vec::new());
     let mut dragging_id: Signal<Option<String>> = use_signal(|| None);
     let mut drag_over_id: Signal<Option<String>> = use_signal(|| None);
+
+    // Watch for add-section trigger from toolbar
+    let _section_trigger = use_effect(move || {
+        if *add_section_trigger.0.read() {
+            show_section_input.set(true);
+            add_section_trigger.0.set(false);
+        }
+    });
 
     // Fetch project data when project_id changes
     let pid = project_id.clone();
@@ -71,6 +84,37 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
             div { class: "task-list",
                 div { class: "empty-state",
                     p { class: "empty-state-text", "Loading..." }
+                }
+            }
+        };
+    }
+
+    if !is_loading && all_tasks.is_empty() && sections.is_empty() {
+        return rsx! {
+            div { class: "task-list",
+                div { class: "empty-state",
+                    p { class: "empty-state-text", "No tasks in this project yet." }
+                }
+                NewTaskInline {
+                    on_create: {
+                        let pid = project_id.clone();
+                        move |title: String| {
+                            let api_clone = api.read().clone();
+                            let pid = pid.clone();
+                            spawn(async move {
+                                match api_clone.create_task(&title).await {
+                                    Ok(task) => {
+                                        let mut pt = project_state.write().project_tasks;
+                                        let mut map = pt.write();
+                                        map.entry(pid).or_default().push(task);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to create task: {e}");
+                                    }
+                                }
+                            });
+                        }
+                    },
                 }
             }
         };
@@ -298,6 +342,52 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                                 },
                             }
                         }
+                    }
+                }
+            }
+
+            // New section inline input
+            if *show_section_input.read() {
+                div { class: "new-section-input-row",
+                    input {
+                        class: "input",
+                        placeholder: "Section title...",
+                        value: "{section_input_value.read()}",
+                        autofocus: true,
+                        oninput: move |evt: Event<FormData>| {
+                            section_input_value.set(evt.value().clone());
+                        },
+                        onkeydown: {
+                            let pid = project_id.clone();
+                            move |evt: Event<KeyboardData>| {
+                                if evt.key() == Key::Enter {
+                                    let title = section_input_value.read().clone();
+                                    if !title.trim().is_empty() {
+                                        let api_clone = api.read().clone();
+                                        let pid = pid.clone();
+                                        spawn(async move {
+                                            match api_clone.create_section(&pid, &title).await {
+                                                Ok(section) => {
+                                                    let mut sec = project_state.write().sections;
+                                                    sec.write()
+                                                        .entry(pid)
+                                                        .or_default()
+                                                        .push(section);
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Failed to create section: {e}");
+                                                }
+                                            }
+                                        });
+                                        section_input_value.set(String::new());
+                                        show_section_input.set(false);
+                                    }
+                                } else if evt.key() == Key::Escape {
+                                    section_input_value.set(String::new());
+                                    show_section_input.set(false);
+                                }
+                            }
+                        },
                     }
                 }
             }

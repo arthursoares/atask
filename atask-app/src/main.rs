@@ -9,8 +9,10 @@ mod views;
 use api::client::ApiClient;
 use api::sse::{self, SseParsedEvent};
 use components::command_palette::CommandPalette;
+use components::confirm_dialog::ConfirmDialog;
 use components::sidebar::Sidebar;
-use components::toolbar::Toolbar;
+use components::toast::Toast;
+use components::toolbar::{AddSectionTrigger, Toolbar};
 use state::command::CommandState;
 use state::navigation::ActiveView;
 use state::tasks::TaskState;
@@ -37,9 +39,12 @@ fn App() -> Element {
     let task_state: Signal<TaskState> = use_signal(|| TaskState::default());
     let project_state: Signal<ProjectState> = use_signal(|| ProjectState::default());
     let active_view = use_signal(|| ActiveView::Today);
-    let selected_task_id: Signal<Option<String>> = use_signal(|| None);
+    let mut selected_task_id: Signal<Option<String>> = use_signal(|| None);
     let command_state: Signal<CommandState> = use_signal(|| CommandState::default());
     let selected_list_index: Signal<Option<usize>> = use_signal(|| None);
+    let mut confirm_delete: Signal<Option<String>> = use_signal(|| None);
+    let toast_message: Signal<Option<String>> = use_signal(|| None);
+    let add_section_trigger = AddSectionTrigger(use_signal(|| false));
 
     use_context_provider(|| api);
     use_context_provider(|| login_token);
@@ -48,6 +53,8 @@ fn App() -> Element {
     use_context_provider(|| active_view);
     use_context_provider(|| selected_task_id);
     use_context_provider(|| command_state);
+    use_context_provider(|| toast_message);
+    use_context_provider(|| add_section_trigger);
 
     // Load initial data when token becomes available
     let _data_loader = use_effect(move || {
@@ -166,6 +173,7 @@ fn App() -> Element {
                         task_state,
                         api,
                         project_state,
+                        confirm_delete,
                     );
                 },
                 Sidebar {}
@@ -190,6 +198,37 @@ fn App() -> Element {
                 if *command_state.read().open.read() {
                     CommandPalette {}
                 }
+                if let Some(ref task_id) = *confirm_delete.read() {
+                    {
+                        let task_id = task_id.clone();
+                        rsx! {
+                            ConfirmDialog {
+                                message: "Delete this task? This cannot be undone.".to_string(),
+                                on_confirm: move |_| {
+                                    let api_clone = api.read().clone();
+                                    let tid = task_id.clone();
+                                    let mut toast = toast_message;
+                                    confirm_delete.set(None);
+                                    selected_task_id.set(None);
+                                    spawn(async move {
+                                        if let Err(e) = api_clone.delete_task(&tid).await {
+                                            toast.set(Some(format!("Failed to delete task: {e}")));
+                                            // Clear toast after 3 seconds
+                                            spawn(async move {
+                                                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                                                toast.set(None);
+                                            });
+                                        }
+                                    });
+                                },
+                                on_cancel: move |_| {
+                                    confirm_delete.set(None);
+                                },
+                            }
+                        }
+                    }
+                }
+                Toast {}
             }
         }
     }
@@ -260,6 +299,7 @@ fn handle_global_keydown(
     task_state: Signal<TaskState>,
     api: Signal<ApiClient>,
     project_state: Signal<ProjectState>,
+    mut confirm_delete: Signal<Option<String>>,
 ) {
     let key = evt.key();
     let modifiers = evt.modifiers();
@@ -360,16 +400,10 @@ fn handle_global_keydown(
             return;
         }
 
-        // Backspace / Delete — delete task
+        // Backspace / Delete — show confirm dialog
         if key == Key::Backspace || key == Key::Delete {
             evt.prevent_default();
-            let api_clone = api.read().clone();
-            let task_id = tid.clone();
-            selected_task_id.set(None);
-            selected_list_index.set(None);
-            spawn(async move {
-                let _ = api_clone.delete_task(&task_id).await;
-            });
+            confirm_delete.set(Some(tid.clone()));
             return;
         }
 
