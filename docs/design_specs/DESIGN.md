@@ -345,7 +345,11 @@ fn Checkbox(props: CheckboxProps) -> Element {
 
 Single-line row. Checkbox, title, and metadata all on one horizontal axis. 32px row height. Title truncates with ellipsis when it meets right-aligned metadata.
 
-**States:** default, hover (subtle bg), selected (accent-tinted bg), completed (struck through)
+**States:** default, hover (subtle bg), selected (accent-tinted bg), completed (struck through), draggable (grip indicator)
+
+**Completion behavior:** When a task is completed (checkbox click), it instantly shows as struck through with checked checkbox and faded text (`--ink-tertiary`). It remains visible in the list for 2 seconds so the user can see the result, then disappears from the current view (moves to logbook). This is the one exception to the "no animation" rule — but it's not animated, it's a timed removal. If the user scrolls or navigates away before the 2s, the task is removed immediately.
+
+**Drag affordance:** When a view supports reordering, each task row shows a subtle grip icon (6-dot drag handle, `--ink-quaternary`) on the far left, visible on hover. This signals that rows are draggable.
 
 ```rust
 #[derive(Props, Clone, PartialEq)]
@@ -423,9 +427,12 @@ fn TaskItem(props: TaskItemProps) -> Element {
 - Project pill (colored dot + name) — always show if task has a project
 - Deadline pill (red text, "Due Mar 25") — show if deadline exists
 - Today badge (★ Today in amber) — show if in today view from a non-today context
+- Checklist progress ("3/5" in `--ink-tertiary`) — show if task has checklist items
 - Agent indicator (✦ Claude assigned / ✦ In progress) — show if last activity is from an agent
 
-**Priority of metadata display:** project → deadline → today badge → agent → tags. Truncate after 3 items on narrow widths.
+**Priority of metadata display:** project → deadline → today badge → checklist → agent → tags. Truncate after 3 items on narrow widths.
+
+**Checklist indicator:** When a task has checklist items, show a compact progress indicator in the metadata row: `"3/5"` (completed/total) in `--text-xs` `--ink-tertiary`. If all items are completed, show in `--success` color. This requires the API to include `checklist_count` and `open_checklist_count` in the task response, or the client fetches checklist data per visible task.
 
 ---
 
@@ -966,6 +973,83 @@ transition: background-color 80ms ease-out;
 | Task item hover | 80ms bg-color transition (smoothing only) |
 | Button hover | 80ms bg-color transition (smoothing only) |
 | Focus ring | Instant |
+| Task completion | Instant strikethrough, remains 2s, then removed from list |
+
+### Drag-and-Drop UX (Things-inspired)
+
+Drag-and-drop is the primary reordering mechanism for Today, Someday, and Project views.
+
+**Grip handle:** On hover, a 6-dot grip icon appears at the left edge of the task row (before the checkbox). Color `--ink-quaternary`. This is the drag handle — clicking it initiates drag. Clicking the rest of the row still selects the task.
+
+**Drag preview:** When dragging begins, the browser's native drag image shows the full task row (title + metadata). Apply `opacity: 0.7` to the drag source row to indicate it's being moved.
+
+**Drop target gap:** As the user drags over other task rows, a visible gap opens between rows where the task will be inserted. This is achieved by adding a `margin-top` or a placeholder div at the drop position. The gap should be roughly the height of a task row (32px) so the user sees exactly where the task will land.
+
+```css
+.task-item.drag-source {
+    opacity: 0.5;
+}
+
+.task-list-drop-indicator {
+    height: 32px;
+    background: var(--accent-subtle);
+    border: 1px dashed var(--accent);
+    border-radius: var(--radius-md);
+    margin: 2px 0;
+}
+```
+
+**Cross-section drag (Project view):** In project views, tasks can be dragged between sections. When hovering over a section header during drag, highlight the header to indicate the task will be moved to that section.
+
+**Reorder on drop:** On drop, update the local signal immediately (optimistic) and call `PUT /tasks/{id}/reorder` with the new index.
+
+---
+
+## 9.5 Settings / Preferences
+
+**Trigger:** `⌘,` or command palette "Open Preferences"
+
+**Implementation:** A simple overlay panel (not a separate window) with:
+
+1. **Server URL** — text input, default `http://localhost:8080`. Saved to `~/.config/atask/credentials.json`. Applied on next app restart or with a "Reconnect" button.
+
+2. **Auto-archive** — toggle + duration selector:
+   - "Archive completed tasks after: [Never / 1 day / 1 week / 1 month]"
+   - When enabled, completed tasks older than the threshold are hidden from the logbook (or moved to a separate archive view)
+   - Default: Never (show all completed tasks)
+
+3. **Theme** — reserved for future dark mode toggle
+
+Settings are stored locally in `~/.config/atask/settings.json`.
+
+---
+
+## 9.6 Date Formatting Rules
+
+All dates displayed in the app follow these relative formatting rules:
+
+| Condition | Format | Example |
+|-----------|--------|---------|
+| Today | "Today" | Today |
+| Tomorrow | "Tomorrow" | Tomorrow |
+| Yesterday | "Yesterday" | Yesterday |
+| This week (within 7 days, future) | "DayName" | "Friday" |
+| Last week (within 7 days, past) | "Last DayName" | "Last Monday" |
+| This year | "Mon DD" | "Mar 25" |
+| Different year | "Mon DD, YYYY" | "Mar 25, 2027" |
+| Overdue (past deadline) | "Mon DD" in `--deadline-red` | "Mar 18" in red |
+
+**Deadline display:** In task metadata, deadlines show as:
+- Future: "Due Mon DD" or "Due Tomorrow" (neutral `--ink-tertiary`)
+- Today: "Due Today" in `--today-star` (amber)
+- Overdue: "Overdue · Mon DD" in `--deadline-red`
+
+**Start date display:** In upcoming view section headers:
+- "Tomorrow — Fri, Mar 21"
+- "Saturday, Mar 22"
+- "Next Week — Mon, Mar 24"
+
+These rules apply everywhere dates appear: task metadata, detail panel fields, section headers, logbook groupings.
 
 ---
 
