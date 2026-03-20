@@ -1,11 +1,17 @@
 use dioxus::prelude::*;
 
 use crate::api::client::ApiClient;
+use crate::state::credentials;
+
+/// Signal shared between LoginView and App to communicate login success.
+/// LoginView writes the token here; App observes it.
+#[derive(Clone, Copy)]
+pub struct LoginToken(pub Signal<Option<String>>);
 
 #[component]
 pub fn LoginView() -> Element {
     let mut api: Signal<ApiClient> = use_context();
-    let mut token: Signal<Option<String>> = use_context();
+    let mut login_token: LoginToken = use_context();
 
     let mut email = use_signal(|| String::new());
     let mut password = use_signal(|| String::new());
@@ -14,6 +20,31 @@ pub fn LoginView() -> Element {
     let mut loading = use_signal(|| false);
     let mut show_register = use_signal(|| false);
 
+    let mut do_login = move |email_val: String, password_val: String| {
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            let api_clone = api.read().clone();
+            println!("[LOGIN] Calling API at {}", api_clone.base_url());
+            match api_clone.login(&email_val, &password_val).await {
+                Ok(tok) => {
+                    println!("[LOGIN] Success, saving token");
+                    credentials::save(&credentials::Credentials {
+                        token: Some(tok.clone()),
+                        api_url: None,
+                    });
+                    api.write().set_token(tok.clone());
+                    login_token.0.set(Some(tok));
+                }
+                Err(e) => {
+                    println!("[LOGIN] Error: {e}");
+                    error.set(Some(format!("Login failed: {e}")));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
     let on_login = move |_| {
         let email_val = email.read().clone();
         let password_val = password.read().clone();
@@ -21,21 +52,7 @@ pub fn LoginView() -> Element {
             error.set(Some("Email and password are required.".to_string()));
             return;
         }
-        loading.set(true);
-        error.set(None);
-        spawn(async move {
-            let api_clone = api.read().clone();
-            match api_clone.login(&email_val, &password_val).await {
-                Ok(tok) => {
-                    api.write().set_token(tok.clone());
-                    token.set(Some(tok));
-                }
-                Err(e) => {
-                    error.set(Some(format!("Login failed: {e}")));
-                }
-            }
-            loading.set(false);
-        });
+        do_login(email_val, password_val);
     };
 
     let on_register = move |_| {
@@ -56,7 +73,7 @@ pub fn LoginView() -> Element {
                     match api_clone.login(&email_val, &password_val).await {
                         Ok(tok) => {
                             api.write().set_token(tok.clone());
-                            token.set(Some(tok));
+                            login_token.0.set(Some(tok));
                         }
                         Err(e) => {
                             error.set(Some(format!("Registered but login failed: {e}")));
@@ -121,25 +138,9 @@ pub fn LoginView() -> Element {
                             if e.key() == Key::Enter && !is_register {
                                 let email_val = email.read().clone();
                                 let password_val = password.read().clone();
-                                if email_val.is_empty() || password_val.is_empty() {
-                                    error.set(Some("Email and password are required.".to_string()));
-                                    return;
+                                if !email_val.is_empty() && !password_val.is_empty() {
+                                    do_login(email_val, password_val);
                                 }
-                                loading.set(true);
-                                error.set(None);
-                                spawn(async move {
-                                    let api_clone = api.read().clone();
-                                    match api_clone.login(&email_val, &password_val).await {
-                                        Ok(tok) => {
-                                            api.write().set_token(tok.clone());
-                                            token.set(Some(tok));
-                                        }
-                                        Err(e) => {
-                                            error.set(Some(format!("Login failed: {e}")));
-                                        }
-                                    }
-                                    loading.set(false);
-                                });
                             }
                         },
                     }

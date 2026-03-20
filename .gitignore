@@ -40,3 +40,5 @@ Thumbs.db
 # Environment
 .env
 .env.local
+atask-server
+experiments/

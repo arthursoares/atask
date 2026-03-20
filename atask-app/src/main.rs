@@ -15,6 +15,7 @@ use state::command::CommandState;
 use state::navigation::ActiveView;
 use state::tasks::TaskState;
 use state::projects::ProjectState;
+use views::login::LoginToken;
 
 fn main() {
     dioxus::launch(App);
@@ -25,8 +26,14 @@ fn App() -> Element {
     let api_url = std::env::var("ATASK_API_URL")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
 
-    let api: Signal<ApiClient> = use_signal(|| ApiClient::new(&api_url));
-    let token: Signal<Option<String>> = use_signal(|| None);
+    // Load saved credentials
+    let saved = state::credentials::load();
+    let mut initial_api = ApiClient::new(&api_url);
+    if let Some(ref tok) = saved.token {
+        initial_api.set_token(tok.clone());
+    }
+    let api: Signal<ApiClient> = use_signal(|| initial_api);
+    let login_token = LoginToken(use_signal(|| saved.token));
     let task_state: Signal<TaskState> = use_signal(|| TaskState::default());
     let project_state: Signal<ProjectState> = use_signal(|| ProjectState::default());
     let active_view = use_signal(|| ActiveView::Today);
@@ -35,7 +42,7 @@ fn App() -> Element {
     let selected_list_index: Signal<Option<usize>> = use_signal(|| None);
 
     use_context_provider(|| api);
-    use_context_provider(|| token);
+    use_context_provider(|| login_token);
     use_context_provider(|| task_state);
     use_context_provider(|| project_state);
     use_context_provider(|| active_view);
@@ -44,9 +51,11 @@ fn App() -> Element {
 
     // Load initial data when token becomes available
     let _data_loader = use_effect(move || {
-        let tok = token.read().clone();
+        let tok = login_token.0.read().clone();
+        println!("[DATA] Effect fired. token present: {}", tok.is_some());
         if tok.is_some() {
             let api_clone = api.read().clone();
+            println!("[DATA] Loading initial data...");
             let mut ts = task_state;
             let mut ps = project_state;
             spawn(async move {
@@ -84,6 +93,7 @@ fn App() -> Element {
                     ps.write().areas.set(a);
                 }
 
+                println!("[DATA] Initial data loaded");
                 ts.write().loading.set(false);
             });
         }
@@ -138,15 +148,11 @@ fn App() -> Element {
         }
     });
 
-    if token.read().is_none() {
-        rsx! {
-            document::Link { rel: "stylesheet", href: asset!("/assets/theme.css") }
+    rsx! {
+        document::Link { rel: "stylesheet", href: asset!("/assets/theme.css") }
+        if login_token.0.read().is_none() {
             views::login::LoginView {}
-        }
-    } else {
-        let command_open = *command_state.read().open.read();
-        rsx! {
-            document::Link { rel: "stylesheet", href: asset!("/assets/theme.css") }
+        } else {
             div {
                 class: "app-frame",
                 tabindex: 0,
@@ -181,7 +187,7 @@ fn App() -> Element {
                 if selected_task_id.read().is_some() {
                     components::task_detail::TaskDetail {}
                 }
-                if command_open {
+                if *command_state.read().open.read() {
                     CommandPalette {}
                 }
             }
