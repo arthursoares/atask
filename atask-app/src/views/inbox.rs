@@ -1,75 +1,51 @@
 use dioxus::prelude::*;
 
+use crate::api::client::ApiClient;
 use crate::api::types::Task;
 use crate::components::new_task_inline::NewTaskInline;
 use crate::components::task_item::TaskItem;
-
-fn default_task() -> Task {
-    Task {
-        id: String::new(),
-        title: String::new(),
-        notes: String::new(),
-        status: 0,
-        schedule: 0,
-        start_date: None,
-        deadline: None,
-        completed_at: None,
-        created_at: String::new(),
-        updated_at: String::new(),
-        index: 0,
-        today_index: None,
-        project_id: None,
-        section_id: None,
-        area_id: None,
-        location_id: None,
-        recurrence_rule: None,
-        tags: None,
-        deleted: false,
-        deleted_at: None,
-    }
-}
+use crate::state::tasks::TaskState;
 
 #[component]
 pub fn InboxView() -> Element {
-    let mut tasks = use_signal(|| {
-        vec![
-            Task {
-                id: "inbox-1".into(),
-                title: "Review Pascal's feedback on metering spec".into(),
-                notes: "Added 2 hours ago".into(),
-                schedule: 0,
-                index: 0,
-                ..default_task()
-            },
-            Task {
-                id: "inbox-2".into(),
-                title: "Look into NATS JetStream for persistent event delivery".into(),
-                notes: "Added yesterday".into(),
-                schedule: 0,
-                index: 1,
-                ..default_task()
-            },
-            Task {
-                id: "inbox-3".into(),
-                title: "Investigate Home Assistant energy monitoring dashboard".into(),
-                notes: "Added 2 days ago".into(),
-                schedule: 0,
-                index: 2,
-                ..default_task()
-            },
-        ]
-    });
-
+    let api: Signal<ApiClient> = use_context();
+    let mut task_state: Signal<TaskState> = use_context();
     let mut selected_task_id: Signal<Option<String>> = use_context();
     let selected_id = selected_task_id.read().clone().unwrap_or_default();
 
-    let task_list: Vec<Task> = tasks.read().clone();
+    let tasks: Vec<Task> = task_state.read().inbox.read().clone();
+    let is_loading = *task_state.read().loading.read();
 
-    if task_list.is_empty() {
+    if is_loading && tasks.is_empty() {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
-                    p { style: "color: var(--success);", "Inbox Zero \u{2713}" }
+                    p { class: "empty-state-text", "Loading..." }
+                }
+            }
+        };
+    }
+
+    if tasks.is_empty() {
+        return rsx! {
+            div { class: "task-list",
+                div { class: "empty-state",
+                    p { "Inbox Zero" }
+                }
+                NewTaskInline {
+                    on_create: move |title: String| {
+                        let api_clone = api.read().clone();
+                        spawn(async move {
+                            match api_clone.create_task(&title).await {
+                                Ok(task) => {
+                                    task_state.write().inbox.write().push(task);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to create task: {e}");
+                                }
+                            }
+                        });
+                    },
                 }
             }
         };
@@ -77,7 +53,7 @@ pub fn InboxView() -> Element {
 
     rsx! {
         div { class: "task-list",
-            for task in task_list {
+            for task in tasks {
                 {
                     let task_id = task.id.clone();
                     let task_id_complete = task.id.clone();
@@ -92,10 +68,23 @@ pub fn InboxView() -> Element {
                                 selected_task_id.set(Some(id));
                             },
                             on_complete: move |_id: String| {
-                                let mut t = tasks.write();
-                                if let Some(task) = t.iter_mut().find(|t| t.id == task_id_complete) {
-                                    task.status = if task.status == 0 { 1 } else { 0 };
+                                {
+                                    let mut inbox = task_state.write().inbox;
+                                    let mut tasks = inbox.write();
+                                    if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_complete) {
+                                        t.status = if t.status == 0 { 1 } else { 0 };
+                                    }
                                 }
+                                let api_clone = api.read().clone();
+                                let id = task_id_complete.clone();
+                                spawn(async move {
+                                    if let Err(e) = api_clone.complete_task(&id).await {
+                                        eprintln!("Failed to complete task: {e}");
+                                        if let Ok(tasks) = api_clone.list_inbox().await {
+                                            task_state.write().inbox.set(tasks);
+                                        }
+                                    }
+                                });
                             },
                         }
                     }
@@ -103,8 +92,18 @@ pub fn InboxView() -> Element {
             }
 
             NewTaskInline {
-                on_create: move |_title: String| {
-                    // placeholder — will create tasks via API later
+                on_create: move |title: String| {
+                    let api_clone = api.read().clone();
+                    spawn(async move {
+                        match api_clone.create_task(&title).await {
+                            Ok(task) => {
+                                task_state.write().inbox.write().push(task);
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to create task: {e}");
+                            }
+                        }
+                    });
                 },
             }
         }

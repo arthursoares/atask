@@ -1205,4 +1205,78 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Login
+   ═══════════════════════════════════════════ */
+
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    background: var(--canvas-base);
+}
+
+.login-card {
+    width: 340px;
+    padding: var(--sp-8);
+    background: var(--canvas-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.login-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin-bottom: var(--sp-6);
+    text-align: center;
+}
+
+.login-field {
+    margin-bottom: var(--sp-4);
+}
+
+.login-label {
+    display: block;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--ink-secondary);
+    margin-bottom: var(--sp-1);
+}
+
+.login-btn {
+    width: 100%;
+    margin-top: var(--sp-4);
+}
+
+.login-error {
+    background: rgba(208, 72, 72, 0.1);
+    color: var(--deadline-red);
+    font-size: var(--text-sm);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--sp-4);
+}
+
+.login-toggle {
+    text-align: center;
+    margin-top: var(--sp-4);
+    font-size: var(--text-sm);
+    color: var(--ink-tertiary);
+}
+
+.login-link {
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.login-link:hover {
+    text-decoration: underline;
+}
+
+
 /* No animations. All state changes are instant. */

@@ -1,10 +1,12 @@
 use dioxus::prelude::*;
 
 use crate::state::navigation::ActiveView;
+use crate::state::projects::ProjectState;
 
 #[component]
 pub fn Toolbar() -> Element {
     let active_view: Signal<ActiveView> = use_context();
+    let project_state: Signal<ProjectState> = use_context();
 
     let is_project = matches!(&*active_view.read(), ActiveView::Project(_));
 
@@ -86,29 +88,39 @@ pub fn Toolbar() -> Element {
             (icon, "Logbook".to_string(), None)
         }
         ActiveView::Project(id) => {
-            let (project_name, color) = match id.as_str() {
-                "p1" => ("atask v0", "#5B9BD5"),
-                "p2" => ("Homelab", "#6BBF6A"),
-                "p3" => ("Roon Display", "#C77DBA"),
-                _ => ("Project", "#5B9BD5"),
-            };
+            let projects = project_state.read().projects.read().clone();
+            let project_name = projects
+                .iter()
+                .find(|p| p.id == *id)
+                .map(|p| p.title.clone())
+                .unwrap_or_else(|| "Project".to_string());
             let icon = rsx! {
                 svg {
                     class: "toolbar-icon",
                     view_box: "0 0 16 16",
-                    circle { cx: "8", cy: "8", r: "5", fill: color }
+                    circle { cx: "8", cy: "8", r: "5", fill: "var(--accent)" }
                 }
             };
-            (icon, project_name.to_string(), None)
+            (icon, project_name, None)
         }
     };
 
-    // Hardcoded progress for project p1: 4 completed out of 12 total
-    let (completed, total) = if is_project {
-        (4u32, 12u32)
+    // For project view, compute progress from project_tasks
+    let (completed, total) = if let ActiveView::Project(ref id) = *active_view.read() {
+        let tasks = project_state
+            .read()
+            .project_tasks
+            .read()
+            .get(id)
+            .cloned()
+            .unwrap_or_default();
+        let total = tasks.len() as u32;
+        let completed = tasks.iter().filter(|t| t.is_completed()).count() as u32;
+        (completed, total)
     } else {
         (0, 0)
     };
+
     let progress_pct = if total > 0 {
         format!("{}%", (completed as f64 / total as f64 * 100.0) as u32)
     } else {

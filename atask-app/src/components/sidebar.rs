@@ -1,10 +1,20 @@
 use dioxus::prelude::*;
 
 use crate::state::navigation::ActiveView;
+use crate::state::tasks::TaskState;
+use crate::state::projects::ProjectState;
 
 #[component]
 pub fn Sidebar() -> Element {
     let active_view: Signal<ActiveView> = use_context();
+    let task_state: Signal<TaskState> = use_context();
+    let project_state: Signal<ProjectState> = use_context();
+
+    let inbox_count = task_state.read().inbox.read().len();
+    let today_count = task_state.read().today.read().len();
+
+    let projects = project_state.read().projects.read().clone();
+    let areas = project_state.read().areas.read().clone();
 
     rsx! {
         div { class: "sidebar",
@@ -17,14 +27,14 @@ pub fn Sidebar() -> Element {
                     label: "Inbox",
                     view: ActiveView::Inbox,
                     active_view,
-                    badge: 3,
+                    badge: inbox_count as u32,
                     icon: NavIcon::Inbox,
                 }
                 NavItem {
                     label: "Today",
                     view: ActiveView::Today,
                     active_view,
-                    badge: 5,
+                    badge: today_count as u32,
                     icon: NavIcon::Today,
                 }
                 NavItem {
@@ -55,41 +65,38 @@ pub fn Sidebar() -> Element {
             // Projects
             div { class: "sidebar-group",
                 div { class: "sidebar-group-label", "Projects" }
-                ProjectItem {
-                    id: "proj-atask-v0",
-                    name: "atask v0",
-                    color: "#4670a0",
-                    badge: 12,
-                    active_view,
-                }
-                ProjectItem {
-                    id: "proj-homelab",
-                    name: "Homelab",
-                    color: "#4a8860",
-                    badge: 4,
-                    active_view,
-                }
-                ProjectItem {
-                    id: "proj-roon-ext",
-                    name: "Roon Ext",
-                    color: "#a07846",
-                    badge: 7,
-                    active_view,
+                for project in projects.iter().filter(|p| p.status == 0) {
+                    {
+                        let pid = project.id.clone();
+                        let pname = project.title.clone();
+                        rsx! {
+                            ProjectItem {
+                                key: "{pid}",
+                                id: pid,
+                                name: pname,
+                                active_view,
+                            }
+                        }
+                    }
                 }
             }
 
-            div { class: "sidebar-separator" }
+            if !areas.is_empty() {
+                div { class: "sidebar-separator" }
 
-            // Areas
-            div { class: "sidebar-group",
-                div { class: "sidebar-group-label", "Areas" }
-                AreaItem {
-                    name: "Work",
-                    active: false,
-                }
-                AreaItem {
-                    name: "Home",
-                    active: false,
+                div { class: "sidebar-group",
+                    div { class: "sidebar-group-label", "Areas" }
+                    for area in areas.iter().filter(|a| !a.archived) {
+                        {
+                            let aname = area.title.clone();
+                            rsx! {
+                                AreaItem {
+                                    name: aname,
+                                    active: false,
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -183,43 +190,35 @@ fn NavItem(props: NavItemProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 struct ProjectItemProps {
-    id: &'static str,
-    name: &'static str,
-    color: &'static str,
-    badge: u32,
+    id: String,
+    name: String,
     active_view: Signal<ActiveView>,
 }
 
 #[component]
 fn ProjectItem(props: ProjectItemProps) -> Element {
     let mut active_view = props.active_view;
-    let is_active = *active_view.read() == ActiveView::Project(props.id.to_string());
+    let is_active = *active_view.read() == ActiveView::Project(props.id.clone());
     let class = if is_active {
         "sidebar-item active"
     } else {
         "sidebar-item"
     };
-    let id = props.id.to_string();
+    let id = props.id.clone();
 
     rsx! {
         div {
             class,
             onclick: move |_| active_view.set(ActiveView::Project(id.clone())),
-            span {
-                class: "sidebar-project-dot",
-                style: "background: {props.color};",
-            }
+            span { class: "sidebar-project-dot" }
             span { "{props.name}" }
-            if props.badge > 0 {
-                span { class: "sidebar-badge", "{props.badge}" }
-            }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
 struct AreaItemProps {
-    name: &'static str,
+    name: String,
     active: bool,
 }
 

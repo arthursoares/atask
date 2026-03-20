@@ -3,6 +3,14 @@ name = "atask"
 version = "0.1.0"
 edition = "2024"
 
+# Optimize deps even in dev builds (faster UI, reasonable compile times)
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
 [dependencies]
 dioxus = { version = "0.7", features = ["desktop"] }
 serde = { version = "1", features = ["derive"] }

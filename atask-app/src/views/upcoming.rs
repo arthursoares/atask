@@ -1,104 +1,50 @@
 use dioxus::prelude::*;
 
+use crate::api::client::ApiClient;
 use crate::api::types::Task;
 use crate::components::section_header::SectionHeader;
 use crate::components::task_item::TaskItem;
+use crate::state::tasks::TaskState;
 
-fn default_task() -> Task {
-    Task {
-        id: String::new(),
-        title: String::new(),
-        notes: String::new(),
-        status: 0,
-        schedule: 0,
-        start_date: None,
-        deadline: None,
-        completed_at: None,
-        created_at: String::new(),
-        updated_at: String::new(),
-        index: 0,
-        today_index: None,
-        project_id: None,
-        section_id: None,
-        area_id: None,
-        location_id: None,
-        recurrence_rule: None,
-        tags: None,
-        deleted: false,
-        deleted_at: None,
-    }
-}
-
+/// Group tasks by start_date for the upcoming view.
 struct DateGroup {
     label: String,
     tasks: Vec<Task>,
 }
 
+fn group_by_date(tasks: &[Task]) -> Vec<DateGroup> {
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<String, Vec<Task>> = BTreeMap::new();
+    for task in tasks {
+        let key = task.start_date.clone().unwrap_or_else(|| "No Date".to_string());
+        map.entry(key).or_default().push(task.clone());
+    }
+    map.into_iter()
+        .map(|(label, tasks)| DateGroup { label, tasks })
+        .collect()
+}
+
 #[component]
 pub fn UpcomingView() -> Element {
-    let mut tasks = use_signal(|| {
-        vec![
-            DateGroup {
-                label: "Tomorrow \u{2014} Fri, Mar 21".into(),
-                tasks: vec![
-                    Task {
-                        id: "up-1".into(),
-                        title: "Review pull request for event sourcing refactor".into(),
-                        schedule: 1,
-                        start_date: Some("2026-03-21".into()),
-                        index: 0,
-                        ..default_task()
-                    },
-                ],
-            },
-            DateGroup {
-                label: "Saturday, Mar 22".into(),
-                tasks: vec![
-                    Task {
-                        id: "up-2".into(),
-                        title: "Prepare demo environment for client meeting".into(),
-                        schedule: 1,
-                        start_date: Some("2026-03-22".into()),
-                        index: 1,
-                        ..default_task()
-                    },
-                ],
-            },
-            DateGroup {
-                label: "Next Week \u{2014} Mon, Mar 24".into(),
-                tasks: vec![
-                    Task {
-                        id: "up-3".into(),
-                        title: "Write integration tests for SSE streaming".into(),
-                        schedule: 1,
-                        start_date: Some("2026-03-24".into()),
-                        index: 2,
-                        ..default_task()
-                    },
-                    Task {
-                        id: "up-4".into(),
-                        title: "Draft RFC for agent authentication flow".into(),
-                        schedule: 1,
-                        start_date: Some("2026-03-24".into()),
-                        index: 3,
-                        ..default_task()
-                    },
-                ],
-            },
-        ]
-    });
-
+    let api: Signal<ApiClient> = use_context();
+    let mut task_state: Signal<TaskState> = use_context();
     let mut selected_task_id: Signal<Option<String>> = use_context();
     let selected_id = selected_task_id.read().clone().unwrap_or_default();
 
-    let groups: Vec<DateGroup> = tasks.read().iter().map(|g| DateGroup {
-        label: g.label.clone(),
-        tasks: g.tasks.clone(),
-    }).collect();
+    let tasks: Vec<Task> = task_state.read().upcoming.read().clone();
+    let is_loading = *task_state.read().loading.read();
 
-    let all_empty = groups.iter().all(|g| g.tasks.is_empty());
+    if is_loading && tasks.is_empty() {
+        return rsx! {
+            div { class: "task-list",
+                div { class: "empty-state",
+                    p { class: "empty-state-text", "Loading..." }
+                }
+            }
+        };
+    }
 
-    if all_empty {
+    if tasks.is_empty() {
         return rsx! {
             div { class: "task-list",
                 div { class: "empty-state",
@@ -107,6 +53,8 @@ pub fn UpcomingView() -> Element {
             }
         };
     }
+
+    let groups = group_by_date(&tasks);
 
     rsx! {
         div { class: "task-list",
@@ -132,13 +80,23 @@ pub fn UpcomingView() -> Element {
                                     selected_task_id.set(Some(id));
                                 },
                                 on_complete: move |_id: String| {
-                                    let mut all_groups = tasks.write();
-                                    for g in all_groups.iter_mut() {
-                                        if let Some(t) = g.tasks.iter_mut().find(|t| t.id == task_id_complete) {
+                                    {
+                                        let mut upcoming = task_state.write().upcoming;
+                                        let mut tasks = upcoming.write();
+                                        if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_complete) {
                                             t.status = if t.status == 0 { 1 } else { 0 };
-                                            break;
                                         }
                                     }
+                                    let api_clone = api.read().clone();
+                                    let id = task_id_complete.clone();
+                                    spawn(async move {
+                                        if let Err(e) = api_clone.complete_task(&id).await {
+                                            eprintln!("Failed to complete task: {e}");
+                                            if let Ok(tasks) = api_clone.list_upcoming().await {
+                                                task_state.write().upcoming.set(tasks);
+                                            }
+                                        }
+                                    });
                                 },
                             }
                         }
