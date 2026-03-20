@@ -4,14 +4,15 @@ use crate::api::client::ApiClient;
 use crate::api::types::Task;
 use crate::components::new_task_inline::NewTaskInline;
 use crate::components::task_item::TaskItem;
+use crate::state::navigation::SelectedTask;
 use crate::state::tasks::TaskState;
 
 #[component]
 pub fn SomedayView() -> Element {
     let api: Signal<ApiClient> = use_context();
     let mut task_state: Signal<TaskState> = use_context();
-    let mut selected_task_id: Signal<Option<String>> = use_context();
-    let selected_id = selected_task_id.read().clone().unwrap_or_default();
+    let mut selected_task: SelectedTask = use_context();
+    let selected_id = selected_task.0.read().clone().unwrap_or_default();
 
     let mut dragging_id: Signal<Option<String>> = use_signal(|| None);
     let mut drag_over_id: Signal<Option<String>> = use_signal(|| None);
@@ -76,7 +77,7 @@ pub fn SomedayView() -> Element {
                             draggable: true,
                             drag_over: is_drag_over,
                             on_select: move |id: String| {
-                                selected_task_id.set(Some(id));
+                                selected_task.0.set(Some(id));
                             },
                             on_drag_start: move |id: String| {
                                 dragging_id.set(Some(id));

@@ -7,6 +7,7 @@ use crate::components::date_picker::DatePicker;
 use crate::components::project_picker::ProjectPicker;
 use crate::components::tag_picker::TagPicker;
 use crate::components::tag_pill::TagPill;
+use crate::state::navigation::SelectedTask;
 use crate::state::projects::ProjectState;
 use crate::state::tasks::TaskState;
 
@@ -37,7 +38,7 @@ fn find_task_in_state(
 
 #[component]
 pub fn TaskDetail() -> Element {
-    let mut selected_task_id: Signal<Option<String>> = use_context();
+    let mut selected_task: SelectedTask = use_context();
     let task_state: Signal<TaskState> = use_context();
     let project_state: Signal<ProjectState> = use_context();
     let api: Signal<ApiClient> = use_context();
@@ -54,7 +55,7 @@ pub fn TaskDetail() -> Element {
     // Fetch checklist + activity when selected task changes.
     // We read selected_task_id inside the effect so Dioxus tracks it.
     let _data_loader = use_effect(move || {
-        let selected_id = selected_task_id.read().clone();
+        let selected_id = selected_task.0.read().clone();
         let Some(tid) = selected_id else {
             checklist.set(Vec::new());
             activity.set(Vec::new());
@@ -86,7 +87,7 @@ pub fn TaskDetail() -> Element {
     rsx! {
         {
             // Read selected_task_id inside rsx! for reactivity
-            let selected_id = selected_task_id.read().clone();
+            let selected_id = selected_task.0.read().clone();
             match selected_id {
                 None => rsx! {},
                 Some(task_id) => {
@@ -97,7 +98,7 @@ pub fn TaskDetail() -> Element {
                             div { class: "detail-panel",
                                 div { class: "detail-header",
                                     div { class: "detail-close",
-                                        onclick: move |_| selected_task_id.set(None),
+                                        onclick: move |_| selected_task.0.set(None),
                                         "\u{2715}"
                                     }
                                     div { class: "detail-title", "Task not found" }
@@ -151,7 +152,7 @@ pub fn TaskDetail() -> Element {
                                 div { class: "detail-panel",
                                     div { class: "detail-header",
                                         div { class: "detail-close",
-                                            onclick: move |_| selected_task_id.set(None),
+                                            onclick: move |_| selected_task.0.set(None),
                                             "\u{2715}"
                                         }
                                         // Editable title

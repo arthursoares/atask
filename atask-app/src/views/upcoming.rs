@@ -4,6 +4,7 @@ use crate::api::client::ApiClient;
 use crate::api::types::Task;
 use crate::components::section_header::SectionHeader;
 use crate::components::task_item::TaskItem;
+use crate::state::navigation::SelectedTask;
 use crate::state::tasks::TaskState;
 
 /// Group tasks by start_date for the upcoming view.
@@ -28,8 +29,8 @@ fn group_by_date(tasks: &[Task]) -> Vec<DateGroup> {
 pub fn UpcomingView() -> Element {
     let api: Signal<ApiClient> = use_context();
     let mut task_state: Signal<TaskState> = use_context();
-    let mut selected_task_id: Signal<Option<String>> = use_context();
-    let selected_id = selected_task_id.read().clone().unwrap_or_default();
+    let mut selected_task: SelectedTask = use_context();
+    let selected_id = selected_task.0.read().clone().unwrap_or_default();
 
     let tasks: Vec<Task> = task_state.read().upcoming.read().clone();
     let is_loading = *task_state.read().loading.read();
@@ -77,7 +78,7 @@ pub fn UpcomingView() -> Element {
                                 selected: is_selected,
                                 today_view: false,
                                 on_select: move |id: String| {
-                                    selected_task_id.set(Some(id));
+                                    selected_task.0.set(Some(id));
                                 },
                                 on_complete: move |_id: String| {
                                     // Optimistic: remove from view immediately

@@ -14,7 +14,7 @@ use components::sidebar::Sidebar;
 use components::toast::Toast;
 use components::toolbar::{AddSectionTrigger, Toolbar};
 use state::command::CommandState;
-use state::navigation::ActiveView;
+use state::navigation::{ActiveView, SelectedTask};
 use state::tasks::TaskState;
 use state::projects::ProjectState;
 use views::login::LoginToken;
@@ -39,7 +39,7 @@ fn App() -> Element {
     let task_state: Signal<TaskState> = use_signal(|| TaskState::default());
     let project_state: Signal<ProjectState> = use_signal(|| ProjectState::default());
     let active_view = use_signal(|| ActiveView::Today);
-    let mut selected_task_id: Signal<Option<String>> = use_signal(|| None);
+    let mut selected_task = SelectedTask(use_signal(|| None));
     let command_state: Signal<CommandState> = use_signal(|| CommandState::default());
     let selected_list_index: Signal<Option<usize>> = use_signal(|| None);
     let mut confirm_delete: Signal<Option<String>> = use_signal(|| None);
@@ -51,7 +51,7 @@ fn App() -> Element {
     use_context_provider(|| task_state);
     use_context_provider(|| project_state);
     use_context_provider(|| active_view);
-    use_context_provider(|| selected_task_id);
+    use_context_provider(|| selected_task);
     use_context_provider(|| command_state);
     use_context_provider(|| toast_message);
     use_context_provider(|| add_section_trigger);
@@ -168,7 +168,7 @@ fn App() -> Element {
                         evt,
                         command_state,
                         active_view,
-                        selected_task_id,
+                        selected_task,
                         selected_list_index,
                         task_state,
                         api,
@@ -192,8 +192,14 @@ fn App() -> Element {
                         }
                     }
                 }
-                if selected_task_id.read().is_some() {
-                    components::task_detail::TaskDetail {}
+                {
+                    let has_selection = selected_task.0.read().is_some();
+                    println!("[APP] Detail panel check: has_selection={has_selection}");
+                    if has_selection {
+                        rsx! { components::task_detail::TaskDetail {} }
+                    } else {
+                        rsx! {}
+                    }
                 }
                 if *command_state.read().open.read() {
                     CommandPalette {}
@@ -209,7 +215,7 @@ fn App() -> Element {
                                     let tid = task_id.clone();
                                     let mut toast = toast_message;
                                     confirm_delete.set(None);
-                                    selected_task_id.set(None);
+                                    selected_task.0.set(None);
                                     spawn(async move {
                                         if let Err(e) = api_clone.delete_task(&tid).await {
                                             toast.set(Some(format!("Failed to delete task: {e}")));
@@ -294,7 +300,7 @@ fn handle_global_keydown(
     evt: Event<KeyboardData>,
     mut command_state: Signal<CommandState>,
     mut active_view: Signal<ActiveView>,
-    mut selected_task_id: Signal<Option<String>>,
+    mut selected_task: SelectedTask,
     mut selected_list_index: Signal<Option<usize>>,
     task_state: Signal<TaskState>,
     api: Signal<ApiClient>,
@@ -360,7 +366,7 @@ fn handle_global_keydown(
             evt.prevent_default();
             active_view.set(view);
             selected_list_index.set(None);
-            selected_task_id.set(None);
+            selected_task.0.set(None);
             return;
         }
     }
@@ -368,15 +374,15 @@ fn handle_global_keydown(
     // Escape — close detail panel or deselect task
     if key == Key::Escape {
         evt.prevent_default();
-        if selected_task_id.read().is_some() {
-            selected_task_id.set(None);
+        if selected_task.0.read().is_some() {
+            selected_task.0.set(None);
         }
         selected_list_index.set(None);
         return;
     }
 
     // Task-level shortcuts (when a task is selected)
-    let current_task_id = selected_task_id.read().clone();
+    let current_task_id = selected_task.0.read().clone();
     if let Some(tid) = current_task_id {
         // ⌘⇧C — complete task
         if meta && shift && key == Key::Character("c".into()) {
@@ -421,7 +427,7 @@ fn handle_global_keydown(
 
     // ⌘↑/⌘↓ — reorder task in list
     if meta && (key == Key::ArrowUp || key == Key::ArrowDown) {
-        if let Some(ref tid) = selected_task_id.read().clone() {
+        if let Some(ref tid) = selected_task.0.read().clone() {
             if view_supports_reorder(active_view) {
                 let mut tasks = get_current_task_list(task_state, project_state, active_view);
                 if let Some(idx) = tasks.iter().position(|t| t.id == *tid) {
@@ -470,7 +476,7 @@ fn handle_global_keydown(
                 };
                 selected_list_index.set(Some(next));
                 if let Some(task) = tasks.get(next) {
-                    selected_task_id.set(Some(task.id.clone()));
+                    selected_task.0.set(Some(task.id.clone()));
                 }
             }
             Key::ArrowUp => {
@@ -485,7 +491,7 @@ fn handle_global_keydown(
                 };
                 selected_list_index.set(Some(next));
                 if let Some(task) = tasks.get(next) {
-                    selected_task_id.set(Some(task.id.clone()));
+                    selected_task.0.set(Some(task.id.clone()));
                 }
             }
             Key::Enter => {

@@ -4,6 +4,7 @@ use crate::api::types::Task;
 use crate::components::checkbox::Checkbox;
 use crate::components::section_header::SectionHeader;
 use crate::components::task_meta::TaskMeta;
+use crate::state::navigation::SelectedTask;
 use crate::state::tasks::TaskState;
 
 /// Group logbook tasks by completed_at date.
@@ -49,8 +50,8 @@ fn group_by_completion_date(tasks: &[Task]) -> Vec<DateGroup> {
 #[component]
 pub fn LogbookView() -> Element {
     let task_state: Signal<TaskState> = use_context();
-    let mut selected_task_id: Signal<Option<String>> = use_context();
-    let selected_id = selected_task_id.read().clone().unwrap_or_default();
+    let mut selected_task: SelectedTask = use_context();
+    let selected_id = selected_task.0.read().clone().unwrap_or_default();
 
     let tasks: Vec<Task> = task_state.read().logbook.read().clone();
     let is_loading = *task_state.read().loading.read();
@@ -108,7 +109,7 @@ pub fn LogbookView() -> Element {
                             div {
                                 class: item_class,
                                 onclick: move |_| {
-                                    selected_task_id.set(Some(task_id.clone()));
+                                    selected_task.0.set(Some(task_id.clone()));
                                 },
                                 if is_cancelled {
                                     div { class: "checkbox cancelled",

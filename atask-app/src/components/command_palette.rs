@@ -4,7 +4,7 @@ use crate::api::client::ApiClient;
 use crate::state::command::{
     all_commands, command_to_view, filter_commands, CommandCategory, CommandState,
 };
-use crate::state::navigation::ActiveView;
+use crate::state::navigation::{ActiveView, SelectedTask};
 use crate::state::projects::ProjectState;
 use crate::state::tasks::TaskState;
 
@@ -12,12 +12,12 @@ use crate::state::tasks::TaskState;
 pub fn CommandPalette() -> Element {
     let mut cmd_state: Signal<CommandState> = use_context();
     let mut active_view: Signal<ActiveView> = use_context();
-    let selected_task_id: Signal<Option<String>> = use_context();
+    let selected_task: SelectedTask = use_context();
     let api: Signal<ApiClient> = use_context();
     let task_state: Signal<TaskState> = use_context();
     let project_state: Signal<ProjectState> = use_context();
 
-    let has_selected = selected_task_id.read().is_some();
+    let has_selected = selected_task.0.read().is_some();
     let commands = all_commands(has_selected);
     let query_val = cmd_state.read().query.read().clone();
     let filtered = filter_commands(&commands, &query_val);
@@ -78,7 +78,7 @@ pub fn CommandPalette() -> Element {
                             execute_command(
                                 &cmd_id,
                                 &mut active_view,
-                                &selected_task_id,
+                                &selected_task,
                                 &api,
                                 &task_state,
                                 &project_state,
@@ -140,7 +140,7 @@ pub fn CommandPalette() -> Element {
                                                 execute_command(
                                                     &id,
                                                     &mut active_view,
-                                                    &selected_task_id,
+                                                    &selected_task,
                                                     &api,
                                                     &task_state,
                                                     &project_state,
@@ -213,7 +213,7 @@ fn command_icon(id: &str) -> Element {
 fn execute_command(
     cmd_id: &str,
     active_view: &mut Signal<ActiveView>,
-    selected_task_id: &Signal<Option<String>>,
+    selected_task: &SelectedTask,
     api: &Signal<ApiClient>,
     task_state: &Signal<TaskState>,
     project_state: &Signal<ProjectState>,
@@ -238,7 +238,7 @@ fn execute_command(
             });
         }
         "task.complete" => {
-            if let Some(tid) = selected_task_id.read().clone() {
+            if let Some(tid) = selected_task.0.read().clone() {
                 let api_clone = api.read().clone();
                 spawn(async move {
                     let _ = api_clone.complete_task(&tid).await;
@@ -246,7 +246,7 @@ fn execute_command(
             }
         }
         "task.schedule_today" => {
-            if let Some(tid) = selected_task_id.read().clone() {
+            if let Some(tid) = selected_task.0.read().clone() {
                 let api_clone = api.read().clone();
                 spawn(async move {
                     let _ = api_clone.update_task_schedule(&tid, "today").await;
@@ -254,7 +254,7 @@ fn execute_command(
             }
         }
         "task.defer_someday" => {
-            if let Some(tid) = selected_task_id.read().clone() {
+            if let Some(tid) = selected_task.0.read().clone() {
                 let api_clone = api.read().clone();
                 spawn(async move {
                     let _ = api_clone.update_task_schedule(&tid, "someday").await;
@@ -262,7 +262,7 @@ fn execute_command(
             }
         }
         "task.move_inbox" => {
-            if let Some(tid) = selected_task_id.read().clone() {
+            if let Some(tid) = selected_task.0.read().clone() {
                 let api_clone = api.read().clone();
                 spawn(async move {
                     let _ = api_clone.update_task_schedule(&tid, "inbox").await;
@@ -270,7 +270,7 @@ fn execute_command(
             }
         }
         "task.delete" => {
-            if let Some(tid) = selected_task_id.read().clone() {
+            if let Some(tid) = selected_task.0.read().clone() {
                 let api_clone = api.read().clone();
                 spawn(async move {
                     let _ = api_clone.delete_task(&tid).await;

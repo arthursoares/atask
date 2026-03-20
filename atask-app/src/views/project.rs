@@ -6,6 +6,7 @@ use crate::components::new_task_inline::NewTaskInline;
 use crate::components::section_header::SectionHeader;
 use crate::components::task_item::TaskItem;
 use crate::components::toolbar::AddSectionTrigger;
+use crate::state::navigation::SelectedTask;
 use crate::state::projects::ProjectState;
 
 #[derive(Clone, PartialEq, Props)]
@@ -18,8 +19,8 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
     let project_id = props.project_id.clone();
     let api: Signal<ApiClient> = use_context();
     let mut project_state: Signal<ProjectState> = use_context();
-    let mut selected_task_id: Signal<Option<String>> = use_context();
-    let selected_id = selected_task_id.read().clone().unwrap_or_default();
+    let mut selected_task: SelectedTask = use_context();
+    let selected_id = selected_task.0.read().clone().unwrap_or_default();
 
     let mut add_section_trigger: AddSectionTrigger = use_context();
     let mut show_section_input = use_signal(|| false);
@@ -148,7 +149,7 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                             draggable: true,
                             drag_over: is_drag_over,
                             on_select: move |id: String| {
-                                selected_task_id.set(Some(id));
+                                selected_task.0.set(Some(id));
                             },
                             on_drag_start: move |id: String| {
                                 dragging_id.set(Some(id));
@@ -290,7 +291,7 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                                             today_view: is_today,
                                             show_project: false,
                                             on_select: move |id: String| {
-                                                selected_task_id.set(Some(id));
+                                                selected_task.0.set(Some(id));
                                             },
                                             on_complete: move |_id: String| {
                                                 {
