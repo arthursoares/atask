@@ -347,9 +347,37 @@ Single-line row. Checkbox, title, and metadata all on one horizontal axis. 32px 
 
 **States:** default, hover (subtle bg), selected (accent-tinted bg), completed (struck through), draggable (grip indicator)
 
-**Completion behavior:** When a task is completed (checkbox click), it instantly shows as struck through with checked checkbox and faded text (`--ink-tertiary`). It remains visible in the list for 2 seconds so the user can see the result, then disappears from the current view (moves to logbook). This is the one exception to the "no animation" rule — but it's not animated, it's a timed removal. If the user scrolls or navigates away before the 2s, the task is removed immediately.
+**Completion behavior:** When a task is completed (checkbox click), it instantly shows as struck through with checked checkbox and faded text (`--ink-tertiary`). It remains visible in the current view until the next day, then rolls into the logbook. The user can also manually move it to the logbook via the command palette or by unchecking and re-checking. This matches the Things pattern — completed tasks stay in context so you can see your progress for the day.
 
 **Drag affordance:** When a view supports reordering, each task row shows a subtle grip icon (6-dot drag handle, `--ink-quaternary`) on the far left, visible on hover. This signals that rows are draggable.
+
+**Right-click context menu:** Right-clicking a task row shows a native-styled context menu with:
+
+| Action | Shortcut | Separator |
+|--------|----------|-----------|
+| Complete | ⌘⇧C | |
+| Schedule for Today | ⌘T | |
+| Defer to Someday | | |
+| Move to Inbox | | ── |
+| Move to Project → | | submenu |
+| Set Start Date... | ⌘D | |
+| Set Deadline... | ⌘⇧D | ── |
+| Add Tag → | | submenu |
+| Duplicate | | |
+| Copy Link | | ── |
+| Delete | ⌫ | |
+
+**Context menu for projects** (right-click in sidebar):
+- Rename
+- Set Color...
+- Complete Project
+- Delete Project
+
+**Context menu for sections** (right-click section header):
+- Rename
+- Delete Section
+
+The context menu uses the same visual style as the command palette results: `--canvas-elevated` background, `--shadow-popover`, `--radius-md`. Items are 30px height, `--text-sm`.
 
 ```rust
 #[derive(Props, Clone, PartialEq)]
@@ -973,7 +1001,7 @@ transition: background-color 80ms ease-out;
 | Task item hover | 80ms bg-color transition (smoothing only) |
 | Button hover | 80ms bg-color transition (smoothing only) |
 | Focus ring | Instant |
-| Task completion | Instant strikethrough, remains 2s, then removed from list |
+| Task completion | Instant strikethrough, remains visible until next day |
 
 ### Drag-and-Drop UX (Things-inspired)
 
