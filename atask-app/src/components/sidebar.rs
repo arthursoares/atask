@@ -222,9 +222,16 @@ pub fn Sidebar() -> Element {
                     let area_list = areas.0.read();
                     rsx! {
                         for area in area_list.iter() {
-                            div {
-                                class: "sidebar-item",
-                                span { "{area.title}" }
+                            {
+                                let area_title = area.title.clone();
+                                // Areas don't have their own view — they filter projects
+                                // For now, just show as static items
+                                rsx! {
+                                    div {
+                                        class: "sidebar-item",
+                                        span { "{area_title}" }
+                                    }
+                                }
                             }
                         }
                     }

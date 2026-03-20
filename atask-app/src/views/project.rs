@@ -63,6 +63,26 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                         div { class: "empty-state",
                             p { class: "empty-state-text", "No tasks in this project yet." }
                         }
+                        // Still show NewTaskInline in empty project
+                        NewTaskInline {
+                            on_create: {
+                                let pid = pid.clone();
+                                move |title: String| {
+                                    let api_clone = api.0.read().clone();
+                                    let pid = pid.clone();
+                                    spawn(async move {
+                                        if let Ok(task) = api_clone.create_task(&title).await {
+                                            let _ = api_clone.move_task_to_project(&task.id, Some(&pid)).await;
+                                        }
+                                        if let Ok(fresh) = api_clone.list_tasks_by_project(&pid).await {
+                                            let mut map = project_tasks.0.read().clone();
+                                            map.insert(pid, fresh);
+                                            project_tasks.0.set(map);
+                                        }
+                                    });
+                                }
+                            },
+                        }
                     }
                 } else {
                     rsx! {
