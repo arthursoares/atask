@@ -41,7 +41,12 @@ pub fn SomedayView() -> Element {
                         spawn(async move {
                             match api_clone.create_task(&title).await {
                                 Ok(task) => {
+                                    let task_id = task.id.clone();
                                     task_state.write().someday.write().push(task);
+                                    // New tasks default to inbox; move to someday for this view
+                                    if let Err(e) = api_clone.update_task_schedule(&task_id, "someday").await {
+                                        eprintln!("Failed to set schedule to someday: {e}");
+                                    }
                                 }
                                 Err(e) => {
                                     eprintln!("Failed to create task: {e}");
@@ -135,7 +140,12 @@ pub fn SomedayView() -> Element {
                     spawn(async move {
                         match api_clone.create_task(&title).await {
                             Ok(task) => {
+                                let task_id = task.id.clone();
                                 task_state.write().someday.write().push(task);
+                                // New tasks default to inbox; move to someday for this view
+                                if let Err(e) = api_clone.update_task_schedule(&task_id, "someday").await {
+                                    eprintln!("Failed to set schedule to someday: {e}");
+                                }
                             }
                             Err(e) => {
                                 eprintln!("Failed to create task: {e}");

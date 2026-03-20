@@ -41,6 +41,9 @@ pub fn TaskDetail() -> Element {
 
     let mut checklist: Signal<Vec<ChecklistItemData>> = use_signal(|| Vec::new());
     let mut activity: Signal<Vec<Activity>> = use_signal(|| Vec::new());
+    let mut title_draft: Signal<String> = use_signal(|| String::new());
+    let mut notes_draft: Signal<String> = use_signal(|| String::new());
+    let mut checklist_input: Signal<String> = use_signal(|| String::new());
 
     // Fetch checklist + activity when selected task changes.
     // We read selected_task_id inside the effect so Dioxus tracks it.
@@ -101,10 +104,7 @@ pub fn TaskDetail() -> Element {
                                     .map(|p| p.title.clone())
                             });
 
-                            let schedule_label = match (task.is_today(), task.schedule_name()) {
-                                (true, name) => format!("Today ({name})"),
-                                (false, name) => name.to_string(),
-                            };
+                            let task_schedule = task.schedule;
 
                             let start_date_label = task
                                 .start_date
@@ -120,9 +120,34 @@ pub fn TaskDetail() -> Element {
 
                             let tags = task.tags.clone().unwrap_or_default();
 
+                            // Sync drafts with task data on task switch.
+                            // Use peek() to avoid subscribing (which would loop).
+                            {
+                                let t = task.title.clone();
+                                let n = task.notes.clone();
+                                if title_draft.peek().is_empty() || title_draft.peek().as_str() != t {
+                                    title_draft.set(t);
+                                }
+                                if notes_draft.peek().as_str() != n {
+                                    notes_draft.set(n);
+                                }
+                            }
+
+                            let title_value = title_draft.read().clone();
+                            let notes_value = notes_draft.read().clone();
+
                             // Read signals inside rsx! for reactivity
                             let checklist_items: Vec<ChecklistItemData> = checklist.read().clone();
                             let activity_items: Vec<Activity> = activity.read().clone();
+                            let checklist_input_value = checklist_input.read().clone();
+
+                            let task_id_title_key = task.id.clone();
+                            let task_id_title_blur = task.id.clone();
+                            let task_id_notes = task.id.clone();
+                            let task_id_schedule = task.id.clone();
+                            let task_id_schedule2 = task.id.clone();
+                            let task_id_schedule3 = task.id.clone();
+                            let task_id_checklist = task.id.clone();
 
                             rsx! {
                                 div { class: "detail-panel",
@@ -131,7 +156,40 @@ pub fn TaskDetail() -> Element {
                                             onclick: move |_| selected_task_id.set(None),
                                             "\u{2715}"
                                         }
-                                        div { class: "detail-title", "{task.title}" }
+                                        // Editable title
+                                        input {
+                                            class: "input input-ghost detail-title-input",
+                                            value: "{title_value}",
+                                            oninput: move |e: Event<FormData>| {
+                                                title_draft.set(e.value());
+                                            },
+                                            onkeydown: move |e: Event<KeyboardData>| {
+                                                if e.key() == Key::Enter {
+                                                    let val = title_draft.read().trim().to_string();
+                                                    if !val.is_empty() {
+                                                        let api_clone = api.read().clone();
+                                                        let tid = task_id_title_key.clone();
+                                                        spawn(async move {
+                                                            if let Err(e) = api_clone.update_task_title(&tid, &val).await {
+                                                                eprintln!("Failed to update title: {e}");
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            },
+                                            onblur: move |_| {
+                                                let val = title_draft.read().trim().to_string();
+                                                if !val.is_empty() {
+                                                    let api_clone = api.read().clone();
+                                                    let tid = task_id_title_blur.clone();
+                                                    spawn(async move {
+                                                        if let Err(e) = api_clone.update_task_title(&tid, &val).await {
+                                                            eprintln!("Failed to update title: {e}");
+                                                        }
+                                                    });
+                                                }
+                                            },
+                                        }
                                         div { class: "detail-meta-row",
                                             if task.is_today() {
                                                 TagPill { label: "\u{2605} Today".to_string(), variant: "today".to_string() }
@@ -152,10 +210,59 @@ pub fn TaskDetail() -> Element {
                                                 }
                                             }
                                         }
-                                        // SCHEDULE
+                                        // SCHEDULE — interactive picker
                                         div { class: "detail-field",
                                             div { class: "detail-field-label", "SCHEDULE" }
-                                            div { class: "detail-field-value", "{schedule_label}" }
+                                            div { class: "schedule-picker",
+                                                button {
+                                                    class: if task_schedule == 0 { "schedule-option active" } else { "schedule-option" },
+                                                    onclick: {
+                                                        let tid = task_id_schedule.clone();
+                                                        move |_| {
+                                                            let api_clone = api.read().clone();
+                                                            let tid = tid.clone();
+                                                            spawn(async move {
+                                                                if let Err(e) = api_clone.update_task_schedule(&tid, "inbox").await {
+                                                                    eprintln!("Failed to update schedule: {e}");
+                                                                }
+                                                            });
+                                                        }
+                                                    },
+                                                    "Inbox"
+                                                }
+                                                button {
+                                                    class: if task_schedule == 1 { "schedule-option active" } else { "schedule-option" },
+                                                    onclick: {
+                                                        let tid = task_id_schedule2.clone();
+                                                        move |_| {
+                                                            let api_clone = api.read().clone();
+                                                            let tid = tid.clone();
+                                                            spawn(async move {
+                                                                if let Err(e) = api_clone.update_task_schedule(&tid, "anytime").await {
+                                                                    eprintln!("Failed to update schedule: {e}");
+                                                                }
+                                                            });
+                                                        }
+                                                    },
+                                                    "Today"
+                                                }
+                                                button {
+                                                    class: if task_schedule == 2 { "schedule-option active" } else { "schedule-option" },
+                                                    onclick: {
+                                                        let tid = task_id_schedule3.clone();
+                                                        move |_| {
+                                                            let api_clone = api.read().clone();
+                                                            let tid = tid.clone();
+                                                            spawn(async move {
+                                                                if let Err(e) = api_clone.update_task_schedule(&tid, "someday").await {
+                                                                    eprintln!("Failed to update schedule: {e}");
+                                                                }
+                                                            });
+                                                        }
+                                                    },
+                                                    "Someday"
+                                                }
+                                            }
                                         }
                                         // START DATE
                                         div { class: "detail-field",
@@ -178,52 +285,98 @@ pub fn TaskDetail() -> Element {
                                                 }
                                             }
                                         }
-                                        // NOTES
-                                        if !task.notes.is_empty() {
-                                            div { class: "detail-section",
-                                                div { class: "detail-section-title", "NOTES" }
-                                                div { class: "detail-section-content", "{task.notes}" }
+                                        // NOTES — editable textarea
+                                        div { class: "detail-section",
+                                            div { class: "detail-section-title", "NOTES" }
+                                            textarea {
+                                                class: "detail-notes-input",
+                                                placeholder: "Add notes...",
+                                                value: "{notes_value}",
+                                                oninput: move |e: Event<FormData>| {
+                                                    notes_draft.set(e.value());
+                                                },
+                                                onblur: move |_| {
+                                                    let val = notes_draft.read().clone();
+                                                    let api_clone = api.read().clone();
+                                                    let tid = task_id_notes.clone();
+                                                    spawn(async move {
+                                                        if let Err(e) = api_clone.update_task_notes(&tid, &val).await {
+                                                            eprintln!("Failed to update notes: {e}");
+                                                        }
+                                                    });
+                                                },
                                             }
                                         }
                                         // CHECKLIST
-                                        if !checklist_items.is_empty() {
-                                            div { class: "detail-section",
-                                                div { class: "detail-section-title", "CHECKLIST" }
-                                                for item in checklist_items {
-                                                    {
-                                                        let item_id = item.id.clone();
-                                                        let item_task_id = item.task_id.clone();
-                                                        let is_checked = item.is_completed();
-                                                        rsx! {
-                                                            ChecklistItem {
-                                                                key: "{item_id}",
-                                                                title: item.title.clone(),
-                                                                checked: is_checked,
-                                                                on_toggle: move |_| {
-                                                                    let api_clone = api.read().clone();
-                                                                    let tid = item_task_id.clone();
-                                                                    let iid = item_id.clone();
-                                                                    let was_checked = is_checked;
-                                                                    spawn(async move {
-                                                                        let result = if was_checked {
-                                                                            api_clone.uncomplete_checklist_item(&tid, &iid).await
-                                                                        } else {
-                                                                            api_clone.complete_checklist_item(&tid, &iid).await
-                                                                        };
-                                                                        if let Err(e) = result {
-                                                                            eprintln!("Failed to toggle checklist item: {e}");
-                                                                        }
+                                        div { class: "detail-section",
+                                            div { class: "detail-section-title", "CHECKLIST" }
+                                            for item in checklist_items {
+                                                {
+                                                    let item_id = item.id.clone();
+                                                    let item_task_id = item.task_id.clone();
+                                                    let is_checked = item.is_completed();
+                                                    rsx! {
+                                                        ChecklistItem {
+                                                            key: "{item_id}",
+                                                            title: item.title.clone(),
+                                                            checked: is_checked,
+                                                            on_toggle: move |_| {
+                                                                let api_clone = api.read().clone();
+                                                                let tid = item_task_id.clone();
+                                                                let iid = item_id.clone();
+                                                                let was_checked = is_checked;
+                                                                spawn(async move {
+                                                                    let result = if was_checked {
+                                                                        api_clone.uncomplete_checklist_item(&tid, &iid).await
+                                                                    } else {
+                                                                        api_clone.complete_checklist_item(&tid, &iid).await
+                                                                    };
+                                                                    if let Err(e) = result {
+                                                                        eprintln!("Failed to toggle checklist item: {e}");
+                                                                    }
+                                                                    // Refresh checklist
+                                                                    match api_clone.list_checklist(&tid).await {
+                                                                        Ok(items) => checklist.set(items),
+                                                                        Err(_) => {}
+                                                                    }
+                                                                });
+                                                            },
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            // Add checklist item input
+                                            input {
+                                                class: "input checklist-add-input",
+                                                placeholder: "Add item...",
+                                                value: "{checklist_input_value}",
+                                                oninput: move |e: Event<FormData>| {
+                                                    checklist_input.set(e.value());
+                                                },
+                                                onkeydown: move |e: Event<KeyboardData>| {
+                                                    if e.key() == Key::Enter {
+                                                        let val = checklist_input.read().trim().to_string();
+                                                        if !val.is_empty() {
+                                                            checklist_input.set(String::new());
+                                                            let api_clone = api.read().clone();
+                                                            let tid = task_id_checklist.clone();
+                                                            spawn(async move {
+                                                                match api_clone.add_checklist_item(&tid, &val).await {
+                                                                    Ok(_) => {
                                                                         // Refresh checklist
                                                                         match api_clone.list_checklist(&tid).await {
                                                                             Ok(items) => checklist.set(items),
                                                                             Err(_) => {}
                                                                         }
-                                                                    });
-                                                                },
-                                                            }
+                                                                    }
+                                                                    Err(e) => {
+                                                                        eprintln!("Failed to add checklist item: {e}");
+                                                                    }
+                                                                }
+                                                            });
                                                         }
                                                     }
-                                                }
+                                                },
                                             }
                                         }
                                         // ACTIVITY

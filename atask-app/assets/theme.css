@@ -1372,4 +1372,116 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Detail Panel — Editable Title
+   ═══════════════════════════════════════════ */
+
+.detail-title-input {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--ink-primary);
+    line-height: var(--leading-tight);
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 4px 0;
+    width: 100%;
+    outline: none;
+    font-family: inherit;
+}
+
+.detail-title-input:focus {
+    box-shadow: none;
+    border: none;
+}
+
+.detail-title-input::placeholder {
+    color: var(--ink-quaternary);
+}
+
+
+/* ═══════════════════════════════════════════
+   Detail Panel — Notes Textarea
+   ═══════════════════════════════════════════ */
+
+.detail-notes-input {
+    font-family: inherit;
+    font-size: var(--text-sm);
+    color: var(--ink-secondary);
+    line-height: var(--leading-relaxed);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-2) var(--sp-3);
+    width: 100%;
+    min-height: 80px;
+    resize: vertical;
+    outline: none;
+}
+
+.detail-notes-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.detail-notes-input::placeholder {
+    color: var(--ink-quaternary);
+}
+
+
+/* ═══════════════════════════════════════════
+   Detail Panel — Schedule Picker
+   ═══════════════════════════════════════════ */
+
+.schedule-picker {
+    display: flex;
+    gap: var(--sp-1);
+}
+
+.schedule-option {
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    background: var(--canvas-sunken);
+    color: var(--ink-secondary);
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.schedule-option:hover {
+    background: var(--sidebar-hover);
+}
+
+.schedule-option.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+}
+
+
+/* ═══════════════════════════════════════════
+   Detail Panel — Checklist Add Input
+   ═══════════════════════════════════════════ */
+
+.checklist-add-input {
+    font-size: var(--text-sm);
+    padding: 4px var(--sp-2);
+    margin-top: var(--sp-2);
+    border: 1px dashed var(--border);
+    background: transparent;
+    box-shadow: none;
+}
+
+.checklist-add-input:focus {
+    border-style: solid;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.checklist-add-input::placeholder {
+    color: var(--ink-quaternary);
+}
+
+
 /* No animations. All state changes are instant. */
