@@ -68,21 +68,20 @@ pub fn InboxView() -> Element {
                                 selected_task_id.set(Some(id));
                             },
                             on_complete: move |_id: String| {
+                                // Optimistic: remove from view immediately
                                 {
                                     let mut inbox = task_state.write().inbox;
-                                    let mut tasks = inbox.write();
-                                    if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_complete) {
-                                        t.status = if t.status == 0 { 1 } else { 0 };
-                                    }
+                                    inbox.write().retain(|t| t.id != task_id_complete);
                                 }
                                 let api_clone = api.read().clone();
                                 let id = task_id_complete.clone();
                                 spawn(async move {
                                     if let Err(e) = api_clone.complete_task(&id).await {
                                         eprintln!("Failed to complete task: {e}");
-                                        if let Ok(tasks) = api_clone.list_inbox().await {
-                                            task_state.write().inbox.set(tasks);
-                                        }
+                                    }
+                                    // Always refetch to stay in sync
+                                    if let Ok(tasks) = api_clone.list_inbox().await {
+                                        task_state.write().inbox.set(tasks);
                                     }
                                 });
                             },

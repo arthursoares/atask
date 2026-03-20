@@ -102,13 +102,12 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                                 selected_task_id.set(Some(id));
                             },
                             on_complete: move |_id: String| {
+                                // Optimistic: remove from view immediately
                                 {
                                     let mut pt = project_state.write().project_tasks;
                                     let mut map = pt.write();
                                     if let Some(tasks) = map.get_mut(&pid) {
-                                        if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_complete) {
-                                            t.status = if t.status == 0 { 1 } else { 0 };
-                                        }
+                                        tasks.retain(|t| t.id != task_id_complete);
                                     }
                                 }
                                 let api_clone = api.read().clone();
@@ -117,10 +116,11 @@ pub fn ProjectView(props: ProjectViewProps) -> Element {
                                 spawn(async move {
                                     if let Err(e) = api_clone.complete_task(&id).await {
                                         eprintln!("Failed to complete task: {e}");
-                                        if let Ok(tasks) = api_clone.list_tasks_by_project(&pid).await {
-                                            let mut pt = project_state.write().project_tasks;
-                                            pt.write().insert(pid, tasks);
-                                        }
+                                    }
+                                    // Always refetch to stay in sync
+                                    if let Ok(tasks) = api_clone.list_tasks_by_project(&pid).await {
+                                        let mut pt = project_state.write().project_tasks;
+                                        pt.write().insert(pid, tasks);
                                     }
                                 });
                             },

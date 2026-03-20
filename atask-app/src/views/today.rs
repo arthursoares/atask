@@ -68,13 +68,10 @@ pub fn TodayView() -> Element {
                                 selected_task_id.set(Some(id));
                             },
                             on_complete: move |_id: String| {
-                                // Optimistic: mark completed locally
+                                // Optimistic: remove from view immediately
                                 {
                                     let mut today = task_state.write().today;
-                                    let mut tasks = today.write();
-                                    if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_complete) {
-                                        t.status = if t.status == 0 { 1 } else { 0 };
-                                    }
+                                    today.write().retain(|t| t.id != task_id_complete);
                                 }
                                 // Fire API call
                                 let api_clone = api.read().clone();
@@ -82,10 +79,10 @@ pub fn TodayView() -> Element {
                                 spawn(async move {
                                     if let Err(e) = api_clone.complete_task(&id).await {
                                         eprintln!("Failed to complete task: {e}");
-                                        // Rollback: re-fetch
-                                        if let Ok(tasks) = api_clone.list_today().await {
-                                            task_state.write().today.set(tasks);
-                                        }
+                                    }
+                                    // Always refetch to stay in sync
+                                    if let Ok(tasks) = api_clone.list_today().await {
+                                        task_state.write().today.set(tasks);
                                     }
                                 });
                             },

@@ -10,93 +10,114 @@ pub fn Sidebar() -> Element {
     let task_state: Signal<TaskState> = use_context();
     let project_state: Signal<ProjectState> = use_context();
 
-    let inbox_count = task_state.read().inbox.read().len();
-    let today_count = task_state.read().today.read().len();
-
-    let projects = project_state.read().projects.read().clone();
-    let areas = project_state.read().areas.read().clone();
+    // Signal reads happen inside rsx! for reactivity — see below.
 
     rsx! {
         div { class: "sidebar",
             // Traffic lights / drag region
             div { class: "sidebar-drag-region" }
 
-            // Navigation items
-            div { class: "sidebar-group",
-                NavItem {
-                    label: "Inbox",
-                    view: ActiveView::Inbox,
-                    active_view,
-                    badge: inbox_count as u32,
-                    icon: NavIcon::Inbox,
-                }
-                NavItem {
-                    label: "Today",
-                    view: ActiveView::Today,
-                    active_view,
-                    badge: today_count as u32,
-                    icon: NavIcon::Today,
-                }
-                NavItem {
-                    label: "Upcoming",
-                    view: ActiveView::Upcoming,
-                    active_view,
-                    badge: 0,
-                    icon: NavIcon::Upcoming,
-                }
-                NavItem {
-                    label: "Someday",
-                    view: ActiveView::Someday,
-                    active_view,
-                    badge: 0,
-                    icon: NavIcon::Someday,
-                }
-                NavItem {
-                    label: "Logbook",
-                    view: ActiveView::Logbook,
-                    active_view,
-                    badge: 0,
-                    icon: NavIcon::Logbook,
+            // Read counts inside rsx! so Dioxus tracks signal dependencies
+            {
+                let inbox_count = task_state.read().inbox.read().len() as u32;
+                let today_count = task_state.read().today.read().len() as u32;
+                let upcoming_count = task_state.read().upcoming.read().len() as u32;
+                let someday_count = task_state.read().someday.read().len() as u32;
+
+                rsx! {
+                    // Navigation items
+                    div { class: "sidebar-group",
+                        NavItem {
+                            label: "Inbox",
+                            view: ActiveView::Inbox,
+                            active_view,
+                            badge: inbox_count,
+                            icon: NavIcon::Inbox,
+                        }
+                        NavItem {
+                            label: "Today",
+                            view: ActiveView::Today,
+                            active_view,
+                            badge: today_count,
+                            icon: NavIcon::Today,
+                        }
+                        NavItem {
+                            label: "Upcoming",
+                            view: ActiveView::Upcoming,
+                            active_view,
+                            badge: upcoming_count,
+                            icon: NavIcon::Upcoming,
+                        }
+                        NavItem {
+                            label: "Someday",
+                            view: ActiveView::Someday,
+                            active_view,
+                            badge: someday_count,
+                            icon: NavIcon::Someday,
+                        }
+                        NavItem {
+                            label: "Logbook",
+                            view: ActiveView::Logbook,
+                            active_view,
+                            badge: 0,
+                            icon: NavIcon::Logbook,
+                        }
+                    }
                 }
             }
 
             div { class: "sidebar-separator" }
 
-            // Projects
-            div { class: "sidebar-group",
-                div { class: "sidebar-group-label", "Projects" }
-                for project in projects.iter().filter(|p| p.status == 0) {
-                    {
-                        let pid = project.id.clone();
-                        let pname = project.title.clone();
-                        rsx! {
-                            ProjectItem {
-                                key: "{pid}",
-                                id: pid,
-                                name: pname,
-                                active_view,
+            // Projects — read signal inside rsx!
+            {
+                let projects = project_state.read().projects.read().clone();
+                let active_projects: Vec<_> = projects.into_iter().filter(|p| p.status == 0).collect();
+                rsx! {
+                    div { class: "sidebar-group",
+                        div { class: "sidebar-group-label", "Projects" }
+                        for project in active_projects {
+                            {
+                                let pid = project.id.clone();
+                                let pname = project.title.clone();
+                                rsx! {
+                                    ProjectItem {
+                                        key: "{pid}",
+                                        id: pid,
+                                        name: pname,
+                                        active_view,
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            if !areas.is_empty() {
-                div { class: "sidebar-separator" }
+            // Areas — read signal inside rsx!
+            {
+                let areas = project_state.read().areas.read().clone();
+                let active_areas: Vec<_> = areas.into_iter().filter(|a| !a.archived).collect();
+                if !active_areas.is_empty() {
+                    rsx! {
+                        div { class: "sidebar-separator" }
 
-                div { class: "sidebar-group",
-                    div { class: "sidebar-group-label", "Areas" }
-                    for area in areas.iter().filter(|a| !a.archived) {
-                        {
-                            let aname = area.title.clone();
-                            rsx! {
-                                AreaItem {
-                                    name: aname,
-                                    active: false,
+                        div { class: "sidebar-group",
+                            div { class: "sidebar-group-label", "Areas" }
+                            for area in active_areas {
+                                {
+                                    let aname = area.title.clone();
+                                    rsx! {
+                                        AreaItem {
+                                            name: aname,
+                                            active: false,
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                } else {
+                    rsx! {}
                 }
             }
         }
