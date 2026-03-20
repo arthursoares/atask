@@ -5,6 +5,7 @@ use crate::state::command::{
     all_commands, command_to_view, filter_commands, CommandCategory, CommandState,
 };
 use crate::state::navigation::ActiveView;
+use crate::state::projects::ProjectState;
 use crate::state::tasks::TaskState;
 
 #[component]
@@ -14,6 +15,7 @@ pub fn CommandPalette() -> Element {
     let selected_task_id: Signal<Option<String>> = use_context();
     let api: Signal<ApiClient> = use_context();
     let task_state: Signal<TaskState> = use_context();
+    let project_state: Signal<ProjectState> = use_context();
 
     let has_selected = selected_task_id.read().is_some();
     let commands = all_commands(has_selected);
@@ -79,6 +81,7 @@ pub fn CommandPalette() -> Element {
                                 &selected_task_id,
                                 &api,
                                 &task_state,
+                                &project_state,
                             );
                         }
                     }
@@ -140,6 +143,7 @@ pub fn CommandPalette() -> Element {
                                                     &selected_task_id,
                                                     &api,
                                                     &task_state,
+                                                    &project_state,
                                                 );
                                             },
                                             onmouseenter: move |_| {
@@ -212,6 +216,7 @@ fn execute_command(
     selected_task_id: &Signal<Option<String>>,
     api: &Signal<ApiClient>,
     task_state: &Signal<TaskState>,
+    project_state: &Signal<ProjectState>,
 ) {
     // Navigation commands
     if let Some(view) = command_to_view(cmd_id) {
@@ -271,6 +276,28 @@ fn execute_command(
                     let _ = api_clone.delete_task(&tid).await;
                 });
             }
+        }
+        "create.project" => {
+            let api_clone = api.read().clone();
+            let mut ps = *project_state;
+            spawn(async move {
+                if let Ok(project) = api_clone.create_project("New Project").await {
+                    let mut projects = ps.read().projects.read().clone();
+                    projects.push(project);
+                    ps.write().projects.set(projects);
+                }
+            });
+        }
+        "create.tag" => {
+            let api_clone = api.read().clone();
+            let mut ps = *project_state;
+            spawn(async move {
+                if let Ok(tag) = api_clone.create_tag("New Tag").await {
+                    let mut tags = ps.read().tags.read().clone();
+                    tags.push(tag);
+                    ps.write().tags.set(tags);
+                }
+            });
         }
         _ => {}
     }

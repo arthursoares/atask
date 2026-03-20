@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use crate::api::client::ApiClient;
 use crate::state::navigation::ActiveView;
 use crate::state::tasks::TaskState;
 use crate::state::projects::ProjectState;
@@ -8,7 +9,13 @@ use crate::state::projects::ProjectState;
 pub fn Sidebar() -> Element {
     let active_view: Signal<ActiveView> = use_context();
     let task_state: Signal<TaskState> = use_context();
-    let project_state: Signal<ProjectState> = use_context();
+    let mut project_state: Signal<ProjectState> = use_context();
+    let api: Signal<ApiClient> = use_context();
+
+    let mut adding_project: Signal<bool> = use_signal(|| false);
+    let mut new_project_title: Signal<String> = use_signal(|| String::new());
+    let mut adding_area: Signal<bool> = use_signal(|| false);
+    let mut new_area_title: Signal<String> = use_signal(|| String::new());
 
     // Signal reads happen inside rsx! for reactivity — see below.
 
@@ -89,6 +96,41 @@ pub fn Sidebar() -> Element {
                                 }
                             }
                         }
+                        if *adding_project.read() {
+                            input {
+                                class: "sidebar-inline-input",
+                                placeholder: "Project name",
+                                value: "{new_project_title}",
+                                autofocus: true,
+                                oninput: move |e: Event<FormData>| new_project_title.set(e.value()),
+                                onkeydown: move |e: Event<KeyboardData>| {
+                                    if e.key() == Key::Enter {
+                                        let title = new_project_title.read().clone();
+                                        if !title.is_empty() {
+                                            let api_clone = api.read().clone();
+                                            spawn(async move {
+                                                if let Ok(p) = api_clone.create_project(&title).await {
+                                                    let mut projects = project_state.read().projects.read().clone();
+                                                    projects.push(p);
+                                                    project_state.write().projects.set(projects);
+                                                }
+                                            });
+                                        }
+                                        adding_project.set(false);
+                                        new_project_title.set(String::new());
+                                    } else if e.key() == Key::Escape {
+                                        adding_project.set(false);
+                                        new_project_title.set(String::new());
+                                    }
+                                },
+                            }
+                        } else {
+                            div {
+                                class: "sidebar-add-btn",
+                                onclick: move |_| adding_project.set(true),
+                                "+ Project"
+                            }
+                        }
                     }
                 }
             }
@@ -114,10 +156,86 @@ pub fn Sidebar() -> Element {
                                     }
                                 }
                             }
+                            if *adding_area.read() {
+                                input {
+                                    class: "sidebar-inline-input",
+                                    placeholder: "Area name",
+                                    value: "{new_area_title}",
+                                    autofocus: true,
+                                    oninput: move |e: Event<FormData>| new_area_title.set(e.value()),
+                                    onkeydown: move |e: Event<KeyboardData>| {
+                                        if e.key() == Key::Enter {
+                                            let title = new_area_title.read().clone();
+                                            if !title.is_empty() {
+                                                let api_clone = api.read().clone();
+                                                spawn(async move {
+                                                    if let Ok(a) = api_clone.create_area(&title).await {
+                                                        let mut areas = project_state.read().areas.read().clone();
+                                                        areas.push(a);
+                                                        project_state.write().areas.set(areas);
+                                                    }
+                                                });
+                                            }
+                                            adding_area.set(false);
+                                            new_area_title.set(String::new());
+                                        } else if e.key() == Key::Escape {
+                                            adding_area.set(false);
+                                            new_area_title.set(String::new());
+                                        }
+                                    },
+                                }
+                            } else {
+                                div {
+                                    class: "sidebar-add-btn",
+                                    onclick: move |_| adding_area.set(true),
+                                    "+ Area"
+                                }
+                            }
                         }
                     }
                 } else {
-                    rsx! {}
+                    rsx! {
+                        div { class: "sidebar-separator" }
+
+                        div { class: "sidebar-group",
+                            div { class: "sidebar-group-label", "Areas" }
+                            if *adding_area.read() {
+                                input {
+                                    class: "sidebar-inline-input",
+                                    placeholder: "Area name",
+                                    value: "{new_area_title}",
+                                    autofocus: true,
+                                    oninput: move |e: Event<FormData>| new_area_title.set(e.value()),
+                                    onkeydown: move |e: Event<KeyboardData>| {
+                                        if e.key() == Key::Enter {
+                                            let title = new_area_title.read().clone();
+                                            if !title.is_empty() {
+                                                let api_clone = api.read().clone();
+                                                spawn(async move {
+                                                    if let Ok(a) = api_clone.create_area(&title).await {
+                                                        let mut areas = project_state.read().areas.read().clone();
+                                                        areas.push(a);
+                                                        project_state.write().areas.set(areas);
+                                                    }
+                                                });
+                                            }
+                                            adding_area.set(false);
+                                            new_area_title.set(String::new());
+                                        } else if e.key() == Key::Escape {
+                                            adding_area.set(false);
+                                            new_area_title.set(String::new());
+                                        }
+                                    },
+                                }
+                            } else {
+                                div {
+                                    class: "sidebar-add-btn",
+                                    onclick: move |_| adding_area.set(true),
+                                    "+ Area"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

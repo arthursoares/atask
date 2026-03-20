@@ -49,6 +49,7 @@ pub fn TaskDetail() -> Element {
     let mut checklist_input: Signal<String> = use_signal(|| String::new());
     let mut show_project_picker: Signal<bool> = use_signal(|| false);
     let mut show_tag_picker: Signal<bool> = use_signal(|| false);
+    let mut last_loaded_id: Signal<Option<String>> = use_signal(|| None);
 
     // Fetch checklist + activity when selected task changes.
     // We read selected_task_id inside the effect so Dioxus tracks it.
@@ -59,6 +60,7 @@ pub fn TaskDetail() -> Element {
             activity.set(Vec::new());
             show_project_picker.set(false);
             show_tag_picker.set(false);
+            last_loaded_id.set(None);
             return;
         };
         show_project_picker.set(false);
@@ -118,15 +120,14 @@ pub fn TaskDetail() -> Element {
                             let tags = task.tags.clone().unwrap_or_default();
 
                             // Sync drafts with task data on task switch.
-                            // Use peek() to avoid subscribing (which would loop).
+                            // Only reinitialize when the task ID actually changes
+                            // to avoid overwriting user edits on every render.
                             {
-                                let t = task.title.clone();
-                                let n = task.notes.clone();
-                                if title_draft.peek().is_empty() || title_draft.peek().as_str() != t {
-                                    title_draft.set(t);
-                                }
-                                if notes_draft.peek().as_str() != n {
-                                    notes_draft.set(n);
+                                let current_id = Some(task.id.clone());
+                                if *last_loaded_id.peek() != current_id {
+                                    last_loaded_id.set(current_id);
+                                    title_draft.set(task.title.clone());
+                                    notes_draft.set(task.notes.clone());
                                 }
                             }
 

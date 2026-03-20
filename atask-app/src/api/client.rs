@@ -370,8 +370,22 @@ impl ApiClient {
         self.get_json("/areas").await
     }
 
+    pub async fn create_area(&self, title: &str) -> Result<Area, ApiError> {
+        let envelope: EventEnvelope<Area> = self
+            .post_json("/areas", &serde_json::json!({"title": title}))
+            .await?;
+        Ok(envelope.data)
+    }
+
     pub async fn list_tags(&self) -> Result<Vec<Tag>, ApiError> {
         self.get_json("/tags").await
+    }
+
+    pub async fn create_tag(&self, title: &str) -> Result<Tag, ApiError> {
+        let envelope: EventEnvelope<Tag> = self
+            .post_json("/tags", &serde_json::json!({"title": title}))
+            .await?;
+        Ok(envelope.data)
     }
 
     // -- Checklist ----------------------------------------------------------

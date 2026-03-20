@@ -90,6 +90,18 @@ pub fn all_commands(has_selected_task: bool) -> Vec<Command> {
             shortcut: Some("\u{2318}\u{21e7}N"),
             category: CommandCategory::Creation,
         },
+        Command {
+            id: "create.project",
+            label: "New Project",
+            shortcut: None,
+            category: CommandCategory::Creation,
+        },
+        Command {
+            id: "create.tag",
+            label: "New Tag",
+            shortcut: None,
+            category: CommandCategory::Creation,
+        },
     ];
 
     if has_selected_task {
