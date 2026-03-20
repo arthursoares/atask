@@ -1484,4 +1484,59 @@ html, body {
 }
 
 
+/* ═══════════════════════════════════════════
+   Inbox Triage Hover Actions
+   ═══════════════════════════════════════════ */
+
+.inbox-task-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.inbox-task-row > .task-item {
+    flex: 1;
+    min-width: 0;
+}
+
+.inbox-actions {
+    display: none;
+    position: absolute;
+    right: var(--sp-3);
+    top: 50%;
+    transform: translateY(-50%);
+    gap: var(--sp-1);
+    z-index: 10;
+}
+
+.inbox-task-row:hover .inbox-actions {
+    display: flex;
+}
+
+.inbox-task-row:hover .task-meta {
+    visibility: hidden;
+}
+
+.inbox-action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--canvas-elevated);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--text-sm);
+    padding: 0;
+    font-family: inherit;
+    transition: background-color 80ms ease-out;
+}
+
+.inbox-action-btn:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+}
+
+
 /* No animations. All state changes are instant. */
