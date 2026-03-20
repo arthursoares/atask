@@ -1,1 +1,2 @@
-// Components will be added in Tasks 4-5
+pub mod sidebar;
+pub mod toolbar;

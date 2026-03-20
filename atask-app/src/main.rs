@@ -85,7 +85,19 @@ fn App() -> Element {
             views::login::LoginView {}
         } else {
             div { class: "app-frame",
-                p { "Logged in! Sidebar + Today view coming in Tasks 4-6." }
+                components::sidebar::Sidebar {}
+                div { class: "app-main",
+                    components::toolbar::Toolbar {}
+                    div { class: "app-content",
+                        match *active_view.0.read() {
+                            _ => rsx! {
+                                div { class: "empty-state",
+                                    p { class: "empty-state-text", "View coming soon." }
+                                }
+                            },
+                        }
+                    }
+                }
             }
         }
     }
