@@ -32,17 +32,19 @@ fn find_task(
 pub fn TaskDetail() -> Element {
     let mut selected: SelectedTaskSignal = use_context();
     let api: ApiSignal = use_context();
-    let inbox: InboxTasks = use_context();
-    let today: TodayTasks = use_context();
-    let upcoming: UpcomingTasks = use_context();
-    let someday: SomedayTasks = use_context();
-    let logbook: LogbookTasks = use_context();
+    let mut inbox: InboxTasks = use_context();
+    let mut today: TodayTasks = use_context();
+    let mut upcoming: UpcomingTasks = use_context();
+    let mut someday: SomedayTasks = use_context();
+    let mut logbook: LogbookTasks = use_context();
     let project_tasks: ProjectTasks = use_context();
     let projects: ProjectList = use_context();
+    let active_view: ViewSignal = use_context();
 
     let mut last_loaded_id: Signal<Option<String>> = use_signal(|| None);
     let mut title_draft: Signal<String> = use_signal(|| String::new());
     let mut notes_draft: Signal<String> = use_signal(|| String::new());
+    let mut schedule_draft: Signal<i64> = use_signal(|| 0);
     let mut checklist: Signal<Vec<ChecklistItem>> = use_signal(|| Vec::new());
     let mut checklist_input: Signal<String> = use_signal(|| String::new());
 
@@ -94,18 +96,10 @@ pub fn TaskDetail() -> Element {
                             if *last_loaded_id.read() != Some(task_id.clone()) {
                                 title_draft.set(task.title.clone());
                                 notes_draft.set(task.notes.clone());
+                                schedule_draft.set(task.schedule);
                             }
 
-                            // Check if drafts need init (first load)
-                            if title_draft.read().is_empty() && !task.title.is_empty() {
-                                if *last_loaded_id.read() == Some(task_id.clone()) {
-                                    // Already loaded but drafts empty — init them
-                                    title_draft.set(task.title.clone());
-                                    notes_draft.set(task.notes.clone());
-                                }
-                            }
-
-                            let task_schedule = task.schedule;
+                            let task_schedule = *schedule_draft.read();
                             let project_name = task.project_id.as_ref().and_then(|pid| {
                                 projects.0.read().iter().find(|p| p.id == *pid).map(|p| p.title.clone())
                             });
@@ -154,6 +148,13 @@ pub fn TaskDetail() -> Element {
                                                             Ok(_) => println!("[DETAIL] Title saved via blur"),
                                                             Err(e) => println!("[DETAIL] Title save error: {e}"),
                                                         }
+                                                        // Refetch active views so task list shows updated title
+                                                        let (i, t) = tokio::join!(
+                                                            api_clone.list_inbox(),
+                                                            api_clone.list_today(),
+                                                        );
+                                                        if let Ok(tasks) = i { inbox.0.set(tasks); }
+                                                        if let Ok(tasks) = t { today.0.set(tasks); }
                                                     });
                                                 }
                                             },
@@ -183,6 +184,15 @@ pub fn TaskDetail() -> Element {
                                                     let tid = task_id.clone();
                                                     move |schedule: String| {
                                                         println!("[DETAIL] Changing schedule to: {schedule}");
+                                                        // Update draft immediately for UI feedback
+                                                        let new_val = match schedule.as_str() {
+                                                            "inbox" => 0,
+                                                            "anytime" => 1,
+                                                            "someday" => 2,
+                                                            _ => 0,
+                                                        };
+                                                        schedule_draft.set(new_val);
+                                                        // API call + refetch all views
                                                         let api_clone = api.0.read().clone();
                                                         let tid = tid.clone();
                                                         let sched = schedule.clone();
@@ -191,6 +201,15 @@ pub fn TaskDetail() -> Element {
                                                                 Ok(_) => println!("[DETAIL] Schedule saved"),
                                                                 Err(e) => println!("[DETAIL] Schedule save error: {e}"),
                                                             }
+                                                            // Refetch all views since task may have moved
+                                                            let (i, t, s) = tokio::join!(
+                                                                api_clone.list_inbox(),
+                                                                api_clone.list_today(),
+                                                                api_clone.list_someday(),
+                                                            );
+                                                            if let Ok(tasks) = i { inbox.0.set(tasks); }
+                                                            if let Ok(tasks) = t { today.0.set(tasks); }
+                                                            if let Ok(tasks) = s { someday.0.set(tasks); }
                                                         });
                                                     }
                                                 },
