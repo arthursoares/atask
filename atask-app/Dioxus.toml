@@ -1,0 +1,15 @@
+[application]
+name = "atask"
+default_platform = "desktop"
+
+[web.app]
+title = "atask"
+
+[[desktop.window]]
+title = "atask"
+width = 1080
+height = 720
+min_width = 640
+min_height = 480
+transparent = true
+decorations = true
