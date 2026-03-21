@@ -109,6 +109,11 @@ UPDATE tasks SET today_index = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
 RETURNING *;
 
+-- name: UpdateTaskTimeSlot :one
+UPDATE tasks SET time_slot = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING *;
+
 -- name: SoftDeleteTask :exec
 UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ?
 WHERE id = ?;

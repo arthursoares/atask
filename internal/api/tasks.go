@@ -45,6 +45,7 @@ func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /tasks/{id}/reorder", h.Reorder)
 	mux.HandleFunc("PUT /tasks/{id}/today-index", h.SetTodayIndex)
 	mux.HandleFunc("POST /tasks/{id}/reopen", h.Reopen)
+	mux.HandleFunc("PUT /tasks/{id}/time-slot", h.SetTimeSlot)
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -551,4 +552,26 @@ func (h *TaskHandler) Reopen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.TaskReopened), map[string]string{"id": id})
+}
+
+func (h *TaskHandler) SetTimeSlot(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		TimeSlot *string `json:"time_slot"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.tasks.SetTimeSlot(r.Context(), id, body.TimeSlot, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "task not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.TaskTimeSlotSet), map[string]string{"id": id})
 }

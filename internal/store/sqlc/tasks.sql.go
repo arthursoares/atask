@@ -84,7 +84,7 @@ INSERT INTO tasks (
     ?, ?, ?, ?, ?, ?,
     ?, 0, NULL, ?, ?
 )
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type CreateTaskParams struct {
@@ -148,12 +148,13 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE id = ? AND deleted = 0
 `
 
@@ -180,12 +181,13 @@ func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE deleted = 0
 ORDER BY "index"
 `
@@ -219,6 +221,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -234,7 +237,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 }
 
 const listTasksByArea = `-- name: ListTasksByArea :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE area_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -268,6 +271,7 @@ func (q *Queries) ListTasksByArea(ctx context.Context, areaID sql.NullString) ([
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -283,7 +287,7 @@ func (q *Queries) ListTasksByArea(ctx context.Context, areaID sql.NullString) ([
 }
 
 const listTasksByLocation = `-- name: ListTasksByLocation :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE location_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -317,6 +321,7 @@ func (q *Queries) ListTasksByLocation(ctx context.Context, locationID sql.NullSt
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -332,7 +337,7 @@ func (q *Queries) ListTasksByLocation(ctx context.Context, locationID sql.NullSt
 }
 
 const listTasksByProject = `-- name: ListTasksByProject :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE project_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -366,6 +371,7 @@ func (q *Queries) ListTasksByProject(ctx context.Context, projectID sql.NullStri
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -381,7 +387,7 @@ func (q *Queries) ListTasksByProject(ctx context.Context, projectID sql.NullStri
 }
 
 const listTasksBySchedule = `-- name: ListTasksBySchedule :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE schedule = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -415,6 +421,7 @@ func (q *Queries) ListTasksBySchedule(ctx context.Context, schedule int64) ([]Ta
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -430,7 +437,7 @@ func (q *Queries) ListTasksBySchedule(ctx context.Context, schedule int64) ([]Ta
 }
 
 const listTasksBySection = `-- name: ListTasksBySection :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
 WHERE section_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -464,6 +471,7 @@ func (q *Queries) ListTasksBySection(ctx context.Context, sectionID sql.NullStri
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimeSlot,
 		); err != nil {
 			return nil, err
 		}
@@ -543,7 +551,7 @@ func (q *Queries) SoftDeleteTasksByProject(ctx context.Context, arg SoftDeleteTa
 const updateTaskArea = `-- name: UpdateTaskArea :one
 UPDATE tasks SET area_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskAreaParams struct {
@@ -575,6 +583,7 @@ func (q *Queries) UpdateTaskArea(ctx context.Context, arg UpdateTaskAreaParams) 
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -582,7 +591,7 @@ func (q *Queries) UpdateTaskArea(ctx context.Context, arg UpdateTaskAreaParams) 
 const updateTaskDeadline = `-- name: UpdateTaskDeadline :one
 UPDATE tasks SET deadline = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskDeadlineParams struct {
@@ -614,6 +623,7 @@ func (q *Queries) UpdateTaskDeadline(ctx context.Context, arg UpdateTaskDeadline
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -621,7 +631,7 @@ func (q *Queries) UpdateTaskDeadline(ctx context.Context, arg UpdateTaskDeadline
 const updateTaskIndex = `-- name: UpdateTaskIndex :one
 UPDATE tasks SET "index" = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskIndexParams struct {
@@ -653,6 +663,7 @@ func (q *Queries) UpdateTaskIndex(ctx context.Context, arg UpdateTaskIndexParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -660,7 +671,7 @@ func (q *Queries) UpdateTaskIndex(ctx context.Context, arg UpdateTaskIndexParams
 const updateTaskLocation = `-- name: UpdateTaskLocation :one
 UPDATE tasks SET location_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskLocationParams struct {
@@ -692,6 +703,7 @@ func (q *Queries) UpdateTaskLocation(ctx context.Context, arg UpdateTaskLocation
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -699,7 +711,7 @@ func (q *Queries) UpdateTaskLocation(ctx context.Context, arg UpdateTaskLocation
 const updateTaskNotes = `-- name: UpdateTaskNotes :one
 UPDATE tasks SET notes = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskNotesParams struct {
@@ -731,6 +743,7 @@ func (q *Queries) UpdateTaskNotes(ctx context.Context, arg UpdateTaskNotesParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -738,7 +751,7 @@ func (q *Queries) UpdateTaskNotes(ctx context.Context, arg UpdateTaskNotesParams
 const updateTaskProject = `-- name: UpdateTaskProject :one
 UPDATE tasks SET project_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskProjectParams struct {
@@ -770,6 +783,7 @@ func (q *Queries) UpdateTaskProject(ctx context.Context, arg UpdateTaskProjectPa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -777,7 +791,7 @@ func (q *Queries) UpdateTaskProject(ctx context.Context, arg UpdateTaskProjectPa
 const updateTaskRecurrence = `-- name: UpdateTaskRecurrence :one
 UPDATE tasks SET recurrence_rule = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskRecurrenceParams struct {
@@ -809,6 +823,7 @@ func (q *Queries) UpdateTaskRecurrence(ctx context.Context, arg UpdateTaskRecurr
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -816,7 +831,7 @@ func (q *Queries) UpdateTaskRecurrence(ctx context.Context, arg UpdateTaskRecurr
 const updateTaskSchedule = `-- name: UpdateTaskSchedule :one
 UPDATE tasks SET schedule = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskScheduleParams struct {
@@ -848,6 +863,7 @@ func (q *Queries) UpdateTaskSchedule(ctx context.Context, arg UpdateTaskSchedule
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -855,7 +871,7 @@ func (q *Queries) UpdateTaskSchedule(ctx context.Context, arg UpdateTaskSchedule
 const updateTaskSection = `-- name: UpdateTaskSection :one
 UPDATE tasks SET section_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskSectionParams struct {
@@ -887,6 +903,7 @@ func (q *Queries) UpdateTaskSection(ctx context.Context, arg UpdateTaskSectionPa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -894,7 +911,7 @@ func (q *Queries) UpdateTaskSection(ctx context.Context, arg UpdateTaskSectionPa
 const updateTaskStartDate = `-- name: UpdateTaskStartDate :one
 UPDATE tasks SET start_date = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskStartDateParams struct {
@@ -926,6 +943,7 @@ func (q *Queries) UpdateTaskStartDate(ctx context.Context, arg UpdateTaskStartDa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -933,7 +951,7 @@ func (q *Queries) UpdateTaskStartDate(ctx context.Context, arg UpdateTaskStartDa
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskStatusParams struct {
@@ -971,6 +989,47 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
+	)
+	return i, err
+}
+
+const updateTaskTimeSlot = `-- name: UpdateTaskTimeSlot :one
+UPDATE tasks SET time_slot = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+`
+
+type UpdateTaskTimeSlotParams struct {
+	TimeSlot  sql.NullString `json:"time_slot"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	ID        string         `json:"id"`
+}
+
+func (q *Queries) UpdateTaskTimeSlot(ctx context.Context, arg UpdateTaskTimeSlotParams) (Task, error) {
+	row := q.db.QueryRowContext(ctx, updateTaskTimeSlot, arg.TimeSlot, arg.UpdatedAt, arg.ID)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Notes,
+		&i.Status,
+		&i.Schedule,
+		&i.StartDate,
+		&i.Deadline,
+		&i.CompletedAt,
+		&i.Index,
+		&i.TodayIndex,
+		&i.ProjectID,
+		&i.SectionID,
+		&i.AreaID,
+		&i.LocationID,
+		&i.RecurrenceRule,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -978,7 +1037,7 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 const updateTaskTitle = `-- name: UpdateTaskTitle :one
 UPDATE tasks SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskTitleParams struct {
@@ -1010,6 +1069,7 @@ func (q *Queries) UpdateTaskTitle(ctx context.Context, arg UpdateTaskTitleParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }
@@ -1017,7 +1077,7 @@ func (q *Queries) UpdateTaskTitle(ctx context.Context, arg UpdateTaskTitleParams
 const updateTaskTodayIndex = `-- name: UpdateTaskTodayIndex :one
 UPDATE tasks SET today_index = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
 `
 
 type UpdateTaskTodayIndexParams struct {
@@ -1049,6 +1109,7 @@ func (q *Queries) UpdateTaskTodayIndex(ctx context.Context, arg UpdateTaskTodayI
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimeSlot,
 	)
 	return i, err
 }

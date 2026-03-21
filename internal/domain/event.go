@@ -75,6 +75,7 @@ const (
 	TaskReordered          EventType = "task.reordered"
 	TaskTodayIndexSet      EventType = "task.today_index_set"
 	TaskReopened           EventType = "task.reopened"
+	TaskTimeSlotSet        EventType = "task.time_slot_set"
 )
 
 // Project events.

@@ -7,7 +7,10 @@ ORDER BY "index";
 SELECT * FROM tasks
 WHERE schedule = 1 AND status = 0 AND deleted = 0
   AND (start_date IS NULL OR start_date <= ?)
-ORDER BY COALESCE(today_index, 999999), "index";
+ORDER BY
+  CASE WHEN time_slot = 'evening' THEN 1 ELSE 0 END,
+  COALESCE(today_index, 999999),
+  "index";
 
 -- name: ViewUpcoming :many
 SELECT * FROM tasks

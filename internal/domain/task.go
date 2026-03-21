@@ -24,6 +24,7 @@ type Task struct {
 	AreaID         *string
 	LocationID     *string
 	RecurrenceRule *RecurrenceRule
+	TimeSlot       *string // nil, "morning", "evening"
 	Tags           []string
 	Timestamps
 	SoftDelete

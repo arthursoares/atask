@@ -92,6 +92,11 @@ func taskFromRow(row sqlc.Task) *domain.Task {
 		t.LocationID = &lid
 	}
 
+	if row.TimeSlot.Valid {
+		ts := row.TimeSlot.String
+		t.TimeSlot = &ts
+	}
+
 	if row.RecurrenceRule.Valid {
 		var rule domain.RecurrenceRule
 		if err := json.Unmarshal([]byte(row.RecurrenceRule.String), &rule); err == nil {
@@ -711,6 +716,31 @@ func (s *TaskService) Reopen(ctx context.Context, id, actorID string) error {
 
 	payload := map[string]any{}
 	return s.publishEvent(ctx, domain.TaskReopened, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
+}
+
+// SetTimeSlot sets the task time slot (morning/evening) and emits task.time_slot_set.
+func (s *TaskService) SetTimeSlot(ctx context.Context, id string, timeSlot *string, actorID string) error {
+	now := timeNow()
+
+	var tsNullStr sql.NullString
+	if timeSlot != nil {
+		tsNullStr = sql.NullString{String: *timeSlot, Valid: true}
+	}
+
+	_, err := s.queries.UpdateTaskTimeSlot(ctx, sqlc.UpdateTaskTimeSlotParams{
+		TimeSlot:  tsNullStr,
+		UpdatedAt: now,
+		ID:        id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{}
+	if timeSlot != nil {
+		payload["time_slot"] = *timeSlot
+	}
+	return s.publishEvent(ctx, domain.TaskTimeSlotSet, id, actorID, now, payload, domain.DeltaModified, strPtr("time_slot"), nil)
 }
 
 // Delete soft-deletes the task and emits task.deleted.
