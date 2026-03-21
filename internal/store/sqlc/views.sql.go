@@ -13,9 +13,11 @@ import (
 const viewInbox = `-- name: ViewInbox :many
 SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
 WHERE schedule = 0 AND status = 0 AND deleted = 0
+  AND start_date IS NULL
 ORDER BY "index"
 `
 
+// Inbox: unscheduled tasks with no start date set
 func (q *Queries) ViewInbox(ctx context.Context) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, viewInbox)
 	if err != nil {
@@ -111,9 +113,11 @@ func (q *Queries) ViewLogbook(ctx context.Context) ([]Task, error) {
 const viewSomeday = `-- name: ViewSomeday :many
 SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
 WHERE schedule = 2 AND status = 0 AND deleted = 0
+  AND start_date IS NULL
 ORDER BY "index"
 `
 
+// Someday: long-term, no date, not prioritized
 func (q *Queries) ViewSomeday(ctx context.Context) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, viewSomeday)
 	if err != nil {
@@ -164,6 +168,7 @@ WHERE schedule = 1 AND status = 0 AND deleted = 0
 ORDER BY COALESCE(today_index, 999999), "index"
 `
 
+// Today: scheduled as anytime, with no date or start_date <= today
 func (q *Queries) ViewToday(ctx context.Context, startDate sql.NullString) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, viewToday, startDate)
 	if err != nil {
@@ -210,9 +215,11 @@ func (q *Queries) ViewToday(ctx context.Context, startDate sql.NullString) ([]Ta
 const viewUpcoming = `-- name: ViewUpcoming :many
 SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at FROM tasks
 WHERE start_date > ? AND status = 0 AND deleted = 0
+  AND schedule != 2
 ORDER BY start_date, "index"
 `
 
+// Upcoming: tasks with a future start date (excludes someday)
 func (q *Queries) ViewUpcoming(ctx context.Context, startDate sql.NullString) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, viewUpcoming, startDate)
 	if err != nil {

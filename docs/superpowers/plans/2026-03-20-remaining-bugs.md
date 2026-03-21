@@ -12,14 +12,15 @@
 - [x] Section headers were collapsible (should be static dividers)
 - [x] Grip/reorder icon creating bad alignment
 
-## Still Broken
-- [ ] **Tags can't be added** — clicking "+ Add" shows picker but clicking a tag may not fire API. Debug: add println to on_add handler, verify API call fires.
-- [ ] **Tags not unique by name** — server allows duplicate tag names. Fix: add unique constraint or check-before-create in Go API.
-- [ ] **Checklist count not in task row** — DESIGN.md says show "3/5" in metadata. Requires either API returning checklist counts per task, or client fetching per visible task (expensive).
-- [ ] **Window title bar** — "atask" not showing in macOS title bar. Dioxus WebView may need explicit title setting.
-- [ ] **Date format in detail panel** — date picker shows YYYY-MM-DD (HTML input limitation). Consider showing relative date label ABOVE the date input.
-- [ ] **Logbook not refreshing** — completing tasks in other views may not update logbook. SSE should handle this but needs verification.
-- [ ] **Inline task editing** — Things allows clicking a task in the list to edit it inline (expanded card). Not implemented. Design spec needs this added.
+## Fixed
+- [x] Tags can't be added — optimistic add/remove with hydrated fetch
+- [x] Tags not unique by name — migration 003: unique index
+- [x] Window title bar — document::Title
+- [x] View query rules — inbox excludes tasks with dates, someday excludes dated tasks, upcoming excludes someday
+
+## Still Open (moved to Plan 3)
+- [ ] **Checklist count in task row** — "3/5" in metadata. Needs API checklist_count fields or per-task fetch.
+- [ ] **Inline task editing** — Things-style expanded card in list.
 
 ## Architecture Issues (Plan 3)
 - [ ] Local-first sync — spec written at `docs/superpowers/specs/2026-03-20-local-first-sync.md`
