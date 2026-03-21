@@ -8,16 +8,13 @@ struct ContentView: View {
             SidebarView(store: store)
                 .frame(minWidth: 200)
         } content: {
-            ScrollView {
-                viewContent
-                    .padding()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.canvas)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
+            VStack(spacing: 0) {
+                // Custom toolbar matching design reference
+                HStack {
+                    // Left: icon + title + subtitle
                     HStack(spacing: 8) {
                         viewIcon
+                            .font(.system(size: 16))
                         Text(viewTitle)
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Theme.inkPrimary)
@@ -27,19 +24,35 @@ struct ContentView: View {
                                 .foregroundStyle(Theme.inkTertiary)
                         }
                     }
+
+                    Spacer()
+
+                    // Right: action buttons
+                    HStack(spacing: 4) {
+                        toolbarButton(icon: "magnifyingglass", tooltip: "Search (⌘F)") {
+                            // TODO: search
+                        }
+                        toolbarButton(icon: "plus", tooltip: "New Task (⌘N)") {
+                            let task = store.createTaskInView(title: "")
+                            store.expandedTaskId = task.id
+                        }
+                    }
                 }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { /* TODO: search */ } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    Button {
-                        let task = store.createTaskInView(title: "")
-                        store.expandedTaskId = task.id
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+                .padding(.horizontal, 20)
+                .frame(height: 52)
+
+                // Divider line
+                Divider()
+
+                // Content
+                ScrollView {
+                    viewContent
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.canvas)
         } detail: {
             if store.selectedTaskId != nil {
                 Text("Detail panel — coming in Task 8")
@@ -50,24 +63,18 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    // MARK: - Toolbar
+    // MARK: - Toolbar Button
 
-    @ViewBuilder
-    private var toolbarView: some View {
-        HStack {
-            viewIcon
-            Text(viewTitle)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Theme.inkPrimary)
-
-            if store.activeView == .today {
-                Text(todayDateString)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.inkTertiary)
-            }
-
-            Spacer()
+    private func toolbarButton(icon: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.inkSecondary)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 
     private var viewTitle: String {
