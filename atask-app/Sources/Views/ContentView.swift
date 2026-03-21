@@ -140,10 +140,12 @@ struct ContentView: View {
         }
     }
 
-    // Temporary task row — replaced in Task 5 with full TaskRow component
     private func taskRow(_ task: TaskModel) -> some View {
-        HStack(spacing: 12) {
-            // Checkbox
+        let isToday = store.activeView == .today
+        let isSelected = store.selectedTaskId == task.id
+
+        return HStack(spacing: 12) {
+            // Checkbox — 32x32 tap target around 20x20 circle
             Button {
                 if task.isCompleted {
                     store.reopenTask(task.id)
@@ -151,64 +153,102 @@ struct ContentView: View {
                     store.completeTask(task.id)
                 }
             } label: {
-                Circle()
-                    .strokeBorder(
-                        store.activeView == .today ? Theme.todayStar : Theme.inkQuaternary,
-                        lineWidth: 1.5
-                    )
-                    .background(
-                        Circle().fill(task.isCompleted ? Theme.accent : .clear)
-                    )
-                    .frame(width: 20, height: 20)
-                    .overlay {
-                        if task.isCompleted {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
+                ZStack {
+                    // Invisible tap target
+                    Color.clear
+                        .frame(width: 32, height: 32)
+
+                    // Visible circle
+                    Circle()
+                        .strokeBorder(
+                            task.isCompleted ? Theme.accent :
+                            isToday ? Theme.todayStar :
+                            Theme.inkQuaternary,
+                            lineWidth: 1.5
+                        )
+                        .background(
+                            Circle().fill(task.isCompleted ? Theme.accent : .clear)
+                        )
+                        .frame(width: 20, height: 20)
+                        .overlay {
+                            if task.isCompleted {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
                         }
-                    }
+                }
             }
             .buttonStyle(.plain)
 
             // Title
             Text(task.title)
+                .font(.system(size: 14))
                 .lineLimit(1)
                 .foregroundStyle(task.isCompleted ? Theme.inkTertiary : Theme.inkPrimary)
-                .strikethrough(task.isCompleted)
+                .strikethrough(task.isCompleted, color: Theme.inkTertiary)
 
             Spacer()
 
-            // Deadline
-            if let deadline = task.deadline {
-                let (label, variant) = DateFormatting.formatDeadline(deadline)
-                Text(label)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(
-                        variant == .overdue ? Theme.deadlineRed :
-                        variant == .today ? Theme.todayStar :
-                        Theme.inkTertiary
-                    )
+            // Metadata: project pill + deadline
+            HStack(spacing: 6) {
+                // Project pill
+                if let pid = task.projectId,
+                   let project = store.projects.first(where: { $0.id == pid }) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                            .frame(width: 6, height: 6)
+                        Text(project.title)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.inkTertiary)
+                    }
+                }
+
+                // Deadline
+                if let deadline = task.deadline {
+                    let (label, variant) = DateFormatting.formatDeadline(deadline)
+                    if task.projectId != nil { Text("·").foregroundStyle(Theme.inkQuaternary).font(.system(size: 11)) }
+                    Text(label)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(
+                            variant == .overdue ? Theme.deadlineRed :
+                            variant == .today ? Theme.todayStar :
+                            Theme.inkTertiary
+                        )
+                }
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 16)
-        .frame(height: 32)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 32)
         .background(
-            store.selectedTaskId == task.id
-                ? Theme.accentSubtle
-                : Color.clear
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Theme.accentSubtle : Color.clear)
         )
-        .cornerRadius(8)
         .contentShape(Rectangle())
         .onTapGesture {
             store.selectedTaskId = task.id
+            store.expandedTaskId = task.id
         }
         .contextMenu {
-            Button("Complete") { store.completeTask(task.id) }
-            Button("Schedule for Today") { store.setSchedule(task.id, 1) }
-            Button("Defer to Someday") { store.setSchedule(task.id, 2) }
+            Button { store.completeTask(task.id) } label: {
+                Label("Complete", systemImage: "checkmark")
+            }
+            Button { store.setSchedule(task.id, 1) } label: {
+                Label("Schedule for Today", systemImage: "star")
+            }
+            Button { store.setSchedule(task.id, 2) } label: {
+                Label("Defer to Someday", systemImage: "clock")
+            }
             Divider()
-            Button("Delete", role: .destructive) { store.deleteTask(task.id) }
+            Button { store.setSchedule(task.id, 0) } label: {
+                Label("Move to Inbox", systemImage: "tray")
+            }
+            Divider()
+            Button(role: .destructive) { store.deleteTask(task.id) } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 }
