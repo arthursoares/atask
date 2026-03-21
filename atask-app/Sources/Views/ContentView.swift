@@ -33,7 +33,8 @@ struct ContentView: View {
                         }
                     }
                 }
-                .padding(.horizontal, Spacing.sp6)
+                .padding(.leading, Spacing.sp4 + Spacing.sp1) // 20px = aligns with checkbox visual edge
+                .padding(.trailing, Spacing.sp6)
                 .frame(height: Size.toolbarHeight)
 
                 // ── Separator ──
