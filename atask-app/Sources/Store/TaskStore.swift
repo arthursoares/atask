@@ -85,23 +85,24 @@ class TaskStore {
     /// Returns true if the task was completed today (stays visible with strikethrough)
     private func completedToday(_ task: TaskModel) -> Bool {
         guard task.isCompleted, let completedAt = task.completedAt else { return false }
-        return completedAt.hasPrefix(DateFormatting.todayString())
+        // Parse the ISO date and check if it's today in local timezone
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        guard let date = iso.date(from: completedAt) else {
+            // Fallback: try prefix match
+            return completedAt.hasPrefix(DateFormatting.todayString())
+        }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: date) == DateFormatting.todayString()
     }
 
     // MARK: - Task Mutations (local-first)
 
-    /// Create task in inbox by default. Use `createTaskInView` to create in the active view's context.
+    /// Create task with context-aware defaults based on activeView.
+    /// Today → schedule=1, Someday → schedule=2, Project → projectId set, else inbox.
     @discardableResult
     func createTask(title: String) -> TaskModel {
-        let task = TaskModel.create(title: title)
-        persist(task)
-        tasks.append(task)
-        return task
-    }
-
-    /// Create task with schedule/project matching the active view.
-    @discardableResult
-    func createTaskInView(title: String) -> TaskModel {
         var task = TaskModel.create(title: title)
         switch activeView {
         case .today:
@@ -111,7 +112,7 @@ class TaskStore {
         case .project(let pid):
             task.projectId = pid
         default:
-            break // inbox
+            break // inbox (schedule=0)
         }
         persist(task)
         tasks.append(task)
@@ -249,6 +250,12 @@ class TaskStore {
     }
 
     // MARK: - Persistence Helpers
+
+    /// Look up project for a task
+    func projectFor(_ task: TaskModel) -> ProjectModel? {
+        guard let pid = task.projectId else { return nil }
+        return projects.first { $0.id == pid }
+    }
 
     /// Persist a new task directly (used by project view for section-specific creation)
     func persist(task: inout TaskModel) {

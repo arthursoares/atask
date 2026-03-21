@@ -9,16 +9,16 @@ struct ContentView: View {
                 .frame(minWidth: 200)
         } content: {
             VStack(spacing: 0) {
-                // ── Toolbar: 52px, padding 0 24px ──
+                // ── Toolbar: 52px, padding 0 24px, border-bottom separator ──
                 HStack {
-                    HStack(spacing: Spacing.sp3) {
+                    HStack(spacing: Spacing.sp2) {
                         viewIcon
                         Text(viewTitle)
-                            .font(.system(size: FontSize.xl, weight: .bold))
+                            .font(.viewTitle)
                             .foregroundStyle(Theme.inkPrimary)
                         if store.activeView == .today {
                             Text(todayDateString)
-                                .font(.system(size: FontSize.sm))
+                                .font(.metadata)
                                 .foregroundStyle(Theme.inkTertiary)
                         }
                     }
@@ -26,27 +26,27 @@ struct ContentView: View {
                     Spacer()
 
                     HStack(spacing: Spacing.sp2) {
-                        toolbarButton(icon: "magnifyingglass") { /* search */ }
+                        toolbarButton(icon: "magnifyingglass") { }
                         toolbarButton(icon: "plus") {
-                            let task = store.createTaskInView(title: "")
+                            let task = store.createTask(title: "")
                             store.expandedTaskId = task.id
                         }
                     }
                 }
-                .padding(.horizontal, Spacing.sp4) // 16px — same as task row padding
-                .frame(height: Size.toolbarHeight)
+                .padding(.horizontal, Spacing.sp6)
+                .frame(height: Spacing.toolbarHeight)
 
-                // ── Separator ──
+                // ── Separator: 1px ──
                 Rectangle()
-                    .fill(Color.black.opacity(0.05))
+                    .fill(Theme.separator)
                     .frame(height: 1)
 
-                // ── Task list ──
+                // ── Content: padding 24px (sp-6) ──
                 ScrollView {
                     viewContent
+                        .padding(Spacing.sp6)
                 }
                 .onTapGesture {
-                    // Click on empty area collapses inline editor
                     if store.expandedTaskId != nil {
                         store.expandedTaskId = nil
                     }
@@ -58,7 +58,7 @@ struct ContentView: View {
             if store.selectedTaskId != nil {
                 Text("Detail panel")
                     .foregroundColor(Theme.inkTertiary)
-                    .frame(minWidth: 300)
+                    .frame(width: Spacing.detailWidth)
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -68,9 +68,9 @@ struct ContentView: View {
     private func toolbarButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: FontSize.base))
+                .font(.system(size: 14))
                 .foregroundStyle(Theme.inkTertiary)
-                .frame(width: Size.toolbarButton, height: Size.toolbarButton)
+                .frame(width: Spacing.toolbarBtnSize, height: Spacing.toolbarBtnSize)
         }
         .buttonStyle(.plain)
     }
@@ -78,33 +78,26 @@ struct ContentView: View {
     // ── View icon ──
     @ViewBuilder
     private var viewIcon: some View {
-        switch store.activeView {
-        case .inbox:
-            Image(systemName: "tray")
-                .font(.system(size: FontSize.base))
-                .foregroundStyle(Theme.accent)
-        case .today:
-            Image(systemName: "star.fill")
-                .font(.system(size: FontSize.base))
-                .foregroundStyle(Theme.todayStar)
-        case .upcoming:
-            Image(systemName: "calendar")
-                .font(.system(size: FontSize.base))
-                .foregroundStyle(Theme.accent)
-        case .someday:
-            Image(systemName: "clock")
-                .font(.system(size: FontSize.base))
-                .foregroundStyle(Theme.somedayTint)
-        case .logbook:
-            Image(systemName: "archivebox")
-                .font(.system(size: FontSize.base))
-                .foregroundStyle(Theme.accent)
-        case .project(let id):
-            let color = store.projects.first { $0.id == id }?.color ?? ""
-            Circle()
-                .fill(Color(hex: color.isEmpty ? "#4670a0" : color))
-                .frame(width: 10, height: 10)
+        Group {
+            switch store.activeView {
+            case .inbox:
+                Image(systemName: "tray").foregroundStyle(Theme.accent)
+            case .today:
+                Image(systemName: "star.fill").foregroundStyle(Theme.todayStar)
+            case .upcoming:
+                Image(systemName: "calendar").foregroundStyle(Theme.accent)
+            case .someday:
+                Image(systemName: "clock").foregroundStyle(Theme.somedayTint)
+            case .logbook:
+                Image(systemName: "archivebox").foregroundStyle(Theme.accent)
+            case .project(let id):
+                let color = store.projects.first { $0.id == id }?.color ?? ""
+                Circle()
+                    .fill(Color(hex: color.isEmpty ? "#4670a0" : color))
+                    .frame(width: 10, height: 10)
+            }
         }
+        .font(.system(size: 14))
     }
 
     private var viewTitle: String {
@@ -144,91 +137,45 @@ struct ContentView: View {
         }
     }
 
-    // ── Today view with morning/evening sections ──
+    // ── Today: morning + evening sections ──
     @ViewBuilder
     private var todayView: some View {
         let morning = store.todayMorning
         let evening = store.todayEvening
 
         if morning.isEmpty && evening.isEmpty {
-            VStack {
-                Spacer(minLength: 80)
-                Text("Your day is clear.")
-                    .foregroundStyle(Theme.inkTertiary)
-                    .font(.system(size: FontSize.md))
-                Spacer(minLength: 40)
-            }
-            .frame(maxWidth: .infinity)
+            emptyState("Your day is clear.")
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                // Morning tasks
-                ForEach(morning) { task in
-                    if store.expandedTaskId == task.id {
-                        TaskInlineEditor(store: store, taskId: task.id)
-                    } else {
-                        taskRow(task)
-                    }
-                }
-
-                // Evening section
+                ForEach(morning) { task in taskOrEditor(task) }
                 if !evening.isEmpty {
                     sectionHeader("This Evening")
-                    ForEach(evening) { task in
-                        if store.expandedTaskId == task.id {
-                            TaskInlineEditor(store: store, taskId: task.id)
-                        } else {
-                            taskRow(task)
-                        }
-                    }
+                    ForEach(evening) { task in taskOrEditor(task) }
                 }
             }
         }
-
-        // New task
-        NewTaskRow { title in
-            store.createTaskInView(title: title)
-        }
+        NewTaskRow { title in store.createTask(title: title) }
     }
 
-    // ── Upcoming view: tasks grouped by start date ──
+    // ── Upcoming: grouped by startDate ──
     @ViewBuilder
     private var upcomingView: some View {
         let tasks = store.upcoming
         if tasks.isEmpty {
-            VStack {
-                Spacer(minLength: 80)
-                Text("Nothing scheduled ahead.")
-                    .foregroundStyle(Theme.inkTertiary)
-                    .font(.system(size: FontSize.md))
-                Spacer(minLength: 40)
-            }
-            .frame(maxWidth: .infinity)
+            emptyState("Nothing scheduled ahead.")
         } else {
-            let grouped = Dictionary(grouping: tasks) { task -> String in
-                // Extract date part from startDate
-                if let sd = task.startDate {
-                    return String(sd.prefix(10)) // YYYY-MM-DD
-                }
-                return "Unknown"
-            }
+            let grouped = Dictionary(grouping: tasks) { String(($0.startDate ?? "").prefix(10)) }
             let sortedKeys = grouped.keys.sorted()
-
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(sortedKeys, id: \.self) { dateKey in
-                    sectionHeader(DateFormatting.formatSectionDate(dateKey))
-                    ForEach(grouped[dateKey] ?? []) { task in
-                        if store.expandedTaskId == task.id {
-                            TaskInlineEditor(store: store, taskId: task.id)
-                        } else {
-                            taskRow(task)
-                        }
-                    }
+                    dateGroupHeader(DateFormatting.formatSectionDate(dateKey))
+                    ForEach(grouped[dateKey] ?? []) { task in taskOrEditor(task) }
                 }
             }
         }
     }
 
-    // ── Project view: sections with tasks ──
+    // ── Project: sections + tasks ──
     @ViewBuilder
     private func projectView(_ projectId: String) -> some View {
         let allTasks = store.tasksForProject(projectId)
@@ -236,156 +183,86 @@ struct ContentView: View {
         let sectionlessTasks = allTasks.filter { $0.sectionId == nil }
 
         VStack(alignment: .leading, spacing: 0) {
-            // Sectionless tasks
-            ForEach(sectionlessTasks) { task in
-                if store.expandedTaskId == task.id {
-                    TaskInlineEditor(store: store, taskId: task.id)
-                } else {
-                    taskRow(task)
-                }
-            }
-
+            ForEach(sectionlessTasks) { task in taskOrEditor(task) }
             NewTaskRow { title in
                 var task = TaskModel.create(title: title, projectId: projectId)
                 store.persist(task: &task)
             }
-
-            // Each section
             ForEach(projectSections) { section in
                 let sectionTasks = allTasks.filter { $0.sectionId == section.id }
                 sectionHeaderWithCount(section.title, count: sectionTasks.count)
-                ForEach(sectionTasks) { task in
-                    if store.expandedTaskId == task.id {
-                        TaskInlineEditor(store: store, taskId: task.id)
-                    } else {
-                        taskRow(task)
-                    }
-                }
+                ForEach(sectionTasks) { task in taskOrEditor(task) }
                 NewTaskRow { title in
                     var task = TaskModel.create(title: title, projectId: projectId)
                     task.sectionId = section.id
                     store.persist(task: &task)
                 }
             }
-
             if allTasks.isEmpty && projectSections.isEmpty {
-                VStack {
-                    Spacer(minLength: 80)
-                    Text("No tasks in this project yet.")
-                        .foregroundStyle(Theme.inkTertiary)
-                        .font(.system(size: FontSize.md))
-                    Spacer(minLength: 40)
-                }
-                .frame(maxWidth: .infinity)
+                emptyState("No tasks in this project yet.")
             }
         }
     }
 
-    // ── Section header with count: title + count + line ──
-    private func sectionHeaderWithCount(_ title: String, count: Int) -> some View {
-        HStack(spacing: Spacing.sp2) {
-            Text(title)
-                .font(.system(size: FontSize.base, weight: .bold))
-                .foregroundStyle(Theme.inkPrimary)
-            if count > 0 {
-                Text("\(count)")
-                    .font(.system(size: FontSize.sm))
-                    .foregroundStyle(Theme.inkTertiary)
-            }
-            Rectangle()
-                .fill(Color.black.opacity(0.05))
-                .frame(height: 1)
-        }
-        .padding(.horizontal, Spacing.sp4)
-        .padding(.top, Spacing.sp3)
-        .padding(.bottom, Spacing.sp1)
-    }
-
-    // ── Section header: title + line ──
-    private func sectionHeader(_ title: String) -> some View {
-        HStack(spacing: Spacing.sp2) {
-            Text(title)
-                .font(.system(size: FontSize.base, weight: .bold))
-                .foregroundStyle(Theme.inkPrimary)
-            Rectangle()
-                .fill(Color.black.opacity(0.05))
-                .frame(height: 1)
-        }
-        .padding(.horizontal, Spacing.sp4)
-        .padding(.top, Spacing.sp3)
-        .padding(.bottom, Spacing.sp1)
-    }
-
-    // ── Task list with empty state + new task row ──
+    // ── Generic task list ──
     @ViewBuilder
     private func taskList(_ tasks: [TaskModel], empty: String, emptyColor: Color = Theme.inkTertiary) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if tasks.isEmpty {
-                VStack {
-                    Spacer(minLength: 80)
-                    Text(empty)
-                        .foregroundStyle(emptyColor)
-                        .font(.system(size: FontSize.md))
-                    Spacer(minLength: 40)
-                }
-                .frame(maxWidth: .infinity)
+                emptyState(empty, color: emptyColor)
             } else {
-                ForEach(tasks) { task in
-                    if store.expandedTaskId == task.id {
-                        TaskInlineEditor(store: store, taskId: task.id)
-                    } else {
-                        taskRow(task)
-                    }
-                }
+                ForEach(tasks) { task in taskOrEditor(task) }
             }
-
             if store.activeView != .logbook && store.activeView != .upcoming {
-                NewTaskRow { title in
-                    store.createTaskInView(title: title)
-                }
+                NewTaskRow { title in store.createTask(title: title) }
             }
         }
     }
 
-    // ── Task row: 32px height, 6px 16px padding, 12px gap ──
+    // ── Task or inline editor ──
+    @ViewBuilder
+    private func taskOrEditor(_ task: TaskModel) -> some View {
+        if store.expandedTaskId == task.id {
+            TaskInlineEditor(store: store, taskId: task.id)
+        } else {
+            taskRow(task)
+        }
+    }
+
+    // ── Task row: 32px, 12px gap, 6px 16px padding, radius-md ──
     private func taskRow(_ task: TaskModel) -> some View {
         let isToday = store.activeView == .today
         let isSelected = store.selectedTaskId == task.id
 
         return HStack(spacing: Spacing.sp3) {
-            // Checkbox: 20×20, with padding for larger hit area
+            // Checkbox: 20×20
             Button {
-                if task.isCompleted {
-                    store.reopenTask(task.id)
-                } else {
-                    store.completeTask(task.id)
-                }
+                if task.isCompleted { store.reopenTask(task.id) }
+                else { store.completeTask(task.id) }
             } label: {
                 Circle()
                     .strokeBorder(
                         task.isCompleted ? Theme.accent :
                         isToday ? Theme.todayStar :
                         Theme.inkQuaternary,
-                        lineWidth: Size.checkboxBorder
+                        lineWidth: Spacing.checkboxBorder
                     )
-                    .background(
-                        Circle().fill(task.isCompleted ? Theme.accent : .clear)
-                    )
-                    .frame(width: Size.checkboxSize, height: Size.checkboxSize)
+                    .background(Circle().fill(task.isCompleted ? Theme.accent : .clear))
+                    .frame(width: Spacing.checkboxSize, height: Spacing.checkboxSize)
                     .overlay {
                         if task.isCompleted {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                     }
-                    .contentShape(Circle().inset(by: -6)) // expand hit area without affecting layout
+                    .contentShape(Circle().inset(by: -6))
             }
             .buttonStyle(.plain)
 
-            // Title: 14px, truncates
-            Text(task.title)
-                .font(.system(size: FontSize.base))
+            // Title: 14px Atkinson
+            Text(task.title.isEmpty ? "Untitled" : task.title)
+                .font(.taskTitle)
                 .lineLimit(1)
                 .foregroundStyle(task.isCompleted ? Theme.inkTertiary : Theme.inkPrimary)
                 .strikethrough(task.isCompleted, color: Theme.inkQuaternary)
@@ -393,44 +270,14 @@ struct ContentView: View {
             Spacer(minLength: Spacing.sp2)
 
             // Meta: 11px, right-aligned
-            HStack(spacing: Spacing.sp2) {
-                if let pid = task.projectId,
-                   let project = store.projects.first(where: { $0.id == pid }) {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
-                            .frame(width: Size.metaDot, height: Size.metaDot)
-                        Text(project.title)
-                            .font(.system(size: FontSize.xs, weight: .medium))
-                            .foregroundStyle(Theme.inkTertiary)
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(Theme.canvasSunken)
-                    .clipShape(Capsule())
-                }
-
-                if let deadline = task.deadline {
-                    let (label, variant) = DateFormatting.formatDeadline(deadline)
-                    if task.projectId != nil {
-                        Text("·").font(.system(size: FontSize.xs)).foregroundStyle(Theme.inkQuaternary)
-                    }
-                    Text(label)
-                        .font(.system(size: FontSize.xs, weight: .bold))
-                        .foregroundStyle(
-                            variant == .overdue ? Theme.deadlineRed :
-                            variant == .today ? Theme.todayStar :
-                            Theme.inkTertiary
-                        )
-                }
-            }
+            taskMeta(task)
         }
-        .padding(.vertical, 2)
+        .frame(height: Spacing.taskRowHeight)
+        .padding(.vertical, 6)
         .padding(.horizontal, Spacing.sp4)
-        .frame(minHeight: Size.taskRowHeight)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Theme.accentSubtle : Color.clear)
+            RoundedRectangle(cornerRadius: Radius.md)
+                .fill(isSelected ? Theme.sidebarSelected : Color.clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -446,5 +293,93 @@ struct ContentView: View {
             Divider()
             Button(role: .destructive) { store.deleteTask(task.id) } label: { Label("Delete", systemImage: "trash") }
         }
+    }
+
+    // ── Task metadata: project pill + deadline ──
+    @ViewBuilder
+    private func taskMeta(_ task: TaskModel) -> some View {
+        HStack(spacing: Spacing.sp2) {
+            if let project = store.projectFor(task) {
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                        .frame(width: Spacing.metaDot, height: Spacing.metaDot)
+                    Text(project.title)
+                        .font(.tagPill)
+                        .foregroundStyle(Theme.inkSecondary)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 1)
+                .background(Theme.canvasSunken)
+                .clipShape(Capsule())
+            }
+
+            if let deadline = task.deadline {
+                if task.projectId != nil {
+                    Text("·").font(.tagPill).foregroundStyle(Theme.inkQuaternary)
+                }
+                let (label, variant) = DateFormatting.formatDeadline(deadline)
+                Text(label)
+                    .font(.metadata)
+                    .foregroundStyle(
+                        variant == .overdue ? Theme.deadlineRed :
+                        variant == .today ? Theme.todayStar :
+                        Theme.inkTertiary
+                    )
+            }
+        }
+    }
+
+    // ── Section header: title + line ──
+    private func sectionHeader(_ title: String) -> some View {
+        HStack(spacing: Spacing.sp2) {
+            Text(title)
+                .font(.atkinson(14, weight: .bold))
+                .foregroundStyle(Theme.inkPrimary)
+            Rectangle()
+                .fill(Theme.separator)
+                .frame(height: 1)
+        }
+        .padding(.top, Spacing.sp3)
+        .padding(.bottom, Spacing.sp1)
+    }
+
+    // ── Section header with count ──
+    private func sectionHeaderWithCount(_ title: String, count: Int) -> some View {
+        HStack(spacing: Spacing.sp2) {
+            Text(title)
+                .font(.atkinson(14, weight: .bold))
+                .foregroundStyle(Theme.inkPrimary)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.groupLabel)
+                    .foregroundStyle(Theme.inkTertiary)
+            }
+            Rectangle()
+                .fill(Theme.separator)
+                .frame(height: 1)
+        }
+        .padding(.top, Spacing.sp3)
+        .padding(.bottom, Spacing.sp1)
+    }
+
+    // ── Date group header (Upcoming/Logbook) ──
+    private func dateGroupHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.metadata)
+            .foregroundStyle(Theme.inkPrimary)
+            .padding(.vertical, Spacing.sp1)
+    }
+
+    // ── Empty state ──
+    private func emptyState(_ message: String, color: Color = Theme.inkTertiary) -> some View {
+        VStack {
+            Spacer(minLength: Spacing.sp20)
+            Text(message)
+                .font(.detailBody)
+                .foregroundStyle(color)
+            Spacer(minLength: Spacing.sp10)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

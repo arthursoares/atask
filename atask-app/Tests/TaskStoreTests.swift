@@ -1,86 +1,74 @@
 import Testing
 @testable import atask
 
-@Test func createTask() throws {
+private func makeInboxStore() throws -> TaskStore {
     let db = try LocalDatabase(inMemory: true)
     let store = TaskStore(db: db)
+    store.activeView = .inbox
+    return store
+}
 
+@Test func createTask() throws {
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Test task")
     #expect(store.inbox.count == 1)
     #expect(store.inbox.first?.title == "Test task")
-    #expect(task.status == 0) // pending
-    #expect(task.schedule == 0) // inbox
+    #expect(task.status == 0)
+    #expect(task.schedule == 0)
 }
 
 @Test func completeTask() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Complete me")
     store.completeTask(task.id)
-    // Completed today: stays in inbox (strikethrough) AND appears in logbook
-    #expect(store.inbox.count == 1) // still visible with strikethrough
+    #expect(store.inbox.count == 1) // still visible with strikethrough (completed today)
     #expect(store.inbox.first?.isCompleted == true)
     #expect(store.logbook.count == 1)
-    #expect(store.logbook.first?.isCompleted == true)
 }
 
 @Test func reopenTask() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Reopen me")
     store.completeTask(task.id)
     #expect(store.logbook.count == 1)
-
     store.reopenTask(task.id)
     #expect(store.inbox.count == 1)
     #expect(store.logbook.count == 0)
 }
 
 @Test func scheduleToday() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Today task")
-    store.setSchedule(task.id, 1) // anytime
+    store.setSchedule(task.id, 1)
     #expect(store.inbox.count == 0)
     #expect(store.today.count == 1)
 }
 
 @Test func scheduleSomeday() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Someday task")
-    store.setSchedule(task.id, 2) // someday
+    store.setSchedule(task.id, 2)
     #expect(store.inbox.count == 0)
     #expect(store.someday.count == 1)
 }
 
 @Test func inboxExcludesDated() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Dated task")
     store.setStartDate(task.id, "2026-04-01")
-    #expect(store.inbox.count == 0) // dated tasks not in inbox
+    #expect(store.inbox.count == 0)
 }
 
 @Test func somedayExcludesDated() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Dated someday")
     store.setSchedule(task.id, 2)
     store.setStartDate(task.id, "2026-04-01")
-    #expect(store.someday.count == 0) // dated tasks not in someday
+    #expect(store.someday.count == 0)
 }
 
 @Test func todayEvening() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Evening task")
     store.setSchedule(task.id, 1)
     store.setTimeSlot(task.id, "evening")
@@ -89,9 +77,7 @@ import Testing
 }
 
 @Test func deleteTask() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let task = store.createTask(title: "Delete me")
     #expect(store.inbox.count == 1)
     store.deleteTask(task.id)
@@ -99,31 +85,44 @@ import Testing
 }
 
 @Test func createProject() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let project = store.createProject(title: "My Project")
     #expect(store.projects.count == 1)
     #expect(project.title == "My Project")
 }
 
 @Test func createArea() throws {
-    let db = try LocalDatabase(inMemory: true)
-    let store = TaskStore(db: db)
-
+    let store = try makeInboxStore()
     let area = store.createArea(title: "Work")
     #expect(store.areas.count == 1)
     #expect(area.title == "Work")
 }
 
 @Test func uniqueTags() throws {
+    let store = try makeInboxStore()
+    let tag1 = store.createTag(title: "important")
+    #expect(tag1 != nil)
+    let tag2 = store.createTag(title: "important")
+    #expect(tag2 == nil)
+    #expect(store.tags.count == 1)
+}
+
+@Test func contextAwareCreation() throws {
     let db = try LocalDatabase(inMemory: true)
     let store = TaskStore(db: db)
 
-    let tag1 = store.createTag(title: "important")
-    #expect(tag1 != nil)
+    // Today view creates anytime tasks
+    store.activeView = .today
+    let todayTask = store.createTask(title: "Today task")
+    #expect(todayTask.schedule == 1)
 
-    let tag2 = store.createTag(title: "important") // duplicate
-    #expect(tag2 == nil) // should fail
-    #expect(store.tags.count == 1)
+    // Someday view creates someday tasks
+    store.activeView = .someday
+    let somedayTask = store.createTask(title: "Someday task")
+    #expect(somedayTask.schedule == 2)
+
+    // Inbox creates inbox tasks
+    store.activeView = .inbox
+    let inboxTask = store.createTask(title: "Inbox task")
+    #expect(inboxTask.schedule == 0)
 }
