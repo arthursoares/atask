@@ -29,7 +29,7 @@ struct NewTaskRow: View {
                     }
             }
             .padding(.vertical, 6)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 20)
             .frame(height: 32)
         } else {
             Button {
@@ -48,7 +48,7 @@ struct NewTaskRow: View {
                     Spacer()
                 }
                 .padding(.vertical, 6)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .frame(height: 32)
                 .contentShape(Rectangle())
             }

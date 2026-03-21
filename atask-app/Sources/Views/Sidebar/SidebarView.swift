@@ -8,80 +8,87 @@ struct SidebarView: View {
     @State private var areaTitle = ""
 
     var body: some View {
-        List {
-            // Nav items
+        List(selection: $store.sidebarSelection) {
             Section {
-                sidebarButton(.inbox) {
-                    Label("Inbox", systemImage: "tray")
-                        .badge(store.inbox.count)
-                }
+                Label("Inbox", systemImage: "tray")
+                    .tag(SidebarItem.inbox)
+                    .badge(store.inbox.count)
 
-                sidebarButton(.today) {
-                    Label {
-                        Text("Today")
-                    } icon: {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(Theme.todayStar)
-                    }
-                    .badge(store.today.count)
+                Label {
+                    Text("Today")
+                } icon: {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(Theme.todayStar)
                 }
+                .tag(SidebarItem.today)
+                .badge(store.today.count)
 
-                sidebarButton(.upcoming) {
-                    Label("Upcoming", systemImage: "calendar")
-                }
+                Label("Upcoming", systemImage: "calendar")
+                    .tag(SidebarItem.upcoming)
 
-                sidebarButton(.someday) {
-                    Label {
-                        Text("Someday")
-                    } icon: {
-                        Image(systemName: "clock")
-                            .foregroundStyle(Theme.somedayTint)
-                    }
+                Label {
+                    Text("Someday")
+                } icon: {
+                    Image(systemName: "clock")
+                        .foregroundStyle(Theme.somedayTint)
                 }
+                .tag(SidebarItem.someday)
 
-                sidebarButton(.logbook) {
-                    Label("Logbook", systemImage: "archivebox")
-                }
+                Label("Logbook", systemImage: "archivebox")
+                    .tag(SidebarItem.logbook)
             }
 
             // Areas with nested projects
             ForEach(store.areas) { area in
                 Section(area.title) {
                     ForEach(projectsForArea(area.id)) { project in
-                        projectButton(project)
+                        Label {
+                            Text(project.title)
+                        } icon: {
+                            Circle()
+                                .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                                .frame(width: 8, height: 8)
+                        }
+                        .tag(SidebarItem.project(project.id))
+                        .contextMenu {
+                            Button("Rename...") { /* TODO */ }
+                            Button("Set Color...") { /* TODO */ }
+                            Divider()
+                            Button("Delete", role: .destructive) { /* TODO */ }
+                        }
                     }
                 }
             }
 
-            // Orphan projects (no area)
+            // Orphan projects
             let orphans = store.projects.filter { $0.areaId == nil && !$0.isCompleted }
             if !orphans.isEmpty {
                 Section {
                     ForEach(orphans) { project in
-                        projectButton(project)
+                        Label {
+                            Text(project.title)
+                        } icon: {
+                            Circle()
+                                .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                                .frame(width: 8, height: 8)
+                        }
+                        .tag(SidebarItem.project(project.id))
                     }
                 }
             }
 
-            // Add project / area
+            // Add buttons
             Section {
                 if addingProject {
                     TextField("Project name", text: $projectTitle)
                         .onSubmit {
-                            if !projectTitle.isEmpty {
-                                store.createProject(title: projectTitle)
-                            }
+                            if !projectTitle.isEmpty { store.createProject(title: projectTitle) }
                             projectTitle = ""
                             addingProject = false
                         }
-                        .onExitCommand {
-                            projectTitle = ""
-                            addingProject = false
-                        }
+                        .onExitCommand { projectTitle = ""; addingProject = false }
                 } else {
-                    Button {
-                        addingProject = true
-                    } label: {
+                    Button { addingProject = true } label: {
                         Label("Project", systemImage: "plus")
                             .foregroundStyle(Theme.inkTertiary)
                     }
@@ -91,20 +98,13 @@ struct SidebarView: View {
                 if addingArea {
                     TextField("Area name", text: $areaTitle)
                         .onSubmit {
-                            if !areaTitle.isEmpty {
-                                store.createArea(title: areaTitle)
-                            }
+                            if !areaTitle.isEmpty { store.createArea(title: areaTitle) }
                             areaTitle = ""
                             addingArea = false
                         }
-                        .onExitCommand {
-                            areaTitle = ""
-                            addingArea = false
-                        }
+                        .onExitCommand { areaTitle = ""; addingArea = false }
                 } else {
-                    Button {
-                        addingArea = true
-                    } label: {
+                    Button { addingArea = true } label: {
                         Label("Area", systemImage: "plus")
                             .foregroundStyle(Theme.inkTertiary)
                     }
@@ -113,63 +113,17 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-    }
-
-    // MARK: - Sidebar Button
-
-    private func sidebarButton<Content: View>(_ item: SidebarItem, @ViewBuilder content: () -> Content) -> some View {
-        Button {
-            store.activeView = item.toActiveView()
-            store.sidebarSelection = item
-        } label: {
-            content()
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 2)
-        .background(
-            store.sidebarSelection == item
-                ? Theme.accentSubtle.cornerRadius(6)
-                : Color.clear.cornerRadius(6)
-        )
-    }
-
-    private func projectButton(_ project: ProjectModel) -> some View {
-        let item = SidebarItem.project(project.id)
-        return Button {
-            store.activeView = .project(project.id)
-            store.sidebarSelection = item
-        } label: {
-            Label {
-                Text(project.title)
-            } icon: {
-                Circle()
-                    .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
-                    .frame(width: 8, height: 8)
+        .onChange(of: store.sidebarSelection) { _, newValue in
+            if let item = newValue {
+                store.activeView = item.toActiveView()
             }
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, 2)
-        .background(
-            store.sidebarSelection == item
-                ? Theme.accentSubtle.cornerRadius(6)
-                : Color.clear.cornerRadius(6)
-        )
-        .contextMenu {
-            Button("Rename...") { /* TODO */ }
-            Button("Set Color...") { /* TODO */ }
-            Divider()
-            Button("Delete", role: .destructive) { /* TODO */ }
-        }
     }
-
-    // MARK: - Helpers
 
     private func projectsForArea(_ areaId: String) -> [ProjectModel] {
         store.projects.filter { $0.areaId == areaId && !$0.isCompleted }
     }
 }
-
-// MARK: - Sidebar Selection
 
 enum SidebarItem: Hashable {
     case inbox, today, upcoming, someday, logbook

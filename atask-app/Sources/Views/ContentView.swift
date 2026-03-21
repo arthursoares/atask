@@ -47,7 +47,6 @@ struct ContentView: View {
                 // Content
                 ScrollView {
                     viewContent
-                        .padding(.horizontal, 20)
                         .padding(.vertical, 8)
                 }
             }
@@ -238,7 +237,7 @@ struct ContentView: View {
             }
         }
         .padding(.vertical, 4)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 20)
         .frame(minHeight: 32)
         .background(
             RoundedRectangle(cornerRadius: 6)
