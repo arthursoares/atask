@@ -199,20 +199,71 @@ The detail panel is for FULL task view when you want to see everything. It appea
 - [x] Categories: Navigation, Task Actions (context-aware), Creation
 - [x] Keyboard: ↑↓ navigate, Enter execute, Escape close
 
-### Keyboard Shortcuts (native SwiftUI)
-- [x] ⌘K — command palette
-- [x] ⌘N — new task (focus inline input)
-- [x] ⌘1-5 — view navigation
-- [x] ⌘⇧C — complete selected task
-- [x] ⌘T — schedule for today
-- [x] ⌘D — set start date
-- [x] ⌘⇧D — set deadline
-- [x] ⌘⇧M — move to project
-- [x] ⌘⌫ — delete task
-- [x] Escape — close panel/palette
-- [x] ↑↓ — navigate task list
-- [x] Enter — open detail panel
-- [x] ⌘↑/⌘↓ — reorder task
+### Keyboard Shortcuts (Things-compatible, native SwiftUI)
+
+**Create:**
+| Shortcut | Action |
+|----------|--------|
+| ⌘N | New task (opens inline editor) |
+| Space | New task below selection (only when task list focused, NOT in text fields) |
+| ⌥⌘N | New project |
+| ⇧⌘N | New heading/section |
+| ⇧⌘C | New checklist in open task |
+
+**Edit:**
+| Shortcut | Action |
+|----------|--------|
+| Return | Open selected task (inline editor) |
+| ⌘Return | Save and close inline editor |
+| ⌘K | Complete selected task |
+| ⌥⌘K | Cancel selected task |
+| ⌘D | Duplicate task |
+| ⌫ | Delete task |
+
+**Schedule (When):**
+| Shortcut | Action |
+|----------|--------|
+| ⌘S | Show When picker |
+| ⌘T | Start Today |
+| ⌘E | Start This Evening |
+| ⌘R | Start Anytime (schedule=anytime) |
+| ⌘O | Start Someday |
+| ⇧⌘D | Set/edit Deadline |
+| Ctrl+] | Start date +1 day |
+| Ctrl+[ | Start date -1 day |
+
+**Move:**
+| Shortcut | Action |
+|----------|--------|
+| ⇧⌘M | Move to another list/project |
+| ⌘↑ | Move item up |
+| ⌘↓ | Move item down |
+
+**Navigate:**
+| Shortcut | Action |
+|----------|--------|
+| ⇧⌘O | Command palette / Quick Find (Things calls this "navigation popover") |
+| ⌘1 | Inbox |
+| ⌘2 | Today |
+| ⌘3 | Upcoming |
+| ⌘4 | Anytime |
+| ⌘5 | Someday |
+| ⌘6 | Logbook |
+| ⌘F | Search |
+| ⌘/ | Toggle sidebar |
+| ↑↓ | Navigate task list |
+| ⌘← | Go back |
+
+**Tags:**
+| Shortcut | Action |
+|----------|--------|
+| ⇧⌘T | Edit tags for selected task |
+
+**Other:**
+| Shortcut | Action |
+|----------|--------|
+| Escape | Close inline editor / command palette / deselect |
+| ⌘, | Settings |
 
 ### Drag and Drop (native SwiftUI)
 - [x] Task rows draggable in Today/Someday/Project views
