@@ -73,9 +73,7 @@ struct ContentView: View {
             .background(Theme.canvas)
         } detail: {
             if store.selectedTaskId != nil {
-                Text("Detail panel")
-                    .foregroundColor(Theme.inkTertiary)
-                    .frame(width: Spacing.detailWidth)
+                TaskDetailView(store: store)
             }
         }
         .navigationSplitViewStyle(.balanced)
