@@ -1,0 +1,47 @@
+name: atask
+options:
+  bundleIdPrefix: com.atask
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "16.0"
+  minimumXcodeGenVersion: "2.40.0"
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+
+targets:
+  atask:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes:
+          - "Resources/Info.plist"
+    resources:
+      - path: Sources/Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        INFOPLIST_FILE: Sources/Resources/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.atask.app
+        PRODUCT_NAME: atask
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+    dependencies:
+      - package: GRDB
+        product: GRDB
+
+  ataskTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: atask
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
