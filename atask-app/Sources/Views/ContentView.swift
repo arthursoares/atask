@@ -132,16 +132,188 @@ struct ContentView: View {
         case .inbox:
             taskList(store.inbox, empty: "Inbox Zero ✓", emptyColor: Theme.success)
         case .today:
-            taskList(store.today, empty: "Your day is clear.")
+            todayView
         case .upcoming:
-            taskList(store.upcoming, empty: "Nothing scheduled ahead.")
+            upcomingView
         case .someday:
             taskList(store.someday, empty: "No someday tasks. Everything is decided.")
         case .logbook:
             taskList(store.logbook, empty: "Nothing completed yet. Get started!")
         case .project(let id):
-            taskList(store.tasksForProject(id), empty: "No tasks in this project yet.")
+            projectView(id)
         }
+    }
+
+    // ── Today view with morning/evening sections ──
+    @ViewBuilder
+    private var todayView: some View {
+        let morning = store.todayMorning
+        let evening = store.todayEvening
+
+        if morning.isEmpty && evening.isEmpty {
+            VStack {
+                Spacer(minLength: 80)
+                Text("Your day is clear.")
+                    .foregroundStyle(Theme.inkTertiary)
+                    .font(.system(size: FontSize.md))
+                Spacer(minLength: 40)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                // Morning tasks
+                ForEach(morning) { task in
+                    if store.expandedTaskId == task.id {
+                        TaskInlineEditor(store: store, taskId: task.id)
+                    } else {
+                        taskRow(task)
+                    }
+                }
+
+                // Evening section
+                if !evening.isEmpty {
+                    sectionHeader("This Evening")
+                    ForEach(evening) { task in
+                        if store.expandedTaskId == task.id {
+                            TaskInlineEditor(store: store, taskId: task.id)
+                        } else {
+                            taskRow(task)
+                        }
+                    }
+                }
+            }
+        }
+
+        // New task
+        NewTaskRow { title in
+            store.createTaskInView(title: title)
+        }
+    }
+
+    // ── Upcoming view: tasks grouped by start date ──
+    @ViewBuilder
+    private var upcomingView: some View {
+        let tasks = store.upcoming
+        if tasks.isEmpty {
+            VStack {
+                Spacer(minLength: 80)
+                Text("Nothing scheduled ahead.")
+                    .foregroundStyle(Theme.inkTertiary)
+                    .font(.system(size: FontSize.md))
+                Spacer(minLength: 40)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            let grouped = Dictionary(grouping: tasks) { task -> String in
+                // Extract date part from startDate
+                if let sd = task.startDate {
+                    return String(sd.prefix(10)) // YYYY-MM-DD
+                }
+                return "Unknown"
+            }
+            let sortedKeys = grouped.keys.sorted()
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(sortedKeys, id: \.self) { dateKey in
+                    sectionHeader(DateFormatting.formatSectionDate(dateKey))
+                    ForEach(grouped[dateKey] ?? []) { task in
+                        if store.expandedTaskId == task.id {
+                            TaskInlineEditor(store: store, taskId: task.id)
+                        } else {
+                            taskRow(task)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Project view: sections with tasks ──
+    @ViewBuilder
+    private func projectView(_ projectId: String) -> some View {
+        let allTasks = store.tasksForProject(projectId)
+        let projectSections = store.sections.filter { $0.projectId == projectId }
+        let sectionlessTasks = allTasks.filter { $0.sectionId == nil }
+
+        VStack(alignment: .leading, spacing: 0) {
+            // Sectionless tasks
+            ForEach(sectionlessTasks) { task in
+                if store.expandedTaskId == task.id {
+                    TaskInlineEditor(store: store, taskId: task.id)
+                } else {
+                    taskRow(task)
+                }
+            }
+
+            NewTaskRow { title in
+                var task = TaskModel.create(title: title, projectId: projectId)
+                store.persist(task: &task)
+            }
+
+            // Each section
+            ForEach(projectSections) { section in
+                let sectionTasks = allTasks.filter { $0.sectionId == section.id }
+                sectionHeaderWithCount(section.title, count: sectionTasks.count)
+                ForEach(sectionTasks) { task in
+                    if store.expandedTaskId == task.id {
+                        TaskInlineEditor(store: store, taskId: task.id)
+                    } else {
+                        taskRow(task)
+                    }
+                }
+                NewTaskRow { title in
+                    var task = TaskModel.create(title: title, projectId: projectId)
+                    task.sectionId = section.id
+                    store.persist(task: &task)
+                }
+            }
+
+            if allTasks.isEmpty && projectSections.isEmpty {
+                VStack {
+                    Spacer(minLength: 80)
+                    Text("No tasks in this project yet.")
+                        .foregroundStyle(Theme.inkTertiary)
+                        .font(.system(size: FontSize.md))
+                    Spacer(minLength: 40)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    // ── Section header with count: title + count + line ──
+    private func sectionHeaderWithCount(_ title: String, count: Int) -> some View {
+        HStack(spacing: Spacing.sp2) {
+            Text(title)
+                .font(.system(size: FontSize.base, weight: .bold))
+                .foregroundStyle(Theme.inkPrimary)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.system(size: FontSize.sm))
+                    .foregroundStyle(Theme.inkTertiary)
+            }
+            Rectangle()
+                .fill(Color.black.opacity(0.05))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, Spacing.sp4)
+        .padding(.top, Spacing.sp3)
+        .padding(.bottom, Spacing.sp1)
+    }
+
+    // ── Section header: title + line ──
+    private func sectionHeader(_ title: String) -> some View {
+        HStack(spacing: Spacing.sp2) {
+            Text(title)
+                .font(.system(size: FontSize.base, weight: .bold))
+                .foregroundStyle(Theme.inkPrimary)
+            Rectangle()
+                .fill(Color.black.opacity(0.05))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, Spacing.sp4)
+        .padding(.top, Spacing.sp3)
+        .padding(.bottom, Spacing.sp1)
     }
 
     // ── Task list with empty state + new task row ──

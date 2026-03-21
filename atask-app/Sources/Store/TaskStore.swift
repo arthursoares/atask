@@ -250,6 +250,16 @@ class TaskStore {
 
     // MARK: - Persistence Helpers
 
+    /// Persist a new task directly (used by project view for section-specific creation)
+    func persist(task: inout TaskModel) {
+        do {
+            try db.dbQueue.write { db in try task.save(db) }
+            tasks.append(task)
+        } catch {
+            print("[TaskStore] Persist task failed: \(error)")
+        }
+    }
+
     private func persist(_ record: some PersistableRecord) {
         do {
             try db.dbQueue.write { db in
