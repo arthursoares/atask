@@ -9,52 +9,48 @@ struct ContentView: View {
                 .frame(minWidth: 200)
         } content: {
             VStack(spacing: 0) {
-                // Custom toolbar matching design reference
+                // ── Toolbar: 52px, padding 0 24px ──
                 HStack {
-                    // Left: icon + title + subtitle
-                    HStack(spacing: 8) {
+                    HStack(spacing: Spacing.sp3) {
                         viewIcon
-                            .font(.system(size: 16))
                         Text(viewTitle)
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: FontSize.xl, weight: .bold))
                             .foregroundStyle(Theme.inkPrimary)
                         if store.activeView == .today {
                             Text(todayDateString)
-                                .font(.system(size: 13))
+                                .font(.system(size: FontSize.sm))
                                 .foregroundStyle(Theme.inkTertiary)
                         }
                     }
 
                     Spacer()
 
-                    // Right: action buttons
-                    HStack(spacing: 4) {
-                        toolbarButton(icon: "magnifyingglass", tooltip: "Search (⌘F)") {
-                            // TODO: search
-                        }
-                        toolbarButton(icon: "plus", tooltip: "New Task (⌘N)") {
+                    HStack(spacing: Spacing.sp2) {
+                        toolbarButton(icon: "magnifyingglass") { /* search */ }
+                        toolbarButton(icon: "plus") {
                             let task = store.createTaskInView(title: "")
                             store.expandedTaskId = task.id
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .frame(height: 52)
+                .padding(.horizontal, Spacing.sp6)
+                .frame(height: Size.toolbarHeight)
 
-                // Divider line
-                Divider()
+                // ── Separator ──
+                Rectangle()
+                    .fill(Color.black.opacity(0.05))
+                    .frame(height: 1)
 
-                // Content
+                // ── Task list ──
                 ScrollView {
                     viewContent
-                        .padding(.vertical, 8)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.canvas)
         } detail: {
             if store.selectedTaskId != nil {
-                Text("Detail panel — coming in Task 8")
+                Text("Detail panel")
                     .foregroundColor(Theme.inkTertiary)
                     .frame(minWidth: 300)
             }
@@ -62,50 +58,58 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    // MARK: - Toolbar Button
-
-    private func toolbarButton(icon: String, tooltip: String, action: @escaping () -> Void) -> some View {
+    // ── Toolbar button: 30×30, radius-sm ──
+    private func toolbarButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.inkSecondary)
-                .frame(width: 30, height: 30)
-                .contentShape(Rectangle())
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.inkTertiary)
+                .frame(width: Size.toolbarButton, height: Size.toolbarButton)
         }
         .buttonStyle(.plain)
-        .help(tooltip)
     }
 
-    private var viewTitle: String {
-        switch store.activeView {
-        case .inbox: return "Inbox"
-        case .today: return "Today"
-        case .upcoming: return "Upcoming"
-        case .someday: return "Someday"
-        case .logbook: return "Logbook"
-        case .project(let id):
-            return store.projects.first { $0.id == id }?.title ?? "Project"
-        }
-    }
-
+    // ── View icon ──
     @ViewBuilder
     private var viewIcon: some View {
         switch store.activeView {
         case .inbox:
-            Image(systemName: "tray").foregroundStyle(Theme.accent)
+            Image(systemName: "tray")
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.accent)
         case .today:
-            Image(systemName: "star.fill").foregroundStyle(Theme.todayStar)
+            Image(systemName: "star.fill")
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.todayStar)
         case .upcoming:
-            Image(systemName: "calendar").foregroundStyle(Theme.accent)
+            Image(systemName: "calendar")
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.accent)
         case .someday:
-            Image(systemName: "clock").foregroundStyle(Theme.somedayTint)
+            Image(systemName: "clock")
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.somedayTint)
         case .logbook:
-            Image(systemName: "archivebox").foregroundStyle(Theme.accent)
+            Image(systemName: "archivebox")
+                .font(.system(size: FontSize.base))
+                .foregroundStyle(Theme.accent)
         case .project(let id):
             let color = store.projects.first { $0.id == id }?.color ?? ""
             Circle()
                 .fill(Color(hex: color.isEmpty ? "#4670a0" : color))
                 .frame(width: 10, height: 10)
+        }
+    }
+
+    private var viewTitle: String {
+        switch store.activeView {
+        case .inbox: "Inbox"
+        case .today: "Today"
+        case .upcoming: "Upcoming"
+        case .someday: "Someday"
+        case .logbook: "Logbook"
+        case .project(let id):
+            store.projects.first { $0.id == id }?.title ?? "Project"
         }
     }
 
@@ -115,35 +119,35 @@ struct ContentView: View {
         return fmt.string(from: Date())
     }
 
-    // MARK: - View Content
-
+    // ── View content ──
     @ViewBuilder
     private var viewContent: some View {
         switch store.activeView {
         case .inbox:
-            taskListContent(store.inbox, emptyMessage: "Inbox Zero ✓", emptyColor: Theme.success)
+            taskList(store.inbox, empty: "Inbox Zero ✓", emptyColor: Theme.success)
         case .today:
-            taskListContent(store.today, emptyMessage: "Your day is clear.")
+            taskList(store.today, empty: "Your day is clear.")
         case .upcoming:
-            taskListContent(store.upcoming, emptyMessage: "Nothing scheduled ahead.")
+            taskList(store.upcoming, empty: "Nothing scheduled ahead.")
         case .someday:
-            taskListContent(store.someday, emptyMessage: "No someday tasks. Everything is decided.")
+            taskList(store.someday, empty: "No someday tasks. Everything is decided.")
         case .logbook:
-            taskListContent(store.logbook, emptyMessage: "Nothing completed yet. Get started!")
+            taskList(store.logbook, empty: "Nothing completed yet. Get started!")
         case .project(let id):
-            taskListContent(store.tasksForProject(id), emptyMessage: "No tasks in this project yet.")
+            taskList(store.tasksForProject(id), empty: "No tasks in this project yet.")
         }
     }
 
+    // ── Task list with empty state + new task row ──
     @ViewBuilder
-    private func taskListContent(_ tasks: [TaskModel], emptyMessage: String, emptyColor: Color = Theme.inkTertiary) -> some View {
+    private func taskList(_ tasks: [TaskModel], empty: String, emptyColor: Color = Theme.inkTertiary) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if tasks.isEmpty {
                 VStack {
-                    Spacer(minLength: 100)
-                    Text(emptyMessage)
+                    Spacer(minLength: 80)
+                    Text(empty)
                         .foregroundStyle(emptyColor)
-                        .font(.system(size: 15))
+                        .font(.system(size: FontSize.md))
                     Spacer(minLength: 40)
                 }
                 .frame(maxWidth: .infinity)
@@ -153,7 +157,6 @@ struct ContentView: View {
                 }
             }
 
-            // New task row (not in logbook or upcoming)
             if store.activeView != .logbook && store.activeView != .upcoming {
                 NewTaskRow { title in
                     store.createTaskInView(title: title)
@@ -162,12 +165,13 @@ struct ContentView: View {
         }
     }
 
+    // ── Task row: 32px height, 6px 16px padding, 12px gap ──
     private func taskRow(_ task: TaskModel) -> some View {
         let isToday = store.activeView == .today
         let isSelected = store.selectedTaskId == task.id
 
-        return HStack(spacing: 12) {
-            // Checkbox — large hit area
+        return HStack(spacing: Spacing.sp3) {
+            // Checkbox: 20×20, with padding for larger hit area
             Button {
                 if task.isCompleted {
                     store.reopenTask(task.id)
@@ -180,12 +184,12 @@ struct ContentView: View {
                         task.isCompleted ? Theme.accent :
                         isToday ? Theme.todayStar :
                         Theme.inkQuaternary,
-                        lineWidth: 1.5
+                        lineWidth: Size.checkboxBorder
                     )
                     .background(
                         Circle().fill(task.isCompleted ? Theme.accent : .clear)
                     )
-                    .frame(width: 20, height: 20)
+                    .frame(width: Size.checkboxSize, height: Size.checkboxSize)
                     .overlay {
                         if task.isCompleted {
                             Image(systemName: "checkmark")
@@ -193,41 +197,45 @@ struct ContentView: View {
                                 .foregroundStyle(.white)
                         }
                     }
-                    .padding(6) // expands tap target to 32x32
+                    .padding(Spacing.sp1) // 4px padding → 28x28 hit area
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Title
+            // Title: 14px, truncates
             Text(task.title)
-                .font(.system(size: 14))
+                .font(.system(size: FontSize.base))
                 .lineLimit(1)
                 .foregroundStyle(task.isCompleted ? Theme.inkTertiary : Theme.inkPrimary)
-                .strikethrough(task.isCompleted, color: Theme.inkTertiary)
+                .strikethrough(task.isCompleted, color: Theme.inkQuaternary)
 
-            Spacer()
+            Spacer(minLength: Spacing.sp2)
 
-            // Metadata: project pill + deadline
-            HStack(spacing: 6) {
-                // Project pill
+            // Meta: 11px, right-aligned
+            HStack(spacing: Spacing.sp2) {
                 if let pid = task.projectId,
                    let project = store.projects.first(where: { $0.id == pid }) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Circle()
                             .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
-                            .frame(width: 6, height: 6)
+                            .frame(width: Size.metaDot, height: Size.metaDot)
                         Text(project.title)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: FontSize.xs, weight: .medium))
                             .foregroundStyle(Theme.inkTertiary)
                     }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(Theme.canvasSunken)
+                    .clipShape(Capsule())
                 }
 
-                // Deadline
                 if let deadline = task.deadline {
                     let (label, variant) = DateFormatting.formatDeadline(deadline)
-                    if task.projectId != nil { Text("·").foregroundStyle(Theme.inkQuaternary).font(.system(size: 11)) }
+                    if task.projectId != nil {
+                        Text("·").font(.system(size: FontSize.xs)).foregroundStyle(Theme.inkQuaternary)
+                    }
                     Text(label)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: FontSize.xs, weight: .bold))
                         .foregroundStyle(
                             variant == .overdue ? Theme.deadlineRed :
                             variant == .today ? Theme.todayStar :
@@ -236,36 +244,25 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 20)
-        .frame(minHeight: 32)
+        .padding(.vertical, 2)
+        .padding(.horizontal, Spacing.sp4)
+        .frame(minHeight: Size.taskRowHeight)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? Theme.accentSubtle : Color.clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
             store.selectedTaskId = task.id
-            store.expandedTaskId = task.id
         }
         .contextMenu {
-            Button { store.completeTask(task.id) } label: {
-                Label("Complete", systemImage: "checkmark")
-            }
-            Button { store.setSchedule(task.id, 1) } label: {
-                Label("Schedule for Today", systemImage: "star")
-            }
-            Button { store.setSchedule(task.id, 2) } label: {
-                Label("Defer to Someday", systemImage: "clock")
-            }
+            Button { store.completeTask(task.id) } label: { Label("Complete", systemImage: "checkmark") }
+            Button { store.setSchedule(task.id, 1) } label: { Label("Schedule for Today", systemImage: "star") }
+            Button { store.setSchedule(task.id, 2) } label: { Label("Defer to Someday", systemImage: "clock") }
             Divider()
-            Button { store.setSchedule(task.id, 0) } label: {
-                Label("Move to Inbox", systemImage: "tray")
-            }
+            Button { store.setSchedule(task.id, 0) } label: { Label("Move to Inbox", systemImage: "tray") }
             Divider()
-            Button(role: .destructive) { store.deleteTask(task.id) } label: {
-                Label("Delete", systemImage: "trash")
-            }
+            Button(role: .destructive) { store.deleteTask(task.id) } label: { Label("Delete", systemImage: "trash") }
         }
     }
 }
