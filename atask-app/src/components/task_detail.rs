@@ -53,6 +53,8 @@ pub fn TaskDetail() -> Element {
     let mut show_project_picker: Signal<bool> = use_signal(|| false);
     let mut show_tag_picker: Signal<bool> = use_signal(|| false);
     let mut task_tags_draft: Signal<Vec<String>> = use_signal(|| Vec::new());
+    let mut checklist_total: Signal<i64> = use_signal(|| 0);
+    let mut checklist_done: Signal<i64> = use_signal(|| 0);
 
     // Fetch checklist + tags when selected task changes
     use_effect(move || {
@@ -71,10 +73,18 @@ pub fn TaskDetail() -> Element {
                         Ok(items) => checklist.set(items),
                         Err(_) => checklist.set(Vec::new()),
                     }
-                    // Get hydrated tags from individual task fetch
+                    // Get hydrated tags + checklist counts from individual task fetch
                     match task_result {
-                        Ok(task) => task_tags_draft.set(task.tags.unwrap_or_default()),
-                        Err(_) => task_tags_draft.set(Vec::new()),
+                        Ok(task) => {
+                            task_tags_draft.set(task.tags.unwrap_or_default());
+                            checklist_total.set(task.checklist_total);
+                            checklist_done.set(task.checklist_done);
+                        },
+                        Err(_) => {
+                            task_tags_draft.set(Vec::new());
+                            checklist_total.set(0);
+                            checklist_done.set(0);
+                        },
                     }
                 });
                 last_loaded_id.set(id);
@@ -84,6 +94,8 @@ pub fn TaskDetail() -> Element {
         } else {
             checklist.set(Vec::new());
             task_tags_draft.set(Vec::new());
+            checklist_total.set(0);
+            checklist_done.set(0);
             last_loaded_id.set(None);
         }
     });
@@ -391,7 +403,14 @@ pub fn TaskDetail() -> Element {
 
                                     // CHECKLIST
                                     div { class: "detail-section",
-                                        div { class: "detail-section-title", "CHECKLIST" }
+                                        div { class: "detail-section-title",
+                                            "CHECKLIST"
+                                            if *checklist_total.read() > 0 {
+                                                span { class: "checklist-count-badge",
+                                                    " {checklist_done.read()}/{checklist_total.read()}"
+                                                }
+                                            }
+                                        }
                                         for item in checklist.read().iter() {
                                             {
                                                 let item_id = item.id.clone();

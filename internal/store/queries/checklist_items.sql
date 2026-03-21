@@ -28,3 +28,10 @@ RETURNING *;
 -- name: SoftDeleteChecklistItem :exec
 UPDATE checklist_items SET deleted = 1, deleted_at = ?, updated_at = ?
 WHERE id = ?;
+
+-- name: CountChecklistByTask :one
+SELECT
+    COUNT(*) AS total,
+    COUNT(CASE WHEN status = 1 THEN 1 END) AS done
+FROM checklist_items
+WHERE task_id = ? AND deleted = 0;

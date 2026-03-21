@@ -1295,6 +1295,13 @@ html, body {
     color: var(--ink-tertiary);
 }
 
+.checklist-count-badge {
+    font-size: var(--text-xs);
+    color: var(--ink-tertiary);
+    font-weight: 400;
+    margin-left: var(--sp-1);
+}
+
 .checklist-add-input {
     width: 100%;
     padding: var(--sp-1) 0;

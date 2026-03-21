@@ -38,6 +38,10 @@ pub struct Task {
     pub recurrence_rule: Option<RecurrenceRule>,
     #[serde(rename = "Tags", default)]
     pub tags: Option<Vec<String>>,
+    #[serde(rename = "ChecklistTotal", default)]
+    pub checklist_total: i64,
+    #[serde(rename = "ChecklistDone", default)]
+    pub checklist_done: i64,
     #[serde(rename = "Deleted", default)]
     pub deleted: bool,
     #[serde(rename = "DeletedAt")]

@@ -207,6 +207,12 @@ func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) 
 	if err := s.hydrateTags(ctx, task); err != nil {
 		return nil, err
 	}
+	// Hydrate checklist counts
+	counts, err := s.queries.CountChecklistByTask(ctx, sql.NullString{String: id, Valid: true})
+	if err == nil {
+		task.ChecklistTotal = int(counts.Total)
+		task.ChecklistDone = int(counts.Done)
+	}
 	return task, nil
 }
 

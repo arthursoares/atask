@@ -11,6 +11,26 @@ import (
 	"time"
 )
 
+const countChecklistByTask = `-- name: CountChecklistByTask :one
+SELECT
+    COUNT(*) AS total,
+    COUNT(CASE WHEN status = 1 THEN 1 END) AS done
+FROM checklist_items
+WHERE task_id = ? AND deleted = 0
+`
+
+type CountChecklistByTaskRow struct {
+	Total int64 `json:"total"`
+	Done  int64 `json:"done"`
+}
+
+func (q *Queries) CountChecklistByTask(ctx context.Context, taskID sql.NullString) (CountChecklistByTaskRow, error) {
+	row := q.db.QueryRowContext(ctx, countChecklistByTask, taskID)
+	var i CountChecklistByTaskRow
+	err := row.Scan(&i.Total, &i.Done)
+	return i, err
+}
+
 const createChecklistItem = `-- name: CreateChecklistItem :one
 INSERT INTO checklist_items (
     id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
