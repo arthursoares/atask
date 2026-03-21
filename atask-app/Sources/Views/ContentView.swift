@@ -115,19 +115,26 @@ struct ContentView: View {
 
     @ViewBuilder
     private func taskListContent(_ tasks: [TaskModel], emptyMessage: String, emptyColor: Color = Theme.inkTertiary) -> some View {
-        if tasks.isEmpty {
-            VStack {
-                Spacer(minLength: 100)
-                Text(emptyMessage)
-                    .foregroundStyle(emptyColor)
-                    .font(.system(size: 15))
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            if tasks.isEmpty {
+                VStack {
+                    Spacer(minLength: 100)
+                    Text(emptyMessage)
+                        .foregroundStyle(emptyColor)
+                        .font(.system(size: 15))
+                    Spacer(minLength: 40)
+                }
+                .frame(maxWidth: .infinity)
+            } else {
                 ForEach(tasks) { task in
                     taskRow(task)
+                }
+            }
+
+            // New task row (not in logbook or upcoming)
+            if store.activeView != .logbook && store.activeView != .upcoming {
+                NewTaskRow { title in
+                    store.createTaskInView(title: title)
                 }
             }
         }

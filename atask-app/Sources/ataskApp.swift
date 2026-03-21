@@ -9,7 +9,30 @@ struct ataskApp: App {
             ContentView(store: store)
                 .frame(minWidth: 640, minHeight: 480)
         }
-        .windowStyle(.titleBar)
         .defaultSize(width: 1080, height: 720)
+        .commands {
+            // ⌘N — New Task
+            CommandGroup(after: .newItem) {
+                Button("New Task") {
+                    store.createTaskInView(title: "")
+                    // TODO: expand inline editor with focus
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+
+            // ⌘1-6 — View Navigation
+            CommandMenu("Navigate") {
+                Button("Inbox") { store.activeView = .inbox; store.sidebarSelection = .inbox }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Today") { store.activeView = .today; store.sidebarSelection = .today }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Upcoming") { store.activeView = .upcoming; store.sidebarSelection = .upcoming }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("Someday") { store.activeView = .someday; store.sidebarSelection = .someday }
+                    .keyboardShortcut("5", modifiers: .command)
+                Button("Logbook") { store.activeView = .logbook; store.sidebarSelection = .logbook }
+                    .keyboardShortcut("6", modifiers: .command)
+            }
+        }
     }
 }
