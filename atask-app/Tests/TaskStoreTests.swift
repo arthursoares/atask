@@ -18,7 +18,9 @@ import Testing
 
     let task = store.createTask(title: "Complete me")
     store.completeTask(task.id)
-    #expect(store.inbox.count == 0)
+    // Completed today: stays in inbox (strikethrough) AND appears in logbook
+    #expect(store.inbox.count == 1) // still visible with strikethrough
+    #expect(store.inbox.first?.isCompleted == true)
     #expect(store.logbook.count == 1)
     #expect(store.logbook.first?.isCompleted == true)
 }

@@ -45,6 +45,12 @@ struct ContentView: View {
                 ScrollView {
                     viewContent
                 }
+                .onTapGesture {
+                    // Click on empty area collapses inline editor
+                    if store.expandedTaskId != nil {
+                        store.expandedTaskId = nil
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.canvas)
@@ -153,7 +159,11 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 ForEach(tasks) { task in
-                    taskRow(task)
+                    if store.expandedTaskId == task.id {
+                        TaskInlineEditor(store: store, taskId: task.id)
+                    } else {
+                        taskRow(task)
+                    }
                 }
             }
 
@@ -253,6 +263,7 @@ struct ContentView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             store.selectedTaskId = task.id
+            store.expandedTaskId = task.id
         }
         .contextMenu {
             Button { store.completeTask(task.id) } label: { Label("Complete", systemImage: "checkmark") }
