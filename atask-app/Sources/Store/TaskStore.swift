@@ -40,7 +40,7 @@ class TaskStore {
     // MARK: - Computed Views
 
     var inbox: [TaskModel] {
-        tasks.filter { $0.isPending && $0.schedule == 0 && $0.startDate == nil }
+        tasks.filter { ($0.isPending || completedToday($0)) && $0.schedule == 0 && $0.startDate == nil }
             .sorted { $0.index < $1.index }
     }
 
@@ -68,7 +68,7 @@ class TaskStore {
     }
 
     var someday: [TaskModel] {
-        tasks.filter { $0.isPending && $0.schedule == 2 && $0.startDate == nil }
+        tasks.filter { ($0.isPending || completedToday($0)) && $0.schedule == 2 && $0.startDate == nil }
             .sorted { $0.index < $1.index }
     }
 
@@ -78,8 +78,14 @@ class TaskStore {
     }
 
     func tasksForProject(_ projectId: String) -> [TaskModel] {
-        tasks.filter { $0.projectId == projectId && $0.isPending }
+        tasks.filter { $0.projectId == projectId && ($0.isPending || completedToday($0)) }
             .sorted { $0.index < $1.index }
+    }
+
+    /// Returns true if the task was completed today (stays visible with strikethrough)
+    private func completedToday(_ task: TaskModel) -> Bool {
+        guard task.isCompleted, let completedAt = task.completedAt else { return false }
+        return completedAt.hasPrefix(DateFormatting.todayString())
     }
 
     // MARK: - Task Mutations (local-first)
