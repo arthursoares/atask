@@ -9,13 +9,14 @@ struct ataskApp: App {
             ContentView(store: store)
                 .frame(minWidth: 640, minHeight: 480)
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 720)
         .commands {
-            // ⌘N — New Task
-            CommandGroup(after: .newItem) {
+            // Replace the default ⌘N (New Window) with New Task
+            CommandGroup(replacing: .newItem) {
                 Button("New Task") {
-                    store.createTaskInView(title: "")
-                    // TODO: expand inline editor with focus
+                    let task = store.createTaskInView(title: "")
+                    store.expandedTaskId = task.id
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }

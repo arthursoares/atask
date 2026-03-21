@@ -8,22 +8,38 @@ struct ContentView: View {
             SidebarView(store: store)
                 .frame(minWidth: 200)
         } content: {
-            VStack(alignment: .leading, spacing: 0) {
-                // Toolbar
-                toolbarView
-                    .frame(height: 52)
-                    .padding(.horizontal)
-
-                Divider()
-
-                // Content
-                ScrollView {
-                    viewContent
-                        .padding()
-                }
+            ScrollView {
+                viewContent
+                    .padding()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.canvas)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    HStack(spacing: 8) {
+                        viewIcon
+                        Text(viewTitle)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(Theme.inkPrimary)
+                        if store.activeView == .today {
+                            Text(todayDateString)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.inkTertiary)
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button { /* TODO: search */ } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    Button {
+                        let task = store.createTaskInView(title: "")
+                        store.expandedTaskId = task.id
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
         } detail: {
             if store.selectedTaskId != nil {
                 Text("Detail panel — coming in Task 8")
