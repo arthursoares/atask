@@ -5,12 +5,10 @@ struct NewTaskRow: View {
 
     @State private var editing = false
     @State private var title = ""
-    @FocusState private var focused: Bool
 
     var body: some View {
         if editing {
             HStack(spacing: 12) {
-                // Dashed circle placeholder
                 Circle()
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                     .foregroundStyle(Theme.inkQuaternary)
@@ -19,13 +17,11 @@ struct NewTaskRow: View {
                 TextField("New Task", text: $title)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
-                    .focused($focused)
                     .onSubmit {
                         if !title.isEmpty {
                             onCreate(title)
                         }
                         title = ""
-                        // Stay in editing mode for rapid entry
                     }
                     .onExitCommand {
                         title = ""
@@ -35,7 +31,6 @@ struct NewTaskRow: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 16)
             .frame(height: 32)
-            .onAppear { focused = true }
         } else {
             Button {
                 editing = true
