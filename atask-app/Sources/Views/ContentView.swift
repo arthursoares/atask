@@ -33,8 +33,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                .padding(.leading, Spacing.sp4 + Spacing.sp1) // 20px = aligns with checkbox visual edge
-                .padding(.trailing, Spacing.sp6)
+                .padding(.horizontal, Spacing.sp4) // 16px — same as task row padding
                 .frame(height: Size.toolbarHeight)
 
                 // ── Separator ──
@@ -198,8 +197,7 @@ struct ContentView: View {
                                 .foregroundStyle(.white)
                         }
                     }
-                    .padding(Spacing.sp1) // 4px padding → 28x28 hit area
-                    .contentShape(Rectangle())
+                    .contentShape(Circle().inset(by: -6)) // expand hit area without affecting layout
             }
             .buttonStyle(.plain)
 
