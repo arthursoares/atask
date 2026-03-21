@@ -178,6 +178,7 @@ fn App() -> Element {
     // CRITICAL: token read INSIDE rsx!
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("/assets/theme.css") }
+        document::Title { "atask" }
         if token.0.read().is_none() {
             views::login::LoginView {}
         } else {
