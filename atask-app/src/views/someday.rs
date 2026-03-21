@@ -49,9 +49,6 @@ pub fn SomedayView() -> Element {
                                                     let tid = task_id.clone();
                                                     spawn(async move {
                                                         let _ = api_clone.complete_task(&tid).await;
-                                                        if let Ok(fresh) = api_clone.list_someday().await {
-                                                            someday.0.set(fresh);
-                                                        }
                                                     });
                                                 }
                                             },

@@ -256,6 +256,8 @@ fn handle_keydown(
         return;
     }
 
+    // ── Meta shortcuts (always active, even in inputs) ──
+
     // Cmd+K -- open palette
     if meta && key == Key::Character("k".into()) {
         evt.prevent_default();
@@ -281,7 +283,7 @@ fn handle_keydown(
         }
     }
 
-    // Cmd+N -- new task
+    // Cmd+N -- new task (TODO: should focus NewTaskInline instead of creating with default name)
     if meta && !shift && key == Key::Character("n".into()) {
         evt.prevent_default();
         let api_clone = api.0.read().clone();
@@ -291,7 +293,25 @@ fn handle_keydown(
         return;
     }
 
-    // Escape -- close detail panel
+    // ── Non-meta shortcuts (ONLY when not typing in an input) ──
+    // Check if the event is coming from an input element.
+    // In Dioxus WebView, we detect this by checking if the event was
+    // triggered while an input/textarea has focus. We use a simple heuristic:
+    // if no meta key is pressed and the key is a printable character or
+    // space/backspace, it's likely typing — skip shortcuts.
+    //
+    // The proper check: non-meta shortcuts only fire when the app-frame
+    // div itself has focus (tabindex=0), not when an input inside it does.
+    // Since we can't easily check the focus target in Dioxus, we gate
+    // non-meta shortcuts on having NO active text input focus.
+    //
+    // Pragmatic approach: Space, Backspace, and arrow keys as shortcuts
+    // ONLY work when meta is held OR when explicitly not in an input.
+    // Since we can't detect input focus in Dioxus easily, we REMOVE
+    // Space and Backspace as standalone shortcuts. They're too dangerous.
+    // Use Cmd+Shift+C to complete and Cmd+Backspace to delete instead.
+
+    // Escape -- close detail panel (safe — Escape doesn't type anything)
     if key == Key::Escape {
         evt.prevent_default();
         if selected_task.0.read().is_some() {
@@ -300,7 +320,7 @@ fn handle_keydown(
         return;
     }
 
-    // Task shortcuts (when task selected)
+    // Task shortcuts (when task selected, meta key REQUIRED for safety)
     let task_id = selected_task.0.read().clone();
     if let Some(tid) = task_id {
         // Cmd+Shift+C -- complete task
@@ -318,16 +338,8 @@ fn handle_keydown(
             spawn(async move { let _ = api_clone.update_task_schedule(&tid, "anytime").await; });
             return;
         }
-        // Space -- complete task
-        if key == Key::Character(" ".into()) {
-            evt.prevent_default();
-            let api_clone = api.0.read().clone();
-            let tid = tid.clone();
-            spawn(async move { let _ = api_clone.complete_task(&tid).await; });
-            return;
-        }
-        // Backspace/Delete -- delete task
-        if key == Key::Backspace || key == Key::Delete {
+        // Cmd+Backspace -- delete task (requires meta to avoid hijacking text editing)
+        if meta && (key == Key::Backspace || key == Key::Delete) {
             evt.prevent_default();
             let api_clone = api.0.read().clone();
             selected_task.0.set(None);

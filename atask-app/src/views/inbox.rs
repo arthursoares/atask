@@ -47,15 +47,11 @@ pub fn InboxView() -> Element {
                                                     }
                                                     inbox.0.set(tasks);
 
-                                                    // API call + refetch
+                                                    // Fire API — no refetch, task stays with strikethrough
                                                     let api_clone = api.0.read().clone();
                                                     let tid = task_id.clone();
                                                     spawn(async move {
                                                         let _ = api_clone.complete_task(&tid).await;
-                                                        // Refetch to get accurate state
-                                                        if let Ok(fresh) = api_clone.list_inbox().await {
-                                                            inbox.0.set(fresh);
-                                                        }
                                                     });
                                                 }
                                             },

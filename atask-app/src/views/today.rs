@@ -40,22 +40,19 @@ pub fn TodayView() -> Element {
                                             on_complete: {
                                                 let task_id = task_id.clone();
                                                 move |_id: String| {
-                                                    // Optimistic: mark as completed locally
+                                                    // Optimistic: mark as completed locally (shows strikethrough)
                                                     let mut tasks = today.0.read().clone();
                                                     if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id) {
-                                                        t.status = 1; // completed
+                                                        t.status = 1; // completed — stays visible with strikethrough
                                                     }
                                                     today.0.set(tasks);
 
-                                                    // API call + refetch
+                                                    // Fire API call — no refetch, task stays in view with strikethrough
+                                                    // SSE or next navigation will clean up
                                                     let api_clone = api.0.read().clone();
                                                     let tid = task_id.clone();
                                                     spawn(async move {
                                                         let _ = api_clone.complete_task(&tid).await;
-                                                        // Refetch to get accurate state
-                                                        if let Ok(fresh) = api_clone.list_today().await {
-                                                            today.0.set(fresh);
-                                                        }
                                                     });
                                                 }
                                             },
