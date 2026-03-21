@@ -34,6 +34,11 @@ struct TaskInlineEditor: View {
                         .focused($titleFocused)
                         .onSubmit {
                             if titleDraft != task.title { store.updateTitle(taskId, titleDraft) }
+                            // If title is empty, delete the task (abandoned creation)
+                            if titleDraft.isEmpty {
+                                store.deleteTask(taskId)
+                            }
+                            store.expandedTaskId = nil
                         }
                 }
                 .frame(height: Spacing.taskRowHeight)
