@@ -11,69 +11,61 @@ test.describe('Tag Flow', () => {
   });
 
   test('create tag', async ({ request }) => {
-    const resp = await request.post('/tags', { headers, data: { title: 'test-tag-unique' } });
+    const name = `tag-create-${Date.now()}`;
+    const resp = await request.post('/tags', { headers, data: { title: name } });
     expect(resp.ok()).toBeTruthy();
     const body = await resp.json();
-    expect(body.data.Title).toBe('test-tag-unique');
-    console.log('Tag ID:', body.data.ID);
+    expect(body.data.Title).toBe(name);
   });
 
   test('list tags returns created tag', async ({ request }) => {
-    await request.post('/tags', { headers, data: { title: 'playwright-tag' } });
+    const name = `tag-list-${Date.now()}`;
+    await request.post('/tags', { headers, data: { title: name } });
     const resp = await request.get('/tags', { headers });
     const tags = await resp.json();
-    expect(tags.some((t: any) => t.Title === 'playwright-tag')).toBeTruthy();
+    expect(tags.some((t: any) => t.Title === name)).toBeTruthy();
   });
 
   test('add tag to task', async ({ request }) => {
-    // Create tag
-    const tagResp = await request.post('/tags', { headers, data: { title: 'assign-me' } });
+    const name = `tag-add-${Date.now()}`;
+    const tagResp = await request.post('/tags', { headers, data: { title: name } });
     const { data: tag } = await tagResp.json();
 
-    // Create task
     const taskResp = await request.post('/tasks', { headers, data: { title: 'Tag test task' } });
     const { data: task } = await taskResp.json();
 
-    // Add tag to task
     const addResp = await request.post(`/tasks/${task.ID}/tags/${tag.ID}`, { headers });
-    console.log('Add tag status:', addResp.status());
-    console.log('Add tag body:', await addResp.text());
     expect(addResp.ok()).toBeTruthy();
 
-    // Verify: GET task should have tag in Tags field
     const getResp = await request.get(`/tasks/${task.ID}`, { headers });
     const fetchedTask = await getResp.json();
-    console.log('Task Tags:', fetchedTask.Tags);
     expect(fetchedTask.Tags).toContain(tag.ID);
 
-    // Cleanup
     await request.delete(`/tasks/${task.ID}`, { headers });
   });
 
   test('remove tag from task', async ({ request }) => {
-    const tagResp = await request.post('/tags', { headers, data: { title: 'remove-me' } });
+    const name = `tag-remove-${Date.now()}`;
+    const tagResp = await request.post('/tags', { headers, data: { title: name } });
     const { data: tag } = await tagResp.json();
 
     const taskResp = await request.post('/tasks', { headers, data: { title: 'Remove tag task' } });
     const { data: task } = await taskResp.json();
 
-    // Add then remove
     await request.post(`/tasks/${task.ID}/tags/${tag.ID}`, { headers });
     const removeResp = await request.delete(`/tasks/${task.ID}/tags/${tag.ID}`, { headers });
     expect(removeResp.ok()).toBeTruthy();
 
-    // Verify tag is gone
     const getResp = await request.get(`/tasks/${task.ID}`, { headers });
     const fetchedTask = await getResp.json();
-    console.log('Tags after remove:', fetchedTask.Tags);
     expect(fetchedTask.Tags || []).not.toContain(tag.ID);
 
     await request.delete(`/tasks/${task.ID}`, { headers });
   });
 
   test('tags list endpoint returns tags for task', async ({ request }) => {
-    // Also test via the list endpoint that views use
-    const tagResp = await request.post('/tags', { headers, data: { title: 'list-check' } });
+    const name = `tag-listcheck-${Date.now()}`;
+    const tagResp = await request.post('/tags', { headers, data: { title: name } });
     const { data: tag } = await tagResp.json();
 
     const taskResp = await request.post('/tasks', { headers, data: { title: 'List tag task' } });
@@ -81,13 +73,21 @@ test.describe('Tag Flow', () => {
 
     await request.post(`/tasks/${task.ID}/tags/${tag.ID}`, { headers });
 
-    // Check: does the inbox view include the tag?
+    // List endpoints don't hydrate tags
     const inboxResp = await request.get('/views/inbox', { headers });
     const inbox = await inboxResp.json();
     const found = inbox.find((t: any) => t.ID === task.ID);
-    console.log('Task in inbox Tags field:', found?.Tags);
-    // Note: list endpoints may NOT hydrate tags (only GET /tasks/{id} does)
-    
+    expect(found).toBeTruthy();
+
     await request.delete(`/tasks/${task.ID}`, { headers });
+  });
+
+  test('duplicate tag name is rejected', async ({ request }) => {
+    const name = `tag-dup-${Date.now()}`;
+    const resp1 = await request.post('/tags', { headers, data: { title: name } });
+    expect(resp1.ok()).toBeTruthy();
+
+    const resp2 = await request.post('/tags', { headers, data: { title: name } });
+    expect(resp2.ok()).toBeFalsy(); // Should fail with unique constraint
   });
 });
