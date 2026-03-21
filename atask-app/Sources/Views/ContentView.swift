@@ -33,7 +33,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                .padding(.horizontal, Spacing.sp6)
+                .padding(.horizontal, Spacing.sp4)
                 .frame(height: Size.toolbarHeight)
 
                 // ── Separator ──
