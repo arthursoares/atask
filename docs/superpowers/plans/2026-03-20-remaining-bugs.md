@@ -29,7 +29,9 @@
 ## Not Yet Built (Plan 3/4)
 - [ ] Command palette (⌘K)
 - [ ] Global keyboard shortcuts
-- [ ] Drag-and-drop with gap indicator
-- [ ] Right-click context menus
+- [ ] Drag-and-drop with gap indicator (tasks + projects between areas)
+- [ ] Right-click context menus (tasks, projects, sections, areas)
+- [ ] Assign project to area (via context menu or drag onto area in sidebar)
+- [ ] Move project to area API: `PUT /projects/{id}/area` body `{"id":"area-uuid"}`
 - [ ] Settings page (server URL, auto-archive)
 - [ ] Inline task editing (Things-style expanded card)
