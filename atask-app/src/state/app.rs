@@ -69,3 +69,14 @@ pub struct ProjectTasks(pub Signal<HashMap<String, Vec<Task>>>);
 
 #[derive(Clone, Copy)]
 pub struct ProjectSections(pub Signal<HashMap<String, Vec<Section>>>);
+
+// ── Command Palette ──
+
+#[derive(Clone, Copy)]
+pub struct CommandOpen(pub Signal<bool>);
+
+#[derive(Clone, Copy)]
+pub struct CommandQuery(pub Signal<String>);
+
+#[derive(Clone, Copy)]
+pub struct CommandIndex(pub Signal<usize>);

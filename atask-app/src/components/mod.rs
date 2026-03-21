@@ -12,3 +12,4 @@ pub mod task_detail;
 pub mod project_picker;
 pub mod date_picker;
 pub mod tag_picker;
+pub mod command_palette;

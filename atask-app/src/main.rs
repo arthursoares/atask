@@ -43,6 +43,9 @@ fn App() -> Element {
     let mut loading = LoadingSignal(use_signal(|| false));
     let mut project_tasks = ProjectTasks(use_signal(|| HashMap::new()));
     let mut project_sections = ProjectSections(use_signal(|| HashMap::new()));
+    let command_open = CommandOpen(use_signal(|| false));
+    let command_query = CommandQuery(use_signal(|| String::new()));
+    let command_index = CommandIndex(use_signal(|| 0usize));
 
     // Provide ALL via context
     use_context_provider(|| api);
@@ -60,6 +63,9 @@ fn App() -> Element {
     use_context_provider(|| loading);
     use_context_provider(|| project_tasks);
     use_context_provider(|| project_sections);
+    use_context_provider(|| command_open);
+    use_context_provider(|| command_query);
+    use_context_provider(|| command_index);
 
     // Load data when token becomes available
     use_effect(move || {
@@ -182,7 +188,12 @@ fn App() -> Element {
         if token.0.read().is_none() {
             views::login::LoginView {}
         } else {
-            div { class: "app-frame",
+            div {
+                class: "app-frame",
+                tabindex: 0,
+                onkeydown: move |evt: Event<KeyboardData>| {
+                    handle_keydown(evt, command_open, command_query, command_index, active_view, selected_task, api);
+                },
                 components::sidebar::Sidebar {}
                 div { class: "app-main",
                     components::toolbar::Toolbar {}
@@ -200,7 +211,115 @@ fn App() -> Element {
                 if selected_task.0.read().is_some() {
                     components::task_detail::TaskDetail {}
                 }
+                if *command_open.0.read() {
+                    components::command_palette::CommandPalette {}
+                }
             }
+        }
+    }
+}
+
+fn handle_keydown(
+    evt: Event<KeyboardData>,
+    mut command_open: CommandOpen,
+    mut command_query: CommandQuery,
+    mut command_index: CommandIndex,
+    mut active_view: ViewSignal,
+    mut selected_task: SelectedTaskSignal,
+    api: ApiSignal,
+) {
+    let key = evt.key();
+    let meta = evt.modifiers().meta();
+    let shift = evt.modifiers().shift();
+
+    // If palette is open, only intercept Escape (palette handles its own keys)
+    if *command_open.0.read() {
+        if key == Key::Escape {
+            evt.prevent_default();
+            command_open.0.set(false);
+            command_query.0.set(String::new());
+            command_index.0.set(0);
+        }
+        return;
+    }
+
+    // Cmd+K -- open palette
+    if meta && key == Key::Character("k".into()) {
+        evt.prevent_default();
+        command_open.0.set(true);
+        return;
+    }
+
+    // Cmd+1-5 -- navigation
+    if meta && !shift {
+        let nav = match &key {
+            Key::Character(c) if c == "1" => Some(ActiveView::Inbox),
+            Key::Character(c) if c == "2" => Some(ActiveView::Today),
+            Key::Character(c) if c == "3" => Some(ActiveView::Upcoming),
+            Key::Character(c) if c == "4" => Some(ActiveView::Someday),
+            Key::Character(c) if c == "5" => Some(ActiveView::Logbook),
+            _ => None,
+        };
+        if let Some(view) = nav {
+            evt.prevent_default();
+            active_view.0.set(view);
+            selected_task.0.set(None);
+            return;
+        }
+    }
+
+    // Cmd+N -- new task
+    if meta && !shift && key == Key::Character("n".into()) {
+        evt.prevent_default();
+        let api_clone = api.0.read().clone();
+        spawn(async move {
+            let _ = api_clone.create_task("New task").await;
+        });
+        return;
+    }
+
+    // Escape -- close detail panel
+    if key == Key::Escape {
+        evt.prevent_default();
+        if selected_task.0.read().is_some() {
+            selected_task.0.set(None);
+        }
+        return;
+    }
+
+    // Task shortcuts (when task selected)
+    let task_id = selected_task.0.read().clone();
+    if let Some(tid) = task_id {
+        // Cmd+Shift+C -- complete task
+        if meta && shift && key == Key::Character("c".into()) {
+            evt.prevent_default();
+            let api_clone = api.0.read().clone();
+            spawn(async move { let _ = api_clone.complete_task(&tid).await; });
+            return;
+        }
+        // Cmd+T -- schedule for today
+        if meta && !shift && key == Key::Character("t".into()) {
+            evt.prevent_default();
+            let api_clone = api.0.read().clone();
+            let tid = tid.clone();
+            spawn(async move { let _ = api_clone.update_task_schedule(&tid, "anytime").await; });
+            return;
+        }
+        // Space -- complete task
+        if key == Key::Character(" ".into()) {
+            evt.prevent_default();
+            let api_clone = api.0.read().clone();
+            let tid = tid.clone();
+            spawn(async move { let _ = api_clone.complete_task(&tid).await; });
+            return;
+        }
+        // Backspace/Delete -- delete task
+        if key == Key::Backspace || key == Key::Delete {
+            evt.prevent_default();
+            let api_clone = api.0.read().clone();
+            selected_task.0.set(None);
+            spawn(async move { let _ = api_clone.delete_task(&tid).await; });
+            return;
         }
     }
 }
