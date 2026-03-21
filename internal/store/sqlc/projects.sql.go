@@ -30,12 +30,12 @@ func (q *Queries) CascadeDeleteProjectsByArea(ctx context.Context, arg CascadeDe
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     id, title, notes, status, schedule, start_date, deadline, completed_at,
-    "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+    "index", area_id, auto_complete, color, deleted, deleted_at, created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type CreateProjectParams struct {
@@ -50,6 +50,7 @@ type CreateProjectParams struct {
 	Index        int64          `json:"index"`
 	AreaID       sql.NullString `json:"area_id"`
 	AutoComplete int64          `json:"auto_complete"`
+	Color        string         `json:"color"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
@@ -67,6 +68,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Index,
 		arg.AreaID,
 		arg.AutoComplete,
+		arg.Color,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -87,12 +89,13 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
 WHERE id = ? AND deleted = 0
 `
 
@@ -115,12 +118,13 @@ func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
 WHERE deleted = 0
 ORDER BY "index"
 `
@@ -150,6 +154,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Color,
 		); err != nil {
 			return nil, err
 		}
@@ -165,7 +170,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 }
 
 const listProjectsByArea = `-- name: ListProjectsByArea :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
 WHERE area_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -195,6 +200,7 @@ func (q *Queries) ListProjectsByArea(ctx context.Context, areaID sql.NullString)
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Color,
 		); err != nil {
 			return nil, err
 		}
@@ -243,7 +249,7 @@ func (q *Queries) SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectPa
 const updateProjectArea = `-- name: UpdateProjectArea :one
 UPDATE projects SET area_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type UpdateProjectAreaParams struct {
@@ -271,6 +277,43 @@ func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaPa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
+	)
+	return i, err
+}
+
+const updateProjectColor = `-- name: UpdateProjectColor :one
+UPDATE projects SET color = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+`
+
+type UpdateProjectColorParams struct {
+	Color     string    `json:"color"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+}
+
+func (q *Queries) UpdateProjectColor(ctx context.Context, arg UpdateProjectColorParams) (Project, error) {
+	row := q.db.QueryRowContext(ctx, updateProjectColor, arg.Color, arg.UpdatedAt, arg.ID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Notes,
+		&i.Status,
+		&i.Schedule,
+		&i.StartDate,
+		&i.Deadline,
+		&i.CompletedAt,
+		&i.Index,
+		&i.AreaID,
+		&i.AutoComplete,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -278,7 +321,7 @@ func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaPa
 const updateProjectDeadline = `-- name: UpdateProjectDeadline :one
 UPDATE projects SET deadline = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type UpdateProjectDeadlineParams struct {
@@ -306,6 +349,7 @@ func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDe
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -313,7 +357,7 @@ func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDe
 const updateProjectNotes = `-- name: UpdateProjectNotes :one
 UPDATE projects SET notes = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type UpdateProjectNotesParams struct {
@@ -341,6 +385,7 @@ func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotes
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -348,7 +393,7 @@ func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotes
 const updateProjectStatus = `-- name: UpdateProjectStatus :one
 UPDATE projects SET status = ?, completed_at = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type UpdateProjectStatusParams struct {
@@ -382,6 +427,7 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -389,7 +435,7 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 const updateProjectTitle = `-- name: UpdateProjectTitle :one
 UPDATE projects SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
 `
 
 type UpdateProjectTitleParams struct {
@@ -417,6 +463,7 @@ func (q *Queries) UpdateProjectTitle(ctx context.Context, arg UpdateProjectTitle
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }

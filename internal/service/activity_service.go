@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // ActivityService implements business logic for Activities.

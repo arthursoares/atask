@@ -32,6 +32,7 @@ func (h *ProjectHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /projects/{id}/notes", h.UpdateNotes)
 	mux.HandleFunc("PUT /projects/{id}/deadline", h.SetDeadline)
 	mux.HandleFunc("PUT /projects/{id}/area", h.MoveToArea)
+	mux.HandleFunc("PUT /projects/{id}/color", h.UpdateColor)
 	mux.HandleFunc("POST /projects/{id}/tags/{tagId}", h.AddTag)
 	mux.HandleFunc("DELETE /projects/{id}/tags/{tagId}", h.RemoveTag)
 }
@@ -223,6 +224,28 @@ func (h *ProjectHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.ProjectDeadlineSet), map[string]string{"id": id})
+}
+
+func (h *ProjectHandler) UpdateColor(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Color string `json:"color"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.projects.UpdateColor(r.Context(), id, body.Color, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.ProjectColorChanged), map[string]string{"id": id})
 }
 
 func (h *ProjectHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {

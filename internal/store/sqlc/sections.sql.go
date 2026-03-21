@@ -143,6 +143,34 @@ func (q *Queries) SoftDeleteSectionsByProject(ctx context.Context, arg SoftDelet
 	return err
 }
 
+const updateSectionIndex = `-- name: UpdateSectionIndex :one
+UPDATE sections SET "index" = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at
+`
+
+type UpdateSectionIndexParams struct {
+	Index     int64     `json:"index"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+}
+
+func (q *Queries) UpdateSectionIndex(ctx context.Context, arg UpdateSectionIndexParams) (Section, error) {
+	row := q.db.QueryRowContext(ctx, updateSectionIndex, arg.Index, arg.UpdatedAt, arg.ID)
+	var i Section
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.ProjectID,
+		&i.Index,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSectionTitle = `-- name: UpdateSectionTitle :one
 UPDATE sections SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0

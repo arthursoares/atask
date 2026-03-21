@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/service"
+	"github.com/google/uuid"
 )
 
 // responseWriter wraps http.ResponseWriter to capture the written status code.

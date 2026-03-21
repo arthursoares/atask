@@ -103,6 +103,7 @@ type Project struct {
 	DeletedAt    sql.NullTime   `json:"deleted_at"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
+	Color        string         `json:"color"`
 }
 
 type ProjectTag struct {

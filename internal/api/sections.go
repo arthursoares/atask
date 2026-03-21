@@ -24,6 +24,7 @@ func (h *SectionHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects/{id}/sections", h.Create)
 	mux.HandleFunc("GET /projects/{id}/sections", h.ListByProject)
 	mux.HandleFunc("PUT /projects/{id}/sections/{sid}", h.Rename)
+	mux.HandleFunc("PUT /projects/{id}/sections/{sid}/reorder", h.Reorder)
 	mux.HandleFunc("DELETE /projects/{id}/sections/{sid}", h.Delete)
 }
 
@@ -77,6 +78,28 @@ func (h *SectionHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.SectionRenamed), map[string]string{"id": sid})
+}
+
+func (h *SectionHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	sid := r.PathValue("sid")
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.sections.Reorder(r.Context(), sid, body.Index, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "section not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.SectionReordered), map[string]string{"id": sid})
 }
 
 func (h *SectionHandler) Delete(w http.ResponseWriter, r *http.Request) {

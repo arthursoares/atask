@@ -21,6 +21,7 @@ type Project struct {
 	AreaID       *string
 	Tags         []string
 	AutoComplete bool
+	Color        string
 	Timestamps
 	SoftDelete
 }

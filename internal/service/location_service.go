@@ -7,11 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // LocationService implements business logic for Locations.

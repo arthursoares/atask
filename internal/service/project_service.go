@@ -7,11 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atask/atask/internal/domain"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/store"
 	sqlc "github.com/atask/atask/internal/store/sqlc"
+	"github.com/google/uuid"
 )
 
 // ProjectService implements business logic for Projects.
@@ -72,6 +72,8 @@ func projectFromRow(row sqlc.Project) *domain.Project {
 		aid := row.AreaID.String
 		p.AreaID = &aid
 	}
+
+	p.Color = row.Color
 
 	if row.Deleted != 0 && row.DeletedAt.Valid {
 		da := row.DeletedAt.Time
@@ -141,6 +143,7 @@ func (s *ProjectService) Create(ctx context.Context, title, actorID string) (*do
 		Notes:     "",
 		Status:    int64(domain.StatusPending),
 		Schedule:  int64(domain.ScheduleInbox),
+		Color:     "",
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
@@ -359,6 +362,23 @@ func (s *ProjectService) RemoveTag(ctx context.Context, id, tagID, actorID strin
 
 	payload := map[string]any{"tag_id": tagID}
 	return s.publishProjectEvent(ctx, domain.ProjectTagRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
+}
+
+// UpdateColor updates the project color and emits project.color_changed.
+func (s *ProjectService) UpdateColor(ctx context.Context, id, color, actorID string) error {
+	now := timeNow()
+	_, err := s.queries.UpdateProjectColor(ctx, sqlc.UpdateProjectColorParams{
+		Color:     color,
+		UpdatedAt: now,
+		ID:        id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{"color": color}
+	colorJSON, _ := json.Marshal(color)
+	return s.publishProjectEvent(ctx, domain.ProjectColorChanged, id, actorID, now, payload, domain.DeltaModified, strPtr("color"), colorJSON)
 }
 
 // Delete soft-deletes the project and cascades to tombstone all tasks and sections

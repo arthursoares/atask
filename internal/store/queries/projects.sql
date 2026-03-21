@@ -1,10 +1,10 @@
 -- name: CreateProject :one
 INSERT INTO projects (
     id, title, notes, status, schedule, start_date, deadline, completed_at,
-    "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at
+    "index", area_id, auto_complete, color, deleted, deleted_at, created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, 0, NULL, ?, ?
 )
 RETURNING *;
 
@@ -44,6 +44,11 @@ RETURNING *;
 
 -- name: UpdateProjectArea :one
 UPDATE projects SET area_id = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING *;
+
+-- name: UpdateProjectColor :one
+UPDATE projects SET color = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
 RETURNING *;
 

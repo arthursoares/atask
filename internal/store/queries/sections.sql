@@ -20,6 +20,11 @@ UPDATE sections SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
 RETURNING *;
 
+-- name: UpdateSectionIndex :one
+UPDATE sections SET "index" = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING *;
+
 -- name: SoftDeleteSection :exec
 UPDATE sections SET deleted = 1, deleted_at = ?, updated_at = ?
 WHERE id = ?;
