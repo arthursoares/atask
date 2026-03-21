@@ -46,6 +46,23 @@ struct ContentView: View {
                     viewContent
                         .padding(Spacing.sp6)
                 }
+                .focusable()
+                .onKeyPress(.upArrow) { navigateTask(direction: -1); return .handled }
+                .onKeyPress(.downArrow) { navigateTask(direction: 1); return .handled }
+                .onKeyPress(.return) {
+                    if let id = store.selectedTaskId, store.expandedTaskId == nil {
+                        store.expandedTaskId = id
+                    }
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    if store.expandedTaskId != nil {
+                        store.expandedTaskId = nil
+                    } else if store.selectedTaskId != nil {
+                        store.selectedTaskId = nil
+                    }
+                    return .handled
+                }
                 .onTapGesture {
                     if store.expandedTaskId != nil {
                         store.expandedTaskId = nil
@@ -62,6 +79,33 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+    }
+
+    // ── Arrow key navigation ──
+    private func navigateTask(direction: Int) {
+        guard store.expandedTaskId == nil else { return } // don't navigate while editing
+        let tasks = currentViewTasks()
+        guard !tasks.isEmpty else { return }
+
+        if let currentId = store.selectedTaskId,
+           let currentIdx = tasks.firstIndex(where: { $0.id == currentId }) {
+            let newIdx = max(0, min(tasks.count - 1, currentIdx + direction))
+            store.selectedTaskId = tasks[newIdx].id
+        } else {
+            // Nothing selected — select first or last
+            store.selectedTaskId = direction > 0 ? tasks.first?.id : tasks.last?.id
+        }
+    }
+
+    private func currentViewTasks() -> [TaskModel] {
+        switch store.activeView {
+        case .inbox: store.inbox
+        case .today: store.today
+        case .upcoming: store.upcoming
+        case .someday: store.someday
+        case .logbook: store.logbook
+        case .project(let id): store.tasksForProject(id)
+        }
     }
 
     // ── Toolbar button: 30×30, radius-sm ──
