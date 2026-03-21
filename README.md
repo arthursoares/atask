@@ -83,12 +83,17 @@ internal/
 
 **Semantic API.** Operations have meaning: `POST /tasks/{id}/complete`, not `PATCH /tasks/{id} {status: "completed"}`. Every mutation response includes the event type: `{"event": "task.completed", "data": {...}}`.
 
-**The "When" model.** Three layers control task visibility:
-- **Schedule** (inbox / anytime / someday) — where it lives in your attention
-- **Start date** — when you want to start seeing it
-- **Deadline** — when it must be done
+**The "When" model.** Three orthogonal layers control task visibility:
+- **Schedule** (inbox / anytime / someday) — attention bucket. Inbox = unsorted, anytime = today's focus, someday = deferred.
+- **Start date** — when the task should surface. NULL = immediate, future = hidden in Upcoming until the date arrives.
+- **Deadline** — when it's due. Shown as relative date in UI (Due Tomorrow, Overdue).
 
-These produce computed views: inbox, today, upcoming, someday, logbook.
+These produce computed views:
+- **Inbox** — `schedule=inbox AND no start_date` (setting a date removes from inbox)
+- **Today** — `schedule=anytime AND (no date OR start_date ≤ today)`
+- **Upcoming** — `start_date > today AND not someday`
+- **Someday** — `schedule=someday AND no start_date` (setting a date removes from someday)
+- **Logbook** — all completed/cancelled tasks
 
 **Activity stream.** Tasks are collaboration surfaces. Humans and agents post comments, drafts, context requests, and artifacts directly on tasks — creating an auditable proof-of-work trail.
 

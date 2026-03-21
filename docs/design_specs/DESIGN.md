@@ -1209,10 +1209,10 @@ pub struct RecurrenceEnd {
 
 | View | Primary Endpoint | Sort Key | Filter |
 |------|-----------------|----------|--------|
-| Inbox | `GET /views/inbox` | `index ASC` | `schedule = inbox` |
-| Today | `GET /views/today` | `today_index ASC` | `schedule = anytime, start_date <= today` |
-| Upcoming | `GET /views/upcoming` | `start_date ASC` | `start_date > today` |
-| Someday | `GET /views/someday` | `index ASC` | `schedule = someday` |
+| Inbox | `GET /views/inbox` | `index ASC` | `schedule = inbox AND start_date IS NULL` |
+| Today | `GET /views/today` | `today_index ASC` | `schedule = anytime AND (start_date IS NULL OR start_date <= today)` |
+| Upcoming | `GET /views/upcoming` | `start_date ASC` | `start_date > today AND schedule != someday` |
+| Someday | `GET /views/someday` | `index ASC` | `schedule = someday AND start_date IS NULL` |
 | Logbook | `GET /views/logbook` | `completed_at DESC` | `status = completed \| cancelled` |
 | Project | `GET /tasks?project_id={id}` | `index ASC` | `project_id = {id}` |
 

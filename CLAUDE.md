@@ -89,9 +89,169 @@ Two streams:
 ## Domain Model Constraints
 
 - Projects don't nest (no sub-projects)
+- Projects belong to areas (optional — a project can exist without an area)
 - Sections only exist inside projects
 - Checklist items are not tasks (no dates, tags, or nesting)
 - Areas don't complete (permanent life categories, can be archived)
 - No explicit priorities (ordering within lists is the priority)
 - No hard dependencies (soft links only, advisory)
 - Tasks always know their project_id even when in a section
+- Tag names are unique (enforced by unique index, migration 003)
+
+## The "When" Model — Schedule + Start Date + Deadline
+
+Tasks have three orthogonal time dimensions:
+
+### Schedule (attention bucket)
+| Value | Meaning |
+|-------|---------|
+| `inbox` (0) | Unsorted — needs triage |
+| `anytime` (1) | Active — shows in Today view |
+| `someday` (2) | Deferred — long-term, no urgency |
+
+### Start Date (when to surface)
+- `NULL` — no scheduled start, visible immediately per schedule
+- Future date — hidden until that date arrives, shows in Upcoming
+- Past/today date — task is active
+
+### Deadline (when it's due)
+- `NULL` — no deadline
+- Future — shows "Due {date}" in metadata
+- Today — shows "Due Today" in amber
+- Past — shows "Overdue · {date}" in red
+
+### View Rules
+
+| View | Query Logic | What Appears |
+|------|------------|--------------|
+| **Inbox** | `schedule=0 AND start_date IS NULL` | Unsorted tasks with no date. Setting a start_date removes from inbox. |
+| **Today** | `schedule=1 AND (start_date IS NULL OR start_date <= today)` | Active tasks. Can have no date (manually scheduled) or date that has arrived. |
+| **Upcoming** | `start_date > today AND schedule != 2` | Tasks with future start dates. Someday tasks excluded even if dated. |
+| **Someday** | `schedule=2 AND start_date IS NULL` | Long-term deferred tasks. Setting a date removes from someday. |
+| **Logbook** | `status IN (1, 2)` | Completed and cancelled tasks, regardless of schedule/dates. |
+| **Project** | `project_id = ? AND status = 0` | All pending tasks in a project (default status filter). |
+
+### Key Interactions
+
+- Setting a **start_date** on an inbox task removes it from inbox (it moves to Upcoming)
+- Setting a **start_date** on a someday task removes it from someday (it moves to Upcoming)
+- When a task's **start_date arrives** (becomes <= today), it surfaces in Today (if schedule=anytime)
+- **Completing** a task moves it to Logbook regardless of schedule/dates
+- **Reopening** a completed task returns it to its original schedule (status → pending)
+
+## API Endpoints
+
+### Views (bare JSON arrays)
+```
+GET /views/inbox      → pending tasks, schedule=inbox, no start_date
+GET /views/today      → pending tasks, schedule=anytime, start_date <= today or NULL
+GET /views/upcoming   → pending tasks, future start_date, not someday
+GET /views/someday    → pending tasks, schedule=someday, no start_date
+GET /views/logbook    → completed/cancelled tasks
+```
+
+### Tasks (filterable, bare arrays for GET, event envelope for mutations)
+```
+GET    /tasks                          List (filterable: project_id, area_id, section_id, schedule, location_id; default status=pending)
+GET    /tasks/{id}                     Get (includes hydrated Tags field)
+POST   /tasks                          Create (lands in inbox by default)
+DELETE /tasks/{id}                     Soft delete
+
+POST   /tasks/{id}/complete            Complete → moves to logbook
+POST   /tasks/{id}/cancel              Cancel → moves to logbook
+POST   /tasks/{id}/reopen             Reopen → returns to original schedule
+
+PUT    /tasks/{id}/title               Update title
+PUT    /tasks/{id}/notes               Update notes
+PUT    /tasks/{id}/schedule            Set schedule: "inbox" | "anytime" | "someday"
+PUT    /tasks/{id}/start-date          Set start date: {"date":"YYYY-MM-DD"} or {"date":null}
+PUT    /tasks/{id}/deadline            Set deadline: same format
+PUT    /tasks/{id}/project             Move to project: {"id":"uuid"} or {"id":null}
+PUT    /tasks/{id}/section             Move to section: {"id":"uuid"} or {"id":null}
+PUT    /tasks/{id}/area                Move to area: {"id":"uuid"} or {"id":null}
+PUT    /tasks/{id}/location            Set location
+PUT    /tasks/{id}/recurrence          Set recurrence rule
+PUT    /tasks/{id}/reorder             Reorder: {"index": N}
+PUT    /tasks/{id}/today-index         Set today ordering: {"index": N} or {"index":null}
+
+POST   /tasks/{id}/tags/{tagId}        Add tag
+DELETE /tasks/{id}/tags/{tagId}        Remove tag
+POST   /tasks/{id}/links/{taskId}      Link tasks
+DELETE /tasks/{id}/links/{taskId}      Unlink tasks
+```
+
+### Projects
+```
+POST   /projects                       Create
+GET    /projects                       List (default: non-archived)
+GET    /projects/{id}                  Get (includes Color field)
+DELETE /projects/{id}                  Soft delete (cascades to tasks + sections)
+
+POST   /projects/{id}/complete         Complete (cascades: all tasks completed)
+POST   /projects/{id}/cancel           Cancel (cascades: all tasks cancelled)
+PUT    /projects/{id}/title            Update title
+PUT    /projects/{id}/notes            Update notes
+PUT    /projects/{id}/deadline         Set deadline
+PUT    /projects/{id}/area             Move to area: {"id":"uuid"} or {"id":null}
+PUT    /projects/{id}/color            Set color: {"color":"#hex"}
+POST   /projects/{id}/tags/{tagId}     Add tag
+DELETE /projects/{id}/tags/{tagId}     Remove tag
+```
+
+### Sections
+```
+POST   /projects/{id}/sections              Create
+GET    /projects/{id}/sections              List
+PUT    /projects/{id}/sections/{sid}        Rename
+DELETE /projects/{id}/sections/{sid}        Delete (?cascade=true for tasks)
+PUT    /projects/{id}/sections/{sid}/reorder Reorder: {"index": N}
+```
+
+### Areas, Tags, Locations
+```
+POST   /areas                          Create
+GET    /areas                          List (non-archived)
+PUT    /areas/{id}                     Rename
+DELETE /areas/{id}                     Delete (?cascade=true)
+POST   /areas/{id}/archive             Archive
+POST   /areas/{id}/unarchive           Unarchive
+
+POST   /tags                           Create (unique title enforced)
+GET    /tags                           List
+PUT    /tags/{id}                      Rename
+DELETE /tags/{id}                      Delete
+
+POST   /locations                      Create
+GET    /locations                      List
+PUT    /locations/{id}                 Rename
+DELETE /locations/{id}                 Delete
+```
+
+### Checklist Items
+```
+POST   /tasks/{id}/checklist                     Add item
+GET    /tasks/{id}/checklist                      List items
+PUT    /tasks/{id}/checklist/{itemId}             Update title
+POST   /tasks/{id}/checklist/{itemId}/complete    Complete
+POST   /tasks/{id}/checklist/{itemId}/uncomplete  Uncomplete
+DELETE /tasks/{id}/checklist/{itemId}             Remove
+```
+
+### Activity
+```
+POST   /tasks/{id}/activity            Add entry
+GET    /tasks/{id}/activity            List entries
+```
+
+### SSE Events
+```
+GET /events/stream?topics=task.*,project.*    Server-Sent Events
+
+Every event includes: entity_type, entity_id, actor_id in the data payload.
+Reconnect with Last-Event-ID header to resume.
+```
+
+### Sync
+```
+GET /sync/deltas?since=N              Delta events since cursor (for state reconstruction)
+```
