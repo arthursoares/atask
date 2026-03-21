@@ -14,6 +14,7 @@ class TaskStore {
     var selectedTaskId: String?
     var expandedTaskId: String?
     var activeView: ActiveView = .today
+    var sidebarSelection: SidebarItem? = .today
 
     init(db: LocalDatabase) {
         self.db = db
