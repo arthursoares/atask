@@ -29,7 +29,7 @@ fn App() -> Element {
 
     // Create ALL signals with newtypes
     let api = ApiSignal(use_signal(|| initial_api));
-    let token = TokenSignal(use_signal(|| saved.token));
+    let mut token = TokenSignal(use_signal(|| saved.token));
     let active_view = ViewSignal(use_signal(|| ActiveView::Today));
     let selected_task = SelectedTaskSignal(use_signal(|| None));
     let mut inbox = InboxTasks(use_signal(|| Vec::new()));
@@ -84,6 +84,19 @@ fn App() -> Element {
                     api_clone.list_areas(),
                     api_clone.list_tags(),
                 );
+                // Check for auth failures — if any request returns 401, clear session
+                let is_unauthorized = inbox_r.as_ref().is_err_and(|e| e.is_unauthorized())
+                    || today_r.as_ref().is_err_and(|e| e.is_unauthorized())
+                    || projects_r.as_ref().is_err_and(|e| e.is_unauthorized());
+
+                if is_unauthorized {
+                    println!("[AUTH] Token expired or invalid — clearing session");
+                    token.0.set(None);
+                    state::credentials::clear();
+                    loading.0.set(false);
+                    return;
+                }
+
                 if let Ok(t) = inbox_r { inbox.0.set(t); }
                 if let Ok(t) = today_r { today.0.set(t); }
                 if let Ok(t) = upcoming_r { upcoming.0.set(t); }

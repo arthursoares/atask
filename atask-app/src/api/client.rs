@@ -19,6 +19,12 @@ impl std::fmt::Display for ApiError {
     }
 }
 
+impl ApiError {
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, ApiError::Api { status: 401, .. })
+    }
+}
+
 impl From<reqwest::Error> for ApiError {
     fn from(e: reqwest::Error) -> Self {
         ApiError::Network(e)
