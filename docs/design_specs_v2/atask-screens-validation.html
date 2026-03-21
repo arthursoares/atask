@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>atask — Screen Validation</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<style>
+/* ═══ Tokens (from theme.css) ═══ */
+:root {
+  --canvas:#f6f5f2;--canvas-elevated:#fefefe;--canvas-sunken:#eceae7;
+  --sidebar-bg:rgba(238,236,231,0.72);--sidebar-hover:rgba(0,0,0,0.04);--sidebar-active:rgba(0,0,0,0.06);--sidebar-selected:rgba(70,112,160,0.10);--sidebar-width:240px;
+  --ink-primary:#222120;--ink-secondary:#686664;--ink-tertiary:#a09e9a;--ink-quaternary:#c8c6c2;--ink-on-accent:#fff;
+  --accent:#4670a0;--accent-hover:#3a5f8a;--accent-subtle:rgba(70,112,160,0.10);--accent-ring:rgba(70,112,160,0.30);
+  --today-star:#c88c30;--today-bg:rgba(200,140,48,0.08);
+  --someday-tint:#8878a0;
+  --deadline-red:#c04848;--deadline-bg:rgba(192,72,72,0.08);
+  --success:#4a8860;--success-bg:rgba(74,136,96,0.08);
+  --agent-tint:#7868a8;--agent-bg:rgba(120,104,168,0.07);--agent-border:rgba(120,104,168,0.20);
+  --border:rgba(0,0,0,0.06);--border-strong:rgba(0,0,0,0.12);--separator:rgba(0,0,0,0.05);
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.04),0 1px 1px rgba(0,0,0,0.03);
+  --shadow-md:0 2px 8px rgba(0,0,0,0.06),0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg:0 8px 30px rgba(0,0,0,0.08),0 2px 8px rgba(0,0,0,0.04);
+  --shadow-popover:0 12px 40px rgba(0,0,0,0.12),0 4px 12px rgba(0,0,0,0.06);
+  --radius-xs:4px;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-full:9999px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-7:28px;--sp-8:32px;--sp-10:40px;--sp-12:48px;--sp-16:64px;--sp-20:80px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-md:15px;--text-lg:17px;--text-xl:20px;--text-2xl:24px;--text-3xl:32px;
+  --leading-tight:1.2;--leading-normal:1.5;--leading-relaxed:1.65;
+  --ease-out:cubic-bezier(0.16,1,0.3,1);--ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  --dur-fast:120ms;--dur-normal:200ms;--dur-slow:350ms;
+  --toolbar-height:52px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Atkinson Hyperlegible',system-ui,sans-serif;font-size:var(--text-base);line-height:var(--leading-normal);color:var(--ink-primary);background:#e6e4e0;-webkit-font-smoothing:antialiased;height:100%;overflow:hidden}
+::selection{background:var(--accent-ring)}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.12);border-radius:var(--radius-full);border:2px solid transparent;background-clip:content-box}
+
+/* ═══ App Frame ═══ */
+.app-frame{display:flex;width:100vw;height:100vh;background:var(--canvas);overflow:hidden;position:relative}
+.sidebar{width:var(--sidebar-width);background:var(--sidebar-bg);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;user-select:none}
+.sidebar-toolbar{height:var(--toolbar-height);display:flex;align-items:center;padding:0 var(--sp-4)}
+.sidebar-traffic-lights{display:flex;gap:8px;align-items:center}
+.traffic-light{width:12px;height:12px;border-radius:50%}.traffic-light.r{background:#ff5f57}.traffic-light.y{background:#febc2e}.traffic-light.g{background:#28c840}
+.sidebar-group{padding:var(--sp-1) var(--sp-3)}
+.sidebar-group-label{font-size:var(--text-xs);font-weight:700;color:var(--ink-tertiary);text-transform:uppercase;letter-spacing:0.8px;padding:var(--sp-2) var(--sp-3) var(--sp-1)}
+.sidebar-item{display:flex;align-items:center;gap:var(--sp-3);padding:5px var(--sp-3);border-radius:var(--radius-sm);font-size:var(--text-base);color:var(--ink-secondary);cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
+.sidebar-item:hover{background:var(--sidebar-hover);color:var(--ink-primary)}
+.sidebar-item.active{background:var(--sidebar-active);color:var(--ink-primary);font-weight:700}
+.sidebar-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sidebar-icon svg{width:16px;height:16px;stroke-width:1.8;fill:none;stroke:currentColor}
+.sidebar-badge{margin-left:auto;font-size:var(--text-xs);color:var(--ink-tertiary);min-width:18px;text-align:center}
+.sidebar-separator{height:1px;background:var(--separator);margin:var(--sp-2) var(--sp-4)}
+.sidebar-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ═══ Main ═══ */
+.app-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.app-toolbar{height:var(--toolbar-height);display:flex;align-items:center;padding:0 var(--sp-6);border-bottom:1px solid var(--separator);background:var(--canvas);flex-shrink:0;justify-content:space-between}
+.app-toolbar-left{display:flex;align-items:center;gap:var(--sp-3)}
+.app-toolbar-right{display:flex;align-items:center;gap:var(--sp-2)}
+.app-view-title{font-size:var(--text-xl);font-weight:700;color:var(--ink-primary);display:flex;align-items:center;gap:var(--sp-2)}
+.toolbar-subtitle{font-size:var(--text-sm);color:var(--ink-tertiary)}
+.toolbar-btn{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--ink-tertiary);cursor:pointer;transition:all var(--dur-fast) var(--ease-out);border:none;background:none}
+.toolbar-btn:hover{background:var(--sidebar-hover);color:var(--ink-primary)}
+.toolbar-btn svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.8;fill:none}
+.app-content{flex:1;overflow-y:auto;padding:var(--sp-6)}
+
+/* ═══ View panels (hidden/shown via JS) ═══ */
+.view-panel{display:none}
+.view-panel.active{display:block}
+
+/* ═══ Task Item ═══ */
+.task-item{display:flex;align-items:center;gap:var(--sp-3);padding:6px var(--sp-4);border-radius:var(--radius-md);cursor:default;position:relative;height:32px}
+.task-item:hover{background:var(--sidebar-hover)}
+.task-item.selected{background:var(--sidebar-selected)}
+.task-content{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-3)}
+.task-title{font-size:var(--text-base);color:var(--ink-primary);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.task-title.completed{color:var(--ink-tertiary);text-decoration:line-through;text-decoration-color:var(--ink-quaternary)}
+.task-meta{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--text-xs);color:var(--ink-tertiary);flex-shrink:0;margin-left:auto;white-space:nowrap}
+.task-meta-sep{color:var(--ink-quaternary)}
+.task-deadline{color:var(--deadline-red);font-weight:700}
+.task-agent{color:var(--agent-tint);font-weight:700;display:inline-flex;align-items:center;gap:3px}
+.task-project-pill{display:inline-flex;align-items:center;gap:3px;background:var(--canvas-sunken);padding:1px 7px;border-radius:var(--radius-full)}
+.task-project-pill .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* Inbox hover actions */
+.task-actions{display:none;position:absolute;right:var(--sp-3);top:50%;transform:translateY(-50%);gap:var(--sp-1);align-items:center}
+.task-item:hover .task-actions{display:flex}
+.task-action-btn{width:26px;height:26px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);background:var(--canvas-elevated);color:var(--ink-tertiary);cursor:pointer;font-size:12px;transition:all var(--dur-fast) var(--ease-out);box-shadow:var(--shadow-sm)}
+.task-action-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-subtle)}
+.task-action-btn.today-btn:hover{color:var(--today-star);border-color:var(--today-star);background:var(--today-bg)}
+.task-action-btn.someday-btn:hover{color:var(--someday-tint);border-color:var(--someday-tint)}
+
+/* ═══ Checkbox ═══ */
+.checkbox{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--ink-quaternary);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:var(--canvas-elevated)}
+.checkbox:hover{border-color:var(--accent);background:var(--accent-subtle)}
+.checkbox.today{border-color:var(--today-star)}
+.checkbox.today:hover{background:var(--today-bg)}
+.checkbox.checked{border-color:var(--accent);background:var(--accent)}
+.checkbox.checked svg{opacity:1;transform:scale(1)}
+.checkbox svg{width:11px;height:11px;stroke:var(--ink-on-accent);stroke-width:2.5;fill:none;opacity:0;transform:scale(0.5)}
+.checkbox.cancelled{border-color:var(--ink-quaternary);background:transparent;position:relative}
+.checkbox.cancelled::after{content:'✕';color:var(--ink-tertiary);font-size:11px;font-weight:700}
+
+/* ═══ Section Header ═══ */
+.section-header{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) 0 var(--sp-1)}
+.section-header-title{font-size:var(--text-base);font-weight:700;color:var(--ink-primary)}
+.section-header-title.muted{font-size:var(--text-sm);color:var(--ink-tertiary);font-weight:700}
+.section-header-count{font-size:var(--text-xs);color:var(--ink-tertiary)}
+.section-header-line{flex:1;height:1px;background:var(--separator)}
+
+/* ═══ Date Group Header (Upcoming / Logbook) ═══ */
+.date-group{margin-bottom:var(--sp-4)}
+.date-group-header{font-size:var(--text-sm);font-weight:700;color:var(--ink-primary);padding:var(--sp-2) var(--sp-4) var(--sp-1);display:flex;align-items:baseline;gap:var(--sp-2)}
+.date-group-header .relative{color:var(--ink-tertiary);font-weight:400}
+
+/* ═══ New Task Inline ═══ */
+.new-task-inline{display:flex;align-items:center;gap:var(--sp-3);padding:6px var(--sp-4);color:var(--ink-tertiary);cursor:pointer;border-radius:var(--radius-md);height:32px}
+.new-task-inline:hover{color:var(--accent);background:var(--accent-subtle)}
+.new-task-plus{width:20px;height:20px;border-radius:50%;border:1.5px dashed currentColor;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+
+/* ═══ Tags ═══ */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);font-weight:700;padding:2px 8px;border-radius:var(--radius-full);user-select:none}
+.tag-default{background:var(--canvas-sunken);color:var(--ink-secondary)}
+.tag-accent{background:var(--accent-subtle);color:var(--accent)}
+.tag-today{background:var(--today-bg);color:var(--today-star)}
+.tag-deadline{background:var(--deadline-bg);color:var(--deadline-red)}
+.tag-agent{background:var(--agent-bg);color:var(--agent-tint)}
+.tag-success{background:var(--success-bg);color:var(--success)}
+.tag-someday{background:rgba(155,138,191,0.08);color:var(--someday-tint)}
+.tag-cancelled{background:var(--canvas-sunken);color:var(--ink-tertiary)}
+
+/* ═══ Empty State ═══ */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--sp-20) var(--sp-8);text-align:center}
+.empty-state-icon{width:48px;height:48px;color:var(--ink-quaternary);margin-bottom:var(--sp-4);opacity:0.5}
+.empty-state-text{font-size:var(--text-md);color:var(--ink-tertiary)}
+
+/* ═══ Detail Panel ═══ */
+.detail-panel{width:340px;background:var(--canvas-elevated);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.detail-header{padding:var(--sp-5) var(--sp-5) var(--sp-3);border-bottom:1px solid var(--separator)}
+.detail-title{font-size:var(--text-lg);font-weight:700;color:var(--ink-primary);line-height:var(--leading-tight)}
+.detail-meta-row{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2);flex-wrap:wrap}
+.detail-body{flex:1;overflow-y:auto;padding:var(--sp-4) var(--sp-5)}
+.detail-field{margin-bottom:var(--sp-4)}
+.detail-field-label{font-size:var(--text-xs);font-weight:700;color:var(--ink-tertiary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:var(--sp-1)}
+.detail-field-value{font-size:var(--text-sm);color:var(--ink-secondary);line-height:var(--leading-relaxed)}
+
+/* Checklist (square) */
+.cl-item{display:flex;align-items:center;gap:var(--sp-2);padding:3px 0;font-size:var(--text-sm);color:var(--ink-primary)}
+.cl-check{width:16px;height:16px;border-radius:var(--radius-xs);border:1.5px solid var(--ink-quaternary);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.cl-check.done{border-color:var(--accent);background:var(--accent)}
+.cl-check.done svg{width:9px;height:9px;stroke:var(--ink-on-accent);stroke-width:2.5;fill:none}
+.cl-done-text{color:var(--ink-tertiary);text-decoration:line-through}
+
+/* Activity */
+.activity-entry{display:flex;gap:var(--sp-3);padding:var(--sp-2) 0}
+.activity-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--ink-on-accent)}
+.activity-avatar.human{background:var(--accent)}
+.activity-avatar.agent{background:var(--agent-tint);position:relative}
+.activity-avatar.agent::after{content:'✦';position:absolute;bottom:-2px;right:-3px;font-size:8px;color:var(--agent-tint);background:var(--canvas-elevated);border-radius:50%;width:12px;height:12px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border)}
+.activity-author{font-size:var(--text-xs);font-weight:700;color:var(--ink-primary)}
+.activity-author.agent-name{color:var(--agent-tint)}
+.activity-time{font-size:10px;color:var(--ink-tertiary)}
+.activity-text{font-size:var(--text-xs);color:var(--ink-secondary);line-height:var(--leading-relaxed);margin-top:1px}
+.activity-agent-card{margin-top:var(--sp-2);background:var(--agent-bg);border:1px solid var(--agent-border);border-radius:var(--radius-md);padding:var(--sp-2) var(--sp-3);font-size:var(--text-xs);color:var(--ink-secondary);line-height:var(--leading-relaxed)}
+
+/* ═══ Progress Bar (Project toolbar) ═══ */
+.progress-wrap{display:flex;align-items:center;gap:var(--sp-2)}
+.progress-text{font-size:var(--text-xs);color:var(--ink-tertiary);font-weight:700}
+.progress-bar{width:80px;height:4px;background:var(--canvas-sunken);border-radius:var(--radius-full);overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:var(--radius-full)}
+
+/* ═══ Command Palette ═══ */
+.cmd-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.15);backdrop-filter:blur(4px);z-index:100;display:none}
+.cmd-backdrop.open{display:block}
+.cmd-palette{position:fixed;top:18%;left:50%;transform:translateX(-50%);width:560px;max-height:460px;background:var(--canvas-elevated);border:1px solid var(--border-strong);border-radius:var(--radius-xl);box-shadow:var(--shadow-popover);z-index:101;display:none;flex-direction:column;overflow:hidden}
+.cmd-palette.open{display:flex}
+.cmd-input-wrap{display:flex;align-items:center;padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--separator);gap:var(--sp-3)}
+.cmd-input-icon{width:20px;height:20px;color:var(--ink-tertiary);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.cmd-input-icon svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.8;fill:none}
+.cmd-input{flex:1;border:none;background:none;outline:none;font-family:inherit;font-size:var(--text-lg);color:var(--ink-primary)}
+.cmd-input::placeholder{color:var(--ink-quaternary)}
+.cmd-shortcut{font-size:var(--text-xs);color:var(--ink-quaternary);font-family:'SF Mono','Menlo',monospace}
+.cmd-results{flex:1;overflow-y:auto;padding:var(--sp-2) 0}
+.cmd-group-label{font-size:var(--text-xs);font-weight:700;color:var(--ink-tertiary);text-transform:uppercase;letter-spacing:0.8px;padding:var(--sp-2) var(--sp-4) var(--sp-1)}
+.cmd-item{display:flex;align-items:center;gap:var(--sp-3);padding:6px var(--sp-4);cursor:default;font-size:var(--text-base);color:var(--ink-secondary);transition:all var(--dur-fast) var(--ease-out)}
+.cmd-item.active,.cmd-item:hover{background:var(--accent-subtle);color:var(--accent)}
+.cmd-item-icon{width:20px;text-align:center;flex-shrink:0;font-size:14px}
+.cmd-item-label{flex:1}
+.cmd-item-shortcut{font-size:var(--text-xs);color:var(--ink-tertiary);font-family:'SF Mono','Menlo',monospace}
+
+/* ═══ Animations ═══ */
+/* No entrance/exit animations — instant state changes only */
+
+/* btn */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);font-family:inherit;font-size:var(--text-sm);font-weight:700;border:none;cursor:pointer;border-radius:var(--radius-sm);padding:6px 14px;transition:all var(--dur-fast) var(--ease-out);user-select:none;line-height:1}
+.btn:active{transform:scale(0.97)}
+.btn-ghost{background:transparent;color:var(--ink-secondary)}
+.btn-ghost:hover{background:var(--sidebar-hover);color:var(--ink-primary)}
+.btn svg{width:14px;height:14px;stroke:currentColor;stroke-width:2;fill:none}
+/* ═══ Inline Editor States ═══ */
+.task-item.editing{height:auto;min-height:32px;flex-direction:column;align-items:stretch;gap:0;padding:6px var(--sp-4) 8px;background:var(--sidebar-selected);border:1.5px solid var(--accent);border-radius:var(--radius-md)}
+.task-editing-top{display:flex;align-items:center;gap:var(--sp-3);height:32px}
+.task-title-input{flex:1;min-width:0;font-family:inherit;font-size:var(--text-base);color:var(--ink-primary);background:none;border:none;outline:none;padding:0;line-height:1}
+.task-title-input::placeholder{color:var(--ink-quaternary)}
+.attr-bar{display:flex;align-items:center;gap:6px;padding:4px 0 0 27px;flex-wrap:wrap}
+.attr-pill{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);font-weight:700;padding:2px 8px;border-radius:var(--radius-full);cursor:pointer;user-select:none;border:1px solid var(--border)}
+.attr-pill:hover{border-color:var(--border-strong)}
+.attr-pill .remove{opacity:0.5;margin-left:2px;font-size:10px}
+.attr-pill .remove:hover{opacity:1}
+.attr-pill.attr-today{background:var(--today-bg);color:var(--today-star);border-color:transparent}
+.attr-pill.attr-project{background:var(--canvas-sunken);color:var(--ink-secondary);border-color:transparent}
+.attr-pill.attr-tag{background:var(--accent-subtle);color:var(--accent);border-color:transparent}
+.attr-pill.attr-add{background:none;color:var(--ink-tertiary);border-style:dashed}
+.attr-pill.attr-add:hover{color:var(--accent);border-color:var(--accent)}
+
+/* When Popover */
+.when-popover{position:absolute;top:100%;left:27px;margin-top:6px;width:260px;background:var(--canvas-elevated);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow-popover);z-index:50;overflow:hidden;user-select:none}
+.when-header{font-size:var(--text-xs);font-weight:700;color:var(--ink-tertiary);padding:var(--sp-3) var(--sp-4) var(--sp-2);text-align:center}
+.when-option{display:flex;align-items:center;gap:var(--sp-3);padding:5px var(--sp-4);font-size:var(--text-base);color:var(--ink-primary);cursor:pointer}
+.when-option:hover{background:var(--sidebar-hover)}
+.when-option.selected{background:var(--accent);color:var(--ink-on-accent);border-radius:var(--radius-sm);margin:0 6px}
+.when-option .when-icon{width:20px;text-align:center;font-size:14px}
+.when-option .when-check{margin-left:auto;font-size:14px}
+.when-cal{padding:var(--sp-2) var(--sp-3)}
+.when-cal-header{display:flex;gap:0;font-size:var(--text-xs);color:var(--ink-tertiary);font-weight:700;margin-bottom:4px}
+.when-cal-header span{flex:1;text-align:center}
+.when-cal-row{display:flex;gap:0}
+.when-cal-day{flex:1;text-align:center;font-size:var(--text-sm);padding:3px 0;cursor:pointer;border-radius:var(--radius-xs);color:var(--ink-secondary)}
+.when-cal-day:hover{background:var(--sidebar-hover)}
+.when-cal-day.today-cal{color:var(--today-star);font-weight:700}
+.when-cal-day.empty{visibility:hidden}
+.when-cal-day.selected-day{background:var(--accent);color:var(--ink-on-accent);font-weight:700}
+.when-sep{height:1px;background:var(--separator);margin:0}
+.when-clear{text-align:center;padding:var(--sp-2);font-size:var(--text-sm);font-weight:700;color:var(--ink-secondary);cursor:pointer}
+.when-clear:hover{background:var(--sidebar-hover)}
+.when-disabled{color:var(--ink-quaternary);cursor:default}
+.when-disabled:hover{background:none}
+
+/* Fast creation row */
+.task-item.creating{height:auto;min-height:32px;flex-direction:column;align-items:stretch;gap:0;padding:6px var(--sp-4) 8px;background:var(--canvas-elevated);border:1.5px dashed var(--accent);border-radius:var(--radius-md)}
+
+/* View label banner */
+.view-label{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:700;color:var(--ink-tertiary);background:var(--canvas-sunken);margin-bottom:var(--sp-4);letter-spacing:0.5px;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="app-frame">
+
+  <!-- ═══ Sidebar ═══ -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-toolbar">
+      <div class="sidebar-traffic-lights">
+        <div class="traffic-light r"></div>
+        <div class="traffic-light y"></div>
+        <div class="traffic-light g"></div>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-item" data-view="inbox" onclick="switchView('inbox')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><polyline points="2 8 6 8 7 10 9 10 10 8 14 8"/></svg></div>
+        Inbox
+        <span class="sidebar-badge" style="color:var(--accent);font-weight:700">3</span>
+      </div>
+      <div class="sidebar-item active" data-view="today" onclick="switchView('today')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16" fill="var(--today-star)" stroke="none"><polygon points="8 2 9.8 5.6 14 6.2 11 9 11.8 13 8 11.2 4.2 13 5 9 2 6.2 6.2 5.6"/></svg></div>
+        <span>Today</span>
+        <span class="sidebar-badge">5</span>
+      </div>
+      <div class="sidebar-item" data-view="upcoming" onclick="switchView('upcoming')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2"/><line x1="2" y1="7" x2="14" y2="7"/><line x1="5" y1="1" x2="5" y2="4"/><line x1="11" y1="1" x2="11" y2="4"/></svg></div>
+        Upcoming
+      </div>
+      <div class="sidebar-item" data-view="someday" onclick="switchView('someday')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16" stroke="var(--someday-tint)"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5" x2="8" y2="8"/><line x1="8" y1="8" x2="10.5" y2="10"/></svg></div>
+        Someday
+      </div>
+      <div class="sidebar-item" data-view="logbook" onclick="switchView('logbook')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16"><path d="M4 2h8l1 4-5 3-5-3z"/><path d="M3 6v6c0 1 2 2 5 2s5-1 5-2V6"/></svg></div>
+        Logbook
+      </div>
+    </div>
+    <div class="sidebar-separator"></div>
+    <!-- Area: Work (contains projects) -->
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">Work</div>
+      <div class="sidebar-item" style="padding-left:var(--sp-6)">
+        <div class="sidebar-dot" style="background:#b84444"></div>
+        Sphere LV
+        <span class="sidebar-badge">3</span>
+      </div>
+      <div class="sidebar-item" style="padding-left:var(--sp-6)">
+        <div class="sidebar-dot" style="background:var(--today-star)"></div>
+        Macros v1
+        <span class="sidebar-badge">8</span>
+      </div>
+    </div>
+    <!-- Area: Home (contains projects) -->
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">Home</div>
+      <div class="sidebar-item" style="padding-left:var(--sp-6)">
+        <div class="sidebar-dot" style="background:var(--success)"></div>
+        Homelab Migration
+        <span class="sidebar-badge">4</span>
+      </div>
+      <div class="sidebar-item" style="padding-left:var(--sp-6)">
+        <div class="sidebar-dot" style="background:var(--today-star)"></div>
+        Roon Extension
+        <span class="sidebar-badge">7</span>
+      </div>
+    </div>
+    <div class="sidebar-separator"></div>
+    <!-- Standalone projects (no area) -->
+    <div class="sidebar-group">
+      <div class="sidebar-item" data-view="project" onclick="switchView('project')">
+        <div class="sidebar-dot" style="background:var(--accent)"></div>
+        atask v0
+        <span class="sidebar-badge">12</span>
+      </div>
+    </div>
+    <div class="sidebar-separator"></div>
+    <!-- UI Example -->
+    <div class="sidebar-group">
+      <div class="sidebar-group-label" style="opacity:0.3;font-size:9px">Examples</div>
+      <div class="sidebar-item" data-view="inline" onclick="switchView('inline')">
+        <div class="sidebar-icon"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="5" y1="7" x2="11" y2="7"/><line x1="5" y1="10" x2="9" y2="10"/></svg></div>
+        Inline Editor
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Main Area ═══ -->
+  <div class="app-main">
+    <div class="app-toolbar" id="toolbar">
+      <div class="app-toolbar-left" id="toolbar-left"></div>
+      <div class="app-toolbar-right" id="toolbar-right">
+        <button class="toolbar-btn" title="Search (⌘F)"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><line x1="10.2" y1="10.2" x2="14" y2="14"/></svg></button>
+        <button class="toolbar-btn" title="New Task (⌘N)"><svg viewBox="0 0 16 16"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg></button>
+        <button class="toolbar-btn" title="Command Palette (⌘K)" onclick="toggleCmd()"><svg viewBox="0 0 16 16"><rect x="1" y="4" width="14" height="9" rx="2"/><text x="8" y="10.5" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-weight="700" font-family="system-ui">⌘K</text></svg></button>
+      </div>
+    </div>
+    <div class="app-content" id="content">
+
+      <!-- ═══ TODAY VIEW ═══ -->
+      <div class="view-panel active" id="view-today">
+        <div>
+          <div class="task-item">
+            <div class="checkbox today" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Design component library for macOS client</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox today" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write domain event catalog documentation</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span class="task-agent">✦ In progress</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox today" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Set up Proxmox backup schedule for NUC</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--success)"></span> Homelab Migration</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox today" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Update Roon now-playing display with color extraction</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--today-star)"></span> Roon Extension</span><span class="task-meta-sep">·</span><span class="task-deadline">Due tomorrow</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="section-header"><span class="section-header-title muted">This Evening</span><span class="section-header-line"></span></div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox today" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Research Swift vs Dioxus for native client</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+        </div>
+      </div>
+
+      <!-- ═══ INBOX VIEW ═══ -->
+      <div class="view-panel" id="view-inbox">
+        <div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Review Pascal's feedback on metering spec</div>
+              <div class="task-meta"><span style="color:var(--ink-quaternary)">Added 2 hours ago</span></div>
+            </div>
+            <div class="task-actions">
+              <button class="task-action-btn today-btn" title="Schedule Today (⌘T)">★</button>
+              <button class="task-action-btn" title="Set Date (⌘D)">📅</button>
+              <button class="task-action-btn someday-btn" title="Someday">💤</button>
+              <button class="task-action-btn" title="Move to Project">📁</button>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Look into NATS JetStream for persistent event delivery</div>
+              <div class="task-meta"><span style="color:var(--ink-quaternary)">Added yesterday</span></div>
+            </div>
+            <div class="task-actions">
+              <button class="task-action-btn today-btn" title="Schedule Today">★</button>
+              <button class="task-action-btn" title="Set Date">📅</button>
+              <button class="task-action-btn someday-btn" title="Someday">💤</button>
+              <button class="task-action-btn" title="Move to Project">📁</button>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Investigate Home Assistant energy monitoring dashboard</div>
+              <div class="task-meta"><span style="color:var(--ink-quaternary)">Added 2 days ago</span></div>
+            </div>
+            <div class="task-actions">
+              <button class="task-action-btn today-btn" title="Schedule Today">★</button>
+              <button class="task-action-btn" title="Set Date">📅</button>
+              <button class="task-action-btn someday-btn" title="Someday">💤</button>
+              <button class="task-action-btn" title="Move to Project">📁</button>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+        </div>
+      </div>
+
+      <!-- ═══ UPCOMING VIEW ═══ -->
+      <div class="view-panel" id="view-upcoming">
+        <div>
+          <div class="date-group">
+            <div class="date-group-header">Tomorrow — Fri, Mar 21</div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Update Roon now-playing display with color extraction</div>
+                <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--today-star)"></span> Roon Extension</span><span class="task-meta-sep">·</span><span class="task-deadline">Due tomorrow</span></div>
+              </div>
+            </div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Prepare OS 2.4.4 release notes draft</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="date-group">
+            <div class="date-group-header">Monday, Mar 24</div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Macros PRD review with Ennio and Daniel</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span><span class="task-meta-sep">·</span><span class="task-deadline">Due Mar 25</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="date-group">
+            <div class="date-group-header">Wednesday, Mar 26</div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Grafana dashboard review — Sphere LV module health</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+              </div>
+            </div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Set up SQLite migration scaffold with goose</div>
+                <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span class="task-agent">✦ Claude assigned</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="date-group">
+            <div class="date-group-header">April 1 <span class="relative">— Next week</span></div>
+            <div class="task-item">
+              <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title">Renew Proxmox VE subscription</div>
+                <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--success)"></span> Homelab Migration</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SOMEDAY VIEW ═══ -->
+      <div class="view-panel" id="view-someday">
+        <div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Explore Mac Mini M4 as Proxmox replacement</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--success)"></span> Homelab Migration</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Build Bubbletea TUI client for atask</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write cold email to Roon Labs CPO</div>
+              <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Career</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Research DMN vs OPA/Rego for business rule validation</div>
+              <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Android tablet kiosk mount for Roon display</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--today-star)"></span> Roon Extension</span></div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+        </div>
+      </div>
+
+      <!-- ═══ LOGBOOK VIEW ═══ -->
+      <div class="view-panel" id="view-logbook">
+        <div>
+          <div class="date-group">
+            <div class="date-group-header">Today — Thu, Mar 20</div>
+            <div class="task-item">
+              <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title completed">Draft domain model entity relationships</div>
+                <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span style="color:var(--success)">Completed 3h ago</span></div>
+              </div>
+            </div>
+            <div class="task-item">
+              <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title completed">Review API endpoint naming conventions</div>
+                <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span style="color:var(--success)">Completed 5h ago</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="date-group">
+            <div class="date-group-header">Yesterday — Wed, Mar 19</div>
+            <div class="task-item">
+              <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title completed">Finalize OS 2.4.3 customer communication</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+              </div>
+            </div>
+            <div class="task-item">
+              <div class="checkbox cancelled"></div>
+              <div class="task-content">
+                <div class="task-title completed">Investigate IFIR frequency response regression</div>
+                <div class="task-meta"><span class="tag tag-cancelled" style="font-size:10px">Cancelled</span><span class="task-meta-sep">·</span><span style="color:var(--ink-tertiary)">Duplicate of CORE-4027</span></div>
+              </div>
+            </div>
+            <div class="task-item">
+              <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title completed">Set up Grafana Loki datasource for Sphere LV</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="date-group">
+            <div class="date-group-header">Monday, Mar 17</div>
+            <div class="task-item">
+              <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <div class="task-content">
+                <div class="task-title completed">Compile Macros stakeholder feedback notes</div>
+                <div class="task-meta"><span class="tag tag-default" style="font-size:10px">Work</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ PROJECT VIEW ═══ -->
+      <div class="view-panel" id="view-project">
+        <div>
+          <!-- Sectionless tasks -->
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Define success criteria for v0 launch</div>
+              <div class="task-meta"><span class="task-deadline">Due Mar 28</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write CLAUDE.md for the project repo</div>
+              <div class="task-meta"><span class="tag tag-today" style="font-size:10px">★ Today</span></div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+
+          <!-- Section: Domain & API -->
+          <div>
+            <div class="section-header">
+              <span class="section-header-title">Domain & API</span>
+              <span class="section-header-count">4</span>
+              <span class="section-header-line"></span>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title completed">Draft domain model entity relationships</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox checked"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title completed">Review API endpoint naming conventions</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write domain event catalog documentation</div>
+              <div class="task-meta"><span class="task-agent">✦ In progress</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Set up SQLite migration scaffold with goose</div>
+              <div class="task-meta"><span class="task-agent">✦ Claude assigned</span></div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+
+          <!-- Section: Client -->
+          <div>
+            <div class="section-header">
+              <span class="section-header-title">Client</span>
+              <span class="section-header-count">4</span>
+              <span class="section-header-line"></span>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Design component library for macOS client</div>
+              <div class="task-meta"><span class="tag tag-today" style="font-size:10px">★ Today</span></div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Research Swift vs Dioxus for native client</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Scaffold Dioxus project with routing</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Implement SSE event subscription in Rust</div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+
+          <!-- Section: Infrastructure -->
+          <div>
+            <div class="section-header">
+              <span class="section-header-title">Infrastructure</span>
+              <span class="section-header-count">2</span>
+              <span class="section-header-line"></span>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write Dockerfile with multi-stage build</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="checkbox" onclick="toggleCheck(this)"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Set up docker-compose for local dev</div>
+            </div>
+          </div>
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+        </div>
+      </div>
+
+      <!-- ═══ INLINE EDITOR VIEW ═══ -->
+      <div class="view-panel" id="view-inline">
+        <div>
+
+          <!-- Label: Normal rows for context -->
+          <div class="view-label">Normal rows</div>
+
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Design component library for macOS client</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+
+          <!-- Label: Inline title editing -->
+          <div class="view-label" style="margin-top:var(--sp-6)">Inline title editing — click a title to edit</div>
+
+          <div class="task-item editing">
+            <div class="task-editing-top">
+              <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <input class="task-title-input" value="Write domain event catalog documentation" />
+            </div>
+            <div class="attr-bar">
+              <span class="attr-pill attr-today">★ Today <span class="remove">×</span></span>
+              <span class="attr-pill attr-project"><span class="dot" style="background:var(--accent);width:6px;height:6px;border-radius:50%;display:inline-block"></span> atask v0</span>
+              <span class="attr-pill attr-tag">Design</span>
+              <span class="attr-pill attr-add" onclick="showWhen(this)">📅 When</span>
+              <span class="attr-pill attr-add">🏷 +Tag</span>
+            </div>
+          </div>
+
+          <!-- Normal row after -->
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Set up Proxmox backup schedule for NUC</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--success)"></span> Homelab</span></div>
+            </div>
+          </div>
+
+          <!-- Label: With "When" popover open -->
+          <div class="view-label" style="margin-top:var(--sp-6)">Inline editor + "When" popover open</div>
+
+          <div style="position:relative">
+            <div class="task-item editing">
+              <div class="task-editing-top">
+                <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+                <input class="task-title-input" value="Update Roon now-playing display" />
+              </div>
+              <div class="attr-bar">
+                <span class="attr-pill attr-today">★ Today <span class="remove">×</span></span>
+                <span class="attr-pill attr-project"><span class="dot" style="background:var(--today-star);width:6px;height:6px;border-radius:50%;display:inline-block"></span> Roon Extension</span>
+                <span class="attr-pill attr-add" style="border-color:var(--accent);color:var(--accent)">📅 When</span>
+                <span class="attr-pill attr-add">🏷 +Tag</span>
+              </div>
+            </div>
+            <!-- When Popover -->
+            <div class="when-popover" style="position:absolute;top:auto;bottom:auto;left:27px;margin-top:4px;z-index:50">
+              <div class="when-header">When</div>
+              <div class="when-sep"></div>
+              <div class="when-option selected">
+                <span class="when-icon">★</span>
+                <span>Today</span>
+                <span class="when-check">✓</span>
+              </div>
+              <div class="when-option">
+                <span class="when-icon">🌙</span>
+                <span>This Evening</span>
+              </div>
+              <div class="when-cal">
+                <div class="when-cal-header">
+                  <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                </div>
+                <div class="when-cal-row">
+                  <div class="when-cal-day empty"></div>
+                  <div class="when-cal-day empty"></div>
+                  <div class="when-cal-day empty"></div>
+                  <div class="when-cal-day empty"></div>
+                  <div class="when-cal-day today-cal">21</div>
+                  <div class="when-cal-day">22</div>
+                  <div class="when-cal-day">23</div>
+                </div>
+                <div class="when-cal-row">
+                  <div class="when-cal-day">24</div>
+                  <div class="when-cal-day selected-day">25</div>
+                  <div class="when-cal-day">26</div>
+                  <div class="when-cal-day">27</div>
+                  <div class="when-cal-day">28</div>
+                  <div class="when-cal-day">29</div>
+                  <div class="when-cal-day">30</div>
+                </div>
+                <div class="when-cal-row">
+                  <div class="when-cal-day">31</div>
+                  <div class="when-cal-day">1</div>
+                  <div class="when-cal-day">2</div>
+                  <div class="when-cal-day">3</div>
+                  <div class="when-cal-day">4</div>
+                  <div class="when-cal-day">5</div>
+                  <div class="when-cal-day">6</div>
+                </div>
+              </div>
+              <div class="when-option">
+                <span class="when-icon">📦</span>
+                <span>Someday</span>
+              </div>
+              <div class="when-option when-disabled">
+                <span class="when-icon" style="font-size:12px">+</span>
+                <span style="color:var(--ink-quaternary)">Add Reminder</span>
+              </div>
+              <div class="when-sep"></div>
+              <div class="when-clear">Clear</div>
+            </div>
+          </div>
+
+          <!-- Spacer for popover visibility -->
+          <div style="height:320px"></div>
+
+          <!-- Label: Fast creation (⌘N) -->
+          <div class="view-label">Fast creation — ⌘N inserts an editable row</div>
+
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Design component library for macOS client</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+
+          <div class="task-item creating">
+            <div class="task-editing-top">
+              <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <input class="task-title-input" placeholder="What needs to happen?" autofocus />
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write domain event catalog documentation</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span class="task-agent">✦ In progress</span></div>
+            </div>
+          </div>
+
+          <!-- Label: After typing + Enter — shows attribute bar -->
+          <div class="view-label" style="margin-top:var(--sp-6)">After typing + Enter — attribute bar appears</div>
+
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Design component library for macOS client</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span></div>
+            </div>
+          </div>
+
+          <div class="task-item editing" style="border-style:dashed">
+            <div class="task-editing-top">
+              <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+              <input class="task-title-input" value="Review Go API auth middleware" />
+            </div>
+            <div class="attr-bar">
+              <span class="attr-pill attr-add">★ Today</span>
+              <span class="attr-pill attr-add">📁 Project</span>
+              <span class="attr-pill attr-add">📅 When</span>
+              <span class="attr-pill attr-add">🏷 +Tag</span>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="checkbox today"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div>
+            <div class="task-content">
+              <div class="task-title">Write domain event catalog documentation</div>
+              <div class="task-meta"><span class="task-project-pill"><span class="dot" style="background:var(--accent)"></span> atask v0</span><span class="task-meta-sep">·</span><span class="task-agent">✦ In progress</span></div>
+            </div>
+          </div>
+
+          <div class="new-task-inline"><div class="new-task-plus">+</div><span>New Task</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ Detail Panel (visible on project view) ═══ -->
+  <div class="detail-panel" id="detail-panel" style="display:none">
+    <div class="detail-header">
+      <div class="detail-title">Design component library for macOS client</div>
+      <div class="detail-meta-row">
+        <span class="tag tag-today" style="font-size:10px">★ Today</span>
+        <span class="tag tag-accent" style="font-size:10px">Design</span>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="detail-field">
+        <div class="detail-field-label">Project</div>
+        <div class="detail-field-value" style="display:flex;align-items:center;gap:6px"><span class="sidebar-dot" style="background:var(--accent);width:8px;height:8px"></span> atask v0</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Schedule</div>
+        <div class="detail-field-value">Today (Anytime)</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Start Date</div>
+        <div class="detail-field-value">Mar 20, 2026</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Deadline</div>
+        <div class="detail-field-value" style="color:var(--ink-quaternary)">None</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Tags</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <span class="tag tag-accent" style="font-size:10px">Design</span>
+          <span class="tag tag-default" style="font-size:10px">Client</span>
+          <span style="font-size:var(--text-xs);color:var(--accent);cursor:pointer">+ Add</span>
+        </div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Notes</div>
+        <div class="detail-field-value">Create a comprehensive design library inspired by Things. Use Atkinson Hyperlegible. Target macOS native aesthetic with warm neutral palette. Include all views, command palette, and keyboard shortcuts.</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-field-label">Checklist</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div class="cl-item"><div class="cl-check done"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div><span class="cl-done-text">Color palette</span></div>
+          <div class="cl-item"><div class="cl-check done"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div><span class="cl-done-text">Typography scale</span></div>
+          <div class="cl-item"><div class="cl-check done"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div><span class="cl-done-text">Core components</span></div>
+          <div class="cl-item"><div class="cl-check done"><svg viewBox="0 0 12 12"><polyline points="2.5 6 5 8.5 9.5 3.5"/></svg></div><span class="cl-done-text">App mockup</span></div>
+          <div class="cl-item"><div class="cl-check"></div><span>All view screens</span></div>
+          <div class="cl-item"><div class="cl-check"></div><span>Command palette</span></div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--separator);padding-top:var(--sp-4);margin-top:var(--sp-4)">
+        <div class="detail-field-label">Activity</div>
+        <div class="activity-entry">
+          <div class="activity-avatar agent">✦</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:baseline;gap:var(--sp-2)"><span class="activity-author agent-name">Claude</span><span class="activity-time">5 min ago</span></div>
+            <div class="activity-text">Decomposed into 6 checklist items based on the design spec scope.</div>
+          </div>
+        </div>
+        <div class="activity-entry">
+          <div class="activity-avatar human">A</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:baseline;gap:var(--sp-2)"><span class="activity-author">Arthur</span><span class="activity-time">20 min ago</span></div>
+            <div class="activity-text">Decided on Dioxus over SwiftUI. Cross-platform wins.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Command Palette Overlay ═══ -->
+<div class="cmd-backdrop" id="cmd-backdrop" onclick="toggleCmd()"></div>
+<div class="cmd-palette" id="cmd-palette">
+  <div class="cmd-input-wrap">
+    <div class="cmd-input-icon"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><line x1="10.2" y1="10.2" x2="14" y2="14"/></svg></div>
+    <input class="cmd-input" placeholder="Type a command or search..." autofocus id="cmd-input"/>
+    <span class="cmd-shortcut">⌘K</span>
+  </div>
+  <div class="cmd-results">
+    <div class="cmd-group-label">Navigation</div>
+    <div class="cmd-item active"><span class="cmd-item-icon">📥</span><span class="cmd-item-label">Go to Inbox</span><span class="cmd-item-shortcut">⌘1</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">★</span><span class="cmd-item-label">Go to Today</span><span class="cmd-item-shortcut">⌘2</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">📅</span><span class="cmd-item-label">Go to Upcoming</span><span class="cmd-item-shortcut">⌘3</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">🕐</span><span class="cmd-item-label">Go to Someday</span><span class="cmd-item-shortcut">⌘4</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">📖</span><span class="cmd-item-label">Go to Logbook</span><span class="cmd-item-shortcut">⌘5</span></div>
+    <div class="cmd-group-label">Task Actions</div>
+    <div class="cmd-item"><span class="cmd-item-icon">★</span><span class="cmd-item-label">Schedule for Today</span><span class="cmd-item-shortcut">⌘T</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">➡</span><span class="cmd-item-label">Move to Project</span><span class="cmd-item-shortcut">⌘⇧M</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">📅</span><span class="cmd-item-label">Set Start Date</span><span class="cmd-item-shortcut">⌘D</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">✓</span><span class="cmd-item-label">Complete Task</span><span class="cmd-item-shortcut">⌘⇧C</span></div>
+    <div class="cmd-group-label">Create</div>
+    <div class="cmd-item"><span class="cmd-item-icon">+</span><span class="cmd-item-label">New Task</span><span class="cmd-item-shortcut">⌘N</span></div>
+    <div class="cmd-item"><span class="cmd-item-icon">+</span><span class="cmd-item-label">New Project</span><span class="cmd-item-shortcut">⌘⇧N</span></div>
+  </div>
+</div>
+
+<script>
+const views = {
+  inbox:    { title: 'Inbox',    icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="var(--accent)" stroke-width="1.8"><rect x="2" y="3" width="12" height="10" rx="2"/><polyline points="2 8 6 8 7 10 9 10 10 8 14 8"/></svg>', subtitle: '', detail: false },
+  today:    { title: 'Today',    icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="var(--today-star)" stroke="none"><polygon points="8 2 9.8 5.6 14 6.2 11 9 11.8 13 8 11.2 4.2 13 5 9 2 6.2 6.2 5.6"/></svg>', subtitle: 'Thursday, Mar 20', detail: false },
+  upcoming: { title: 'Upcoming', icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="var(--ink-primary)" stroke-width="1.8"><rect x="2" y="3" width="12" height="11" rx="2"/><line x1="2" y1="7" x2="14" y2="7"/><line x1="5" y1="1" x2="5" y2="4"/><line x1="11" y1="1" x2="11" y2="4"/></svg>', subtitle: '', detail: false },
+  someday:  { title: 'Someday',  icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="var(--someday-tint)" stroke-width="1.8"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5" x2="8" y2="8"/><line x1="8" y1="8" x2="10.5" y2="10"/></svg>', subtitle: '', detail: false },
+  logbook:  { title: 'Logbook',  icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="var(--ink-primary)" stroke-width="1.8"><path d="M4 2h8l1 4-5 3-5-3z"/><path d="M3 6v6c0 1 2 2 5 2s5-1 5-2V6"/></svg>', subtitle: '', detail: false },
+  project:  { title: 'atask v0', icon: '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--accent)"></span>', subtitle: '', detail: true,
+    extra: '<div class="progress-wrap"><span class="progress-text">4 / 12</span><div class="progress-bar"><div class="progress-fill" style="width:33%"></div></div></div>' },
+  inline:   { title: 'Inline Editor', icon: '<svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="var(--ink-primary)" stroke-width="1.8"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="5" y1="7" x2="11" y2="7"/><line x1="5" y1="10" x2="9" y2="10"/></svg>', subtitle: 'UI interaction examples', detail: false }
+};
+
+function switchView(id) {
+  // Update sidebar
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  const sidebarItem = document.querySelector(`.sidebar-item[data-view="${id}"]`);
+  if (sidebarItem) sidebarItem.classList.add('active');
+
+  // Update toolbar
+  const v = views[id];
+  document.getElementById('toolbar-left').innerHTML =
+    `<div class="app-view-title">${v.icon} ${v.title}</div>` +
+    (v.subtitle ? `<span class="toolbar-subtitle">${v.subtitle}</span>` : '') +
+    (v.extra || '');
+
+  // Update toolbar right — add section button for project view
+  const rightExtra = id === 'project'
+    ? '<button class="btn btn-ghost" style="font-size:var(--text-xs)"><svg viewBox="0 0 16 16" style="width:12px;height:12px"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg> Add Section</button>'
+    : '';
+  document.getElementById('toolbar-right').innerHTML =
+    rightExtra +
+    '<button class="toolbar-btn" title="Search (⌘F)"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><line x1="10.2" y1="10.2" x2="14" y2="14"/></svg></button>' +
+    '<button class="toolbar-btn" title="New Task (⌘N)"><svg viewBox="0 0 16 16"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg></button>' +
+    '<button class="toolbar-btn" title="Command Palette (⌘K)" onclick="toggleCmd()"><svg viewBox="0 0 16 16"><rect x="2" y="5" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="8" y="11" text-anchor="middle" fill="currentColor" stroke="none" font-size="5.5" font-weight="700" font-family="system-ui">⌘K</text></svg></button>';
+
+  // Show/hide views
+  document.querySelectorAll('.view-panel').forEach(el => {
+    el.classList.remove('active');
+  });
+  const panel = document.getElementById('view-' + id);
+  if (panel) panel.classList.add('active');
+
+  // Detail panel
+  document.getElementById('detail-panel').style.display = v.detail ? 'flex' : 'none';
+}
+
+function toggleCheck(el) {
+  el.classList.toggle('checked');
+  const title = el.closest('.task-item')?.querySelector('.task-title');
+  if (title) title.classList.toggle('completed');
+}
+
+function toggleCmd() {
+  const backdrop = document.getElementById('cmd-backdrop');
+  const palette = document.getElementById('cmd-palette');
+  const isOpen = palette.classList.contains('open');
+  if (isOpen) {
+    backdrop.classList.remove('open');
+    palette.classList.remove('open');
+  } else {
+    backdrop.classList.add('open');
+    palette.classList.add('open');
+    document.getElementById('cmd-input').focus();
+  }
+}
+
+// Keyboard shortcut
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); toggleCmd(); }
+  if (e.key === 'Escape') toggleCmd();
+  if ((e.metaKey || e.ctrlKey) && e.key === '1') { e.preventDefault(); switchView('inbox'); }
+  if ((e.metaKey || e.ctrlKey) && e.key === '2') { e.preventDefault(); switchView('today'); }
+  if ((e.metaKey || e.ctrlKey) && e.key === '3') { e.preventDefault(); switchView('upcoming'); }
+  if ((e.metaKey || e.ctrlKey) && e.key === '4') { e.preventDefault(); switchView('someday'); }
+  if ((e.metaKey || e.ctrlKey) && e.key === '5') { e.preventDefault(); switchView('logbook'); }
+});
+
+// Initialize
+switchView('today');
+</script>
+</body>
+</html>
