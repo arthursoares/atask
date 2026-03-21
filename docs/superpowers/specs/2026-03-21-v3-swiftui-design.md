@@ -1,200 +1,309 @@
-# atask SwiftUI Desktop Client — Design Spec
+# atask SwiftUI Desktop Client — v3 Design Spec
 
-> **Status:** Design. Lessons from v1 (Dioxus subagent chaos) and v2 (Dioxus reactivity fights) applied.
+> **Status:** Design. Incorporates all lessons from v1/v2 and merges ALL planned features into a single coherent architecture.
 
-## Why SwiftUI
+## Why v3 / SwiftUI
 
-v1 and v2 used Dioxus (Rust + WebView). We hit:
-- Signal reactivity bugs (reads outside rsx!, async writes not propagating)
-- Keyboard event hijacking (WebView captures everything, no responder chain)
-- Drag-and-drop limitations (HTML5 drag in WebView is janky)
-- Context menus (custom JS, never native)
-- State architecture (no centralized store, views desync)
-- Constant framework fights that added zero user value
+v1 (Dioxus + subagents) and v2 (Dioxus + manual fixes) both failed on framework-level issues: signal reactivity bugs, keyboard hijacking, WebView drag-and-drop limitations, context menu hacks. SwiftUI eliminates these — keyboard shortcuts, drag-and-drop, context menus, and three-pane layout are all native primitives.
 
-SwiftUI gives us for free:
-- `@Observable` + `@State` — predictable, battle-tested state
-- `keyboardShortcut()` — native, respects first responder (inputs don't get hijacked)
-- `draggable()` / `dropDestination()` — OS-level drag-and-drop
-- `.contextMenu {}` — native context menus in one line
-- `NavigationSplitView` — three-pane layout natively
-- Native macOS look & feel (vibrancy, traffic lights, sidebar style)
+## Core Architecture: Local-First
 
-## What Carries Over From v2
+**The app works without a server.** Local SwiftData/SQLite is the source of truth. The server is optional — you configure it in settings, and sync happens in the background.
 
-### API (Go backend) — 100% reusable
-- All endpoints tested (45 Playwright tests pass)
-- Domain model validated (When model, view queries, etc.)
-- SSE working with entity_id in payloads
-- Checklist counts hydrated on GET /tasks/{id}
-- Tag uniqueness enforced
-- Project colors, section reorder, today-index, reopen — all done
+```
+┌──────────────────────────────┐
+│        SwiftUI Views         │  ← reads from local store
+│   (Sidebar, TaskList, Detail) │
+└──────────────┬───────────────┘
+               │ @Observable
+┌──────────────▼───────────────┐
+│         TaskStore            │  ← single source of truth
+│   (in-memory, backed by DB)  │
+└──────────────┬───────────────┘
+               │ read/write
+┌──────────────▼───────────────┐
+│     Local SQLite / SwiftData │  ← persistent, works offline
+│   ~/Library/.../atask.sqlite │
+└──────────────┬───────────────┘
+               │ background sync
+┌──────────────▼───────────────┐
+│         SyncEngine           │  ← optional, when server configured
+│  Outbound: queue + POST/PUT  │
+│  Inbound: SSE → upsert local │
+│  Conflict: server wins       │
+└──────────────┬───────────────┘
+               │ HTTP + SSE
+┌──────────────▼───────────────┐
+│       Go API Server          │  ← authoritative when connected
+│    (already built, tested)   │
+└──────────────────────────────┘
+```
 
-### Design Specs — 100% reusable
-- `docs/design_specs/DESIGN.md` — layout, components, views, keyboard shortcuts
-- `docs/design_specs/CLAUDE.md` — aesthetic rules (Bone theme, no animations, etc.)
-- `docs/design_specs/theme.css` — color tokens (translate to SwiftUI Color values)
+### Flow: Creating a Task
+1. User types title, presses Enter
+2. TaskStore creates task in local SQLite (instant, no network)
+3. UI updates immediately (observable)
+4. If server configured: SyncEngine queues the mutation
+5. Background: POST to API, mark as synced
+6. If offline: stays in queue, syncs when connection restored
+
+### Flow: Incoming SSE Event
+1. Server sends `task.completed` event
+2. SyncEngine receives it
+3. Fetch updated task via `GET /tasks/{entity_id}`
+4. Upsert into local SQLite
+5. TaskStore refreshes → UI updates
+
+## What Carries Over
+
+### API (Go backend) — 100% done
+- 45 Playwright API tests pass
+- All endpoints: CRUD, views, schedule, dates, tags, checklist, activity, SSE
+- Domain model: When model (schedule × start_date × deadline)
+- New endpoints: today-index, reopen, project color, section reorder
+- Tag uniqueness enforced (migration 003)
+
+### Design Specs — translate CSS to SwiftUI
+- `docs/design_specs/DESIGN.md` — layout, components, views
+- `docs/design_specs/CLAUDE.md` — aesthetic rules
+- `docs/design_specs/theme.css` — color tokens → Swift `Color` constants
 - `docs/design_specs/atask-screens-validation.html` — visual reference
 
-### Playwright Tests — 100% reusable
-- `e2e/` — 45 API workflow tests, all pass against Go server
-- These test the API, not the UI framework — work with any frontend
+### Playwright Tests — reusable
+- `e2e/` — test the API, not the UI framework
 
-### Business Rules — documented
-- When model (schedule × start_date × deadline)
-- View query rules (inbox excludes dated, someday excludes dated, etc.)
-- Full API endpoint reference in CLAUDE.md
+### Business Rules — documented in CLAUDE.md
+- View query logic (inbox/today/upcoming/someday/logbook)
+- Status integers: 0=pending, 1=completed, 2=cancelled
+- Schedule integers: 0=inbox, 1=anytime, 2=someday
+- Completion behavior: strikethrough, visible until next day
+- Projects nested under areas in sidebar
 
-## SwiftUI Architecture
+## Feature Inventory (ALL features, no phasing)
 
-### State: Single Observable TaskStore
+Everything below ships in v3. No "deferred" features.
 
-The #1 lesson from Dioxus: **one source of truth for all tasks.**
+### Layout
+- [x] Three-pane: `NavigationSplitView` (sidebar 240pt, content flex, detail 340pt)
+- [x] Sidebar: nav items (Inbox/Today/Upcoming/Someday/Logbook), areas with nested projects, + buttons
+- [x] Toolbar: view title + icon + date subtitle, search + new task buttons
+- [x] Detail panel: appears when task selected, 340pt right side
 
-```swift
-@Observable
-class TaskStore {
-    var tasks: [TaskModel] = []         // ALL tasks, fetched on load
-    var projects: [ProjectModel] = []
-    var areas: [AreaModel] = []
-    var tags: [TagModel] = []
+### Task Row (32pt, single line)
+- [x] Circular checkbox (20pt) — amber border in Today view
+- [x] Title — truncates with ellipsis
+- [x] Metadata (right-aligned): project pill (colored dot + name), deadline, today badge, checklist count ("3/5"), agent indicator
+- [x] Grip handle on hover (drag affordance)
+- [x] Completion: instant strikethrough, stays visible until next day
+- [x] Context menu (right-click): Complete, Schedule Today, Defer, Move to Project →, Set Date, Delete
 
-    // Computed views — derived from tasks, never stored separately
-    var inbox: [TaskModel] { tasks.filter { $0.schedule == .inbox && $0.startDate == nil && $0.status == .pending } }
-    var today: [TaskModel] { tasks.filter { $0.schedule == .anytime && ($0.startDate == nil || $0.startDate! <= Date()) && $0.status == .pending } }
-    var upcoming: [TaskModel] { tasks.filter { $0.startDate != nil && $0.startDate! > Date() && $0.schedule != .someday && $0.status == .pending } }
-    var someday: [TaskModel] { tasks.filter { $0.schedule == .someday && $0.startDate == nil && $0.status == .pending } }
-    var logbook: [TaskModel] { tasks.filter { $0.status == .completed || $0.status == .cancelled } }
+### Task Detail Panel
+- [x] Editable title (large, ghost input style)
+- [x] Schedule picker (Inbox / Today / Someday)
+- [x] Project picker (dropdown, colored dots)
+- [x] Start date picker (native DatePicker)
+- [x] Deadline picker
+- [x] Tag pills + add/remove
+- [x] Notes (TextEditor, markdown)
+- [x] Checklist (square checkboxes, add item, toggle)
+- [x] Activity stream (human + agent entries)
 
-    func tasksForProject(_ id: String) -> [TaskModel] { tasks.filter { $0.projectId == id && $0.status == .pending } }
-}
-```
+### Views
+- [x] Inbox: tasks with schedule=inbox AND no start_date, + New Task
+- [x] Today: schedule=anytime AND (no date OR date ≤ today), amber checkboxes
+- [x] Upcoming: date-grouped by start_date, section headers with relative dates
+- [x] Someday: flat list, schedule=someday AND no start_date
+- [x] Logbook: completed/cancelled grouped by date, reopen on checkbox click
+- [x] Project: sections with tasks, progress bar, + Add Section
 
-When a task is completed, `tasks` is updated once → all computed views update automatically. No signal juggling, no SSE refetch gymnastics.
+### Inbox Triage
+- [x] Hover quick-actions: ★ Today, 💤 Someday, 📁 Project
+- [x] Completing/triaging removes from inbox immediately
 
-### API Client
+### Command Palette (⌘K)
+- [x] 560pt overlay, centered
+- [x] Search: fuzzy match on commands AND task titles
+- [x] Categories: Navigation, Task Actions (context-aware), Creation
+- [x] Keyboard: ↑↓ navigate, Enter execute, Escape close
 
-Simple `URLSession` wrapper. Same patterns as the Rust client:
-- GET views return bare JSON arrays
-- Mutations return event envelopes
-- Bearer token auth
-- PascalCase JSON decoding via `JSONDecoder` with custom `CodingKeys`
+### Keyboard Shortcuts (native SwiftUI)
+- [x] ⌘K — command palette
+- [x] ⌘N — new task (focus inline input)
+- [x] ⌘1-5 — view navigation
+- [x] ⌘⇧C — complete selected task
+- [x] ⌘T — schedule for today
+- [x] ⌘D — set start date
+- [x] ⌘⇧D — set deadline
+- [x] ⌘⇧M — move to project
+- [x] ⌘⌫ — delete task
+- [x] Escape — close panel/palette
+- [x] ↑↓ — navigate task list
+- [x] Enter — open detail panel
+- [x] ⌘↑/⌘↓ — reorder task
 
-### SSE
+### Drag and Drop (native SwiftUI)
+- [x] Task rows draggable in Today/Someday/Project views
+- [x] Drop gap indicator (32pt space opens at drop position)
+- [x] Cross-section drag in project view
+- [x] Drag projects between areas in sidebar
 
-`URLSession` data task with streaming. Parse SSE protocol (same as Dioxus).
-On event: refetch ALL tasks from the API and replace the store. Simple and correct.
+### Context Menus (native SwiftUI)
+- [x] Task: Complete, Schedule Today, Defer, Move to Project →, Dates, Tags, Delete
+- [x] Project (sidebar): Rename, Set Color, Complete, Delete
+- [x] Section (header): Rename, Delete
+- [x] Area (sidebar): Rename, Archive, Delete
 
-Or better: parse the event, find the task by entity_id, fetch just that task via `GET /tasks/{id}`, and upsert into the store.
+### Settings (⌘,)
+- [x] Server URL (default: none — offline only)
+- [x] Auto-archive threshold (Never / 1 day / 1 week / 1 month)
+- [x] Stored in UserDefaults or local config
 
-### Keyboard Shortcuts
+### Date Formatting (relative)
+- [x] Today, Tomorrow, Yesterday, weekday name, "Last Monday", "Mar 25", "Mar 25, 2027"
+- [x] Deadline: "Due Tomorrow", "Due Today" (amber), "Overdue · Mar 18" (red)
 
-SwiftUI's `keyboardShortcut()` modifier:
-```swift
-Button("Go to Inbox") { store.activeView = .inbox }
-    .keyboardShortcut("1", modifiers: .command)
-```
-
-This automatically respects the first responder chain — typing in a TextField won't trigger shortcuts. The exact problem we couldn't solve in Dioxus.
-
-### Drag and Drop
-
-```swift
-TaskRow(task: task)
-    .draggable(task.id)
-
-TaskList()
-    .dropDestination(for: String.self) { taskIds, location in
-        // Reorder or move tasks
-    }
-```
-
-### Context Menus
-
-```swift
-TaskRow(task: task)
-    .contextMenu {
-        Button("Complete") { store.complete(task) }
-        Button("Schedule for Today") { store.scheduleToday(task) }
-        Divider()
-        Button("Delete", role: .destructive) { store.delete(task) }
-    }
-```
+### Sync (when server configured)
+- [x] SSE for inbound events → upsert local
+- [x] Outbound mutation queue → POST/PUT in background
+- [x] Retry with exponential backoff on failure
+- [x] Conflict resolution: server wins
+- [x] Bootstrap: fetch all data from API on first connect
 
 ## Project Structure
 
 ```
 atask/
-├── atask.xcodeproj
+├── atask.xcodeproj (or Package.swift for SPM)
 ├── atask/
-│   ├── ataskApp.swift              ← entry point, @main
-│   ├── Models/
-│   │   ├── TaskModel.swift         ← Codable struct matching Go API
+│   ├── ataskApp.swift                  ← @main, WindowGroup
+│   │
+│   ├── Models/                         ← Codable structs + SwiftData models
+│   │   ├── TaskModel.swift
 │   │   ├── ProjectModel.swift
 │   │   ├── AreaModel.swift
 │   │   ├── TagModel.swift
+│   │   ├── SectionModel.swift
 │   │   ├── ChecklistItem.swift
 │   │   └── Activity.swift
-│   ├── Store/
-│   │   ├── TaskStore.swift         ← @Observable, single source of truth
-│   │   ├── APIClient.swift         ← URLSession wrapper
-│   │   ├── SSEClient.swift         ← SSE streaming
-│   │   └── Credentials.swift       ← Keychain token storage
+│   │
+│   ├── Store/                          ← Business logic + state
+│   │   ├── TaskStore.swift             ← @Observable, computed views, mutations
+│   │   ├── LocalDatabase.swift         ← SwiftData/SQLite wrapper
+│   │   ├── APIClient.swift             ← URLSession, all endpoints
+│   │   ├── SSEClient.swift             ← EventSource streaming
+│   │   ├── SyncEngine.swift            ← Outbound queue + inbound merge
+│   │   └── Credentials.swift           ← Keychain storage
+│   │
 │   ├── Views/
-│   │   ├── ContentView.swift       ← NavigationSplitView (3-pane)
+│   │   ├── ContentView.swift           ← NavigationSplitView shell
 │   │   ├── Sidebar/
-│   │   │   └── SidebarView.swift
+│   │   │   └── SidebarView.swift       ← Nav items, areas with nested projects
 │   │   ├── TaskList/
-│   │   │   ├── TaskListView.swift  ← generic list used by all views
-│   │   │   ├── TaskRow.swift       ← single task row (32px)
-│   │   │   └── NewTaskRow.swift    ← inline creation
+│   │   │   ├── TaskListView.swift      ← Generic list, used by all views
+│   │   │   ├── TaskRow.swift           ← 32pt row with checkbox + title + meta
+│   │   │   ├── TaskMetaView.swift      ← Right-aligned pills (project, deadline, checklist)
+│   │   │   ├── NewTaskRow.swift        ← Inline creation (+ New Task → TextField)
+│   │   │   └── SectionHeaderView.swift ← Bold title + count + line
 │   │   ├── Detail/
-│   │   │   ├── TaskDetailView.swift
+│   │   │   ├── TaskDetailView.swift    ← Right panel, all fields editable
+│   │   │   ├── SchedulePicker.swift
+│   │   │   ├── ProjectPicker.swift
+│   │   │   ├── TagPicker.swift
 │   │   │   ├── ChecklistSection.swift
 │   │   │   └── ActivitySection.swift
-│   │   ├── CommandPalette/
-│   │   │   └── CommandPaletteView.swift
+│   │   ├── Overlays/
+│   │   │   ├── CommandPaletteView.swift
+│   │   │   └── SettingsView.swift
 │   │   └── Login/
-│   │       └── LoginView.swift
+│   │       └── LoginView.swift         ← Only if server configured + needs auth
+│   │
+│   ├── Theme/
+│   │   ├── Colors.swift                ← Bone theme colors as Swift constants
+│   │   ├── Typography.swift            ← Font definitions (Atkinson Hyperlegible)
+│   │   └── Spacing.swift               ← 4px-based spacing constants
+│   │
 │   └── Helpers/
-│       ├── DateFormatting.swift     ← relative date logic (port from Rust)
-│       └── Colors.swift            ← Bone theme colors
+│       ├── DateFormatting.swift         ← Relative date logic (port unit tests from Rust)
+│       └── KeyboardShortcuts.swift     ← Commands + shortcut definitions
+│
+├── ataskTests/
+│   ├── DateFormattingTests.swift
+│   ├── TaskStoreTests.swift
+│   ├── APIClientTests.swift
+│   └── SyncEngineTests.swift
+│
+├── e2e/                                ← Playwright API tests (from v2)
+│   ├── package.json
+│   ├── playwright.config.ts
+│   └── tests/
+│       ├── helpers.ts
+│       ├── today-view.spec.ts
+│       ├── tag-flow.spec.ts
+│       ├── missing-flows.spec.ts
+│       ├── full-coverage.spec.ts
+│       ├── checklist-counts.spec.ts
+│       └── keyboard-workflows.spec.ts
+│
+└── Assets/
+    └── Fonts/
+        └── AtkinsonHyperlegible-*.ttf
 ```
 
-## What NOT To Do (lessons from v1/v2)
+## Color Tokens (CSS → Swift)
 
-1. **Don't use separate state per view.** One `TaskStore`, computed views.
-2. **Don't refetch after every mutation.** Optimistic update the local store. SSE confirms.
-3. **Don't dispatch parallel agents for UI work.** One feature at a time, tested.
-4. **Don't skip manual testing.** Every feature verified by running the app.
-5. **Don't build all views at once.** Build Today first, end-to-end, then replicate.
-6. **Don't fight the framework.** Use SwiftUI patterns, not React/Dioxus patterns.
+```swift
+enum Theme {
+    // Canvas
+    static let canvas = Color(hex: "#f6f5f2")
+    static let canvasElevated = Color(hex: "#fefefe")
+    static let canvasSunken = Color(hex: "#eceae7")
 
-## Implementation Phases
+    // Ink
+    static let inkPrimary = Color(hex: "#222120")
+    static let inkSecondary = Color(hex: "#686664")
+    static let inkTertiary = Color(hex: "#a09e9a")
+    static let inkQuaternary = Color(hex: "#c8c6c2")
 
-### Phase 1: Foundation (same scope as Plan 1)
-- Xcode project + API client + models
-- TaskStore with computed views
-- Login + token storage (Keychain)
-- Sidebar + toolbar
-- Today view — end-to-end with real data
-- Verification: create, complete, select tasks
+    // Accent
+    static let accent = Color(hex: "#4670a0")
+    static let accentHover = Color(hex: "#3a5f8a")
 
-### Phase 2: All Views + Detail Panel
-- Inbox, Upcoming, Someday, Logbook, Project views
-- Task detail panel (right side)
-- All field editing (title, notes, schedule, dates, project, tags)
-- Checklist + activity display
+    // Semantic
+    static let todayStar = Color(hex: "#c88c30")
+    static let somedayTint = Color(hex: "#8878a0")
+    static let deadlineRed = Color(hex: "#c04848")
+    static let success = Color(hex: "#4a8860")
+    static let agentTint = Color(hex: "#7868a8")
+}
+```
 
-### Phase 3: Power Features
-- Command palette (⌘K) — NSPanel or sheet overlay
-- Keyboard shortcuts (native)
-- Drag-and-drop (native)
-- Context menus (native)
-- Settings (server URL, auto-archive)
+## What NOT To Do
 
-### Phase 4: Polish + Sync
-- SSE real-time updates
-- Local-first with Core Data or SQLite
-- Offline support
-- Dark mode (native)
+1. **Don't treat the API as source of truth.** Local DB is source of truth. API is sync target.
+2. **Don't refetch after mutations.** Write locally, sync in background.
+3. **Don't build separate state per view.** One TaskStore, computed views.
+4. **Don't dispatch parallel agents for UI.** One feature at a time, tested.
+5. **Don't skip manual testing.** Every feature verified by running the app.
+6. **Don't use UIKit patterns in SwiftUI.** Use `@Observable`, `NavigationSplitView`, `.contextMenu`, `.draggable`.
+7. **Don't defer "hard" features.** Keyboard shortcuts, drag-and-drop, context menus are EASIER in SwiftUI — build them from day one.
+8. **Don't animate state changes.** The design spec says instant everything. Use `.animation(.none)` where SwiftUI adds implicit animation.
+
+## Implementation Approach
+
+**No phases.** Build the full app feature-by-feature, in this order:
+
+1. **Models + Local DB** — SwiftData models, CRUD operations, unit tests
+2. **TaskStore** — @Observable with computed views, unit tests
+3. **App shell** — NavigationSplitView, sidebar, toolbar
+4. **Today view** — first working view with task rows, checkboxes, creation
+5. **Remaining views** — inbox, upcoming, someday, logbook, project (same pattern)
+6. **Detail panel** — all editable fields, pickers
+7. **Command palette** — overlay with search
+8. **Keyboard shortcuts** — native SwiftUI
+9. **Drag and drop** — native SwiftUI
+10. **Context menus** — native SwiftUI
+11. **Settings** — server URL, auto-archive
+12. **API client + Sync engine** — connect to server, SSE, outbound queue
+13. **Login** — only when server is configured
+
+Each step: build → test → verify in simulator → commit. No subagents.
