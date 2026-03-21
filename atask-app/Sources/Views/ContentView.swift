@@ -161,7 +161,7 @@ struct ContentView: View {
         let isSelected = store.selectedTaskId == task.id
 
         return HStack(spacing: 12) {
-            // Checkbox — 32x32 tap target around 20x20 circle
+            // Checkbox — large hit area
             Button {
                 if task.isCompleted {
                     store.reopenTask(task.id)
@@ -169,31 +169,26 @@ struct ContentView: View {
                     store.completeTask(task.id)
                 }
             } label: {
-                ZStack {
-                    // Invisible tap target
-                    Color.clear
-                        .frame(width: 32, height: 32)
-
-                    // Visible circle
-                    Circle()
-                        .strokeBorder(
-                            task.isCompleted ? Theme.accent :
-                            isToday ? Theme.todayStar :
-                            Theme.inkQuaternary,
-                            lineWidth: 1.5
-                        )
-                        .background(
-                            Circle().fill(task.isCompleted ? Theme.accent : .clear)
-                        )
-                        .frame(width: 20, height: 20)
-                        .overlay {
-                            if task.isCompleted {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.white)
-                            }
+                Circle()
+                    .strokeBorder(
+                        task.isCompleted ? Theme.accent :
+                        isToday ? Theme.todayStar :
+                        Theme.inkQuaternary,
+                        lineWidth: 1.5
+                    )
+                    .background(
+                        Circle().fill(task.isCompleted ? Theme.accent : .clear)
+                    )
+                    .frame(width: 20, height: 20)
+                    .overlay {
+                        if task.isCompleted {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
                         }
-                }
+                    }
+                    .padding(6) // expands tap target to 32x32
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
