@@ -89,7 +89,7 @@ Everything below ships in v3. No "deferred" features.
 - [x] Toolbar: view title + icon + date subtitle, search + new task buttons
 - [x] Detail panel: appears when task selected, 340pt right side
 
-### Task Row (32pt, single line)
+### Task Row (32pt, single line — collapsed state)
 - [x] Circular checkbox (20pt) — amber border in Today view
 - [x] Title — truncates with ellipsis
 - [x] Metadata (right-aligned): project pill (colored dot + name), deadline, today badge, checklist count ("3/5"), agent indicator
@@ -97,7 +97,80 @@ Everything below ships in v3. No "deferred" features.
 - [x] Completion: instant strikethrough, stays visible until next day
 - [x] Context menu (right-click): Complete, Schedule Today, Defer, Move to Project →, Set Date, Delete
 
-### Task Detail Panel
+### Inline Task Editor (Things-style expanded card)
+
+When a task is clicked OR a new task is created, the row expands into an inline editor card. This is the PRIMARY editing surface — not the detail panel.
+
+**Layout (expanded card):**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  ○  Task title (editable, large)                                    │
+│                                                                     │
+│     Notes area (editable, smaller text, auto-grows)                 │
+│     URLs detected and shown as clickable links                      │
+│                                                                     │
+│  ★ Today ✕                              🏷 Tags  ☰ Checklist  🗓 Deadline  │
+│                                         ○ Project Browser >         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Components:**
+- Top: checkbox + editable title (TextField, large font)
+- Middle: notes (TextEditor, auto-grows, detects URLs as clickable links)
+- Bottom-left: schedule badge (★ Today with ✕ to remove, or schedule indicator)
+- Bottom-right: action icons — Tags, Checklist, Deadline/Date, then Project selector below
+
+**Bottom bar action icons:**
+- 🏷 Tags icon — opens tag picker popover (searchable dropdown, dark theme)
+- ☰ Checklist icon — toggles checklist section visibility within the card
+- 🗓 Deadline icon — opens "When" picker popover
+
+**"When" picker popover (Things-style):**
+```
+┌─────────────────────────┐
+│  When                   │  ← searchable field
+├─────────────────────────┤
+│  ★ Today          ✓     │  ← current selection highlighted
+│  🌙 This Evening        │
+├─────────────────────────┤
+│  Mon Tue Wed Thu Fri Sat Sun │  ← calendar grid
+│  23  24  25  26  27  28  29  │
+│  30  31   1   2   3   4   5  │
+│  ...                         │
+├─────────────────────────┤
+│  📦 Someday              │
+│  + Add Reminder          │
+├─────────────────────────┤
+│  [ Clear ]               │  ← clears schedule/date
+└─────────────────────────┘
+```
+
+Selecting "Today" sets schedule=anytime. Selecting a date sets start_date. Selecting "Someday" sets schedule=someday. "Clear" removes schedule and date.
+
+**Tag picker popover:**
+- Dark-themed dropdown
+- Search field at top ("Tags")
+- List of all tags with icons
+- Click to toggle tag on/off
+
+**Behavior:**
+- Click task row → expands inline (other expanded cards collapse)
+- Click outside or press Escape → collapse back to single-line row
+- ⌘N → creates new task and opens inline editor immediately
+- All changes save locally instantly (local-first)
+- Only ONE card expanded at a time
+
+**New task creation flow:**
+1. Click "+ New Task" or press ⌘N
+2. New task created in local store
+3. Inline editor opens with cursor in title field
+4. Type title, optionally set tags/date/project via bottom bar
+5. Click outside or Escape → card collapses to normal row
+
+### Task Detail Panel (340pt right side — full view)
+
+The detail panel is for FULL task view when you want to see everything. It appears when you explicitly open it (Enter key or double-click). It shows ALL fields including activity stream.
+
 - [x] Editable title (large, ghost input style)
 - [x] Schedule picker (Inbox / Today / Someday)
 - [x] Project picker (dropdown, colored dots)
@@ -293,17 +366,19 @@ enum Theme {
 **No phases.** Build the full app feature-by-feature, in this order:
 
 1. **Models + Local DB** — SwiftData models, CRUD operations, unit tests
-2. **TaskStore** — @Observable with computed views, unit tests
-3. **App shell** — NavigationSplitView, sidebar, toolbar
-4. **Today view** — first working view with task rows, checkboxes, creation
-5. **Remaining views** — inbox, upcoming, someday, logbook, project (same pattern)
-6. **Detail panel** — all editable fields, pickers
-7. **Command palette** — overlay with search
-8. **Keyboard shortcuts** — native SwiftUI
-9. **Drag and drop** — native SwiftUI
-10. **Context menus** — native SwiftUI
-11. **Settings** — server URL, auto-archive
-12. **API client + Sync engine** — connect to server, SSE, outbound queue
-13. **Login** — only when server is configured
+2. **TaskStore** — @Observable with computed views, mutations, unit tests
+3. **Theme + helpers** — colors, typography, date formatting (with unit tests)
+4. **App shell** — NavigationSplitView, sidebar (areas + nested projects), toolbar
+5. **Task row + inline editor** — collapsed row (32pt) + expanded inline card (Things-style). This is THE core interaction — clicking expands, editing saves locally, click outside collapses. Includes "When" picker, tag picker, checklist toggle.
+6. **Today view** — first working view with task rows, amber checkboxes, inline creation via ⌘N
+7. **Remaining views** — inbox (with triage actions), upcoming (date-grouped), someday, logbook (with reopen), project (with sections)
+8. **Detail panel** — full task view (right side), all fields, checklist, activity
+9. **Keyboard shortcuts** — native SwiftUI (⌘K, ⌘1-5, ⌘N, ⌘⇧C, ⌘T, etc.)
+10. **Command palette** — ⌘K overlay with fuzzy search on commands + tasks
+11. **Drag and drop** — native SwiftUI (.draggable, .dropDestination), gap indicator
+12. **Context menus** — native SwiftUI (.contextMenu) on tasks, projects, sections, areas
+13. **Settings** — server URL, auto-archive threshold
+14. **API client + Sync engine** — connect to server, SSE inbound, outbound queue
+15. **Login** — only when server configured + needs auth
 
 Each step: build → test → verify in simulator → commit. No subagents.
