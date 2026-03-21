@@ -6,6 +6,41 @@
 
 v1 (Dioxus + subagents) and v2 (Dioxus + manual fixes) both failed on framework-level issues: signal reactivity bugs, keyboard hijacking, WebView drag-and-drop limitations, context menu hacks. SwiftUI eliminates these — keyboard shortcuts, drag-and-drop, context menus, and three-pane layout are all native primitives.
 
+## Tech Decisions
+
+- **SQLite via GRDB.swift** — raw SQL control, schema matches Go backend, supports migrations
+- **Xcode project** — standard for macOS apps, SwiftUI Previews for hot reload
+- **macOS 15 Sequoia** minimum — gives us latest SwiftUI features
+- **Atkinson Hyperlegible** — bundled font
+- **InjectionIII** (optional) — hot reload for running app during development
+
+## API Addition: Time Slots (Morning / Evening)
+
+Things has "This Evening" as a sub-state of Today. We add a `time_slot` field to tasks:
+
+| Field | Type | Values |
+|-------|------|--------|
+| `time_slot` | TEXT nullable | `null` (default), `"morning"`, `"evening"` |
+
+Orthogonal to schedule — a task with `schedule=anytime` and `time_slot="evening"` shows in Today under "This Evening" section.
+
+**Go API changes needed:**
+- Migration 004: `ALTER TABLE tasks ADD COLUMN time_slot TEXT;`
+- `PUT /tasks/{id}/time-slot` body `{"time_slot": "evening"}` or `{"time_slot": null}`
+- ViewToday query: order by `time_slot` (null first = morning/default, "evening" last)
+- Domain event: `task.time_slot_set`
+
+**SwiftUI Today view:**
+```
+[Morning tasks — time_slot is null]
+  ○ Design component library
+  ○ Write documentation
+
+This Evening
+  ○ Research SwiftUI patterns
+  ○ Review PR
+```
+
 ## Core Architecture: Local-First
 
 **The app works without a server.** Local SwiftData/SQLite is the source of truth. The server is optional — you configure it in settings, and sync happens in the background.
