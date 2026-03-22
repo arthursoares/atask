@@ -210,6 +210,19 @@ actor APIClient {
         try await get("/sync/deltas?since=\(since)")
     }
 
+    // MARK: - Generic Request (for sync engine)
+
+    /// Execute a raw HTTP request — used by SyncEngine to replay pending ops.
+    func execute(method: String, path: String, body: String?) async throws {
+        var request = try makeRequest(path, method: method)
+        if let body, let data = body.data(using: .utf8) {
+            request.httpBody = data
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        let (data, response) = try await session.data(for: request)
+        try checkResponse(response, data: data)
+    }
+
     // MARK: - Generic HTTP
 
     private struct EmptyBody: Codable {}
@@ -271,7 +284,7 @@ actor APIClient {
     }
 }
 
-enum APIError: Error, LocalizedError {
+enum APIError: Error, LocalizedError, Equatable {
     case notConfigured
     case invalidResponse
     case unauthorized

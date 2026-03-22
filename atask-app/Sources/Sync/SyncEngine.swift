@@ -83,29 +83,43 @@ class SyncEngine {
         }
     }
 
-    private func flushPendingOps() async throws {
-        struct PendingOp: FetchableRecord, Codable {
-            let id: Int
-            let method: String
-            let path: String
-            let body: String?
-        }
+    private struct PendingOp: FetchableRecord, Codable {
+        let id: Int
+        let method: String
+        let path: String
+        let body: String?
+    }
 
+    private func flushPendingOps() async throws {
         let ops: [PendingOp] = try await db.dbQueue.read { db in
             try PendingOp.fetchAll(db, sql: "SELECT id, method, path, body FROM pendingOps WHERE synced = 0 ORDER BY id")
         }
 
         for op in ops {
-            print("[SyncEngine] Would flush: \(op.method) \(op.path)")
-
-            try await db.dbQueue.write { db in
-                try db.execute(sql: "UPDATE pendingOps SET synced = 1 WHERE id = ?", arguments: [op.id])
+            do {
+                try await executeOp(op)
+                try await db.dbQueue.write { db in
+                    try db.execute(sql: "UPDATE pendingOps SET synced = 1 WHERE id = ?", arguments: [op.id])
+                }
+            } catch let error as APIError where error == .notFound {
+                // Entity deleted on server — mark synced, skip
+                try await db.dbQueue.write { db in
+                    try db.execute(sql: "UPDATE pendingOps SET synced = 1 WHERE id = ?", arguments: [op.id])
+                }
+            } catch {
+                // Stop flushing on network/auth errors — retry next cycle
+                print("[SyncEngine] Flush op \(op.id) failed: \(error)")
+                break
             }
         }
 
         try await db.dbQueue.write { db in
             try db.execute(sql: "DELETE FROM pendingOps WHERE synced = 1")
         }
+    }
+
+    private func executeOp(_ op: PendingOp) async throws {
+        try await api.execute(method: op.method, path: op.path, body: op.body)
     }
 
     // MARK: - Inbound: Delta Events

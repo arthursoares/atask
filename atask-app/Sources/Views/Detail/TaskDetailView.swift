@@ -215,17 +215,30 @@ struct TaskDetailView: View {
                         ChecklistSection(store: store, taskId: taskId)
 
                         // ACTIVITY
-                        VStack(alignment: .leading, spacing: Spacing.sp1) {
+                        VStack(alignment: .leading, spacing: Spacing.sp2) {
                             Text("ACTIVITY")
                                 .font(.groupLabel)
                                 .foregroundStyle(Theme.inkTertiary)
                                 .textCase(.uppercase)
                                 .tracking(0.5)
 
-                            // TODO: activity entries
-                            Text("No activity yet")
-                                .font(.metadataRegular)
-                                .foregroundStyle(Theme.inkTertiary)
+                            ForEach(activityEntries(task), id: \.label) { entry in
+                                HStack(alignment: .top, spacing: Spacing.sp2) {
+                                    Image(systemName: entry.icon)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Theme.inkTertiary)
+                                        .frame(width: 14, alignment: .center)
+                                        .padding(.top, 2)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(entry.label)
+                                            .font(.metadataRegular)
+                                            .foregroundStyle(Theme.inkSecondary)
+                                        Text(entry.date)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(Theme.inkTertiary)
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, Spacing.sp5)
@@ -282,5 +295,46 @@ struct TaskDetailView: View {
         case 2: "Someday"
         default: "Unknown"
         }
+    }
+
+    // ── Activity ──
+
+    private struct ActivityEntry {
+        let icon: String
+        let label: String
+        let date: String
+    }
+
+    private func activityEntries(_ task: TaskModel) -> [ActivityEntry] {
+        var entries: [ActivityEntry] = []
+
+        // Created
+        entries.append(ActivityEntry(
+            icon: "plus.circle",
+            label: "Created",
+            date: DateFormatting.formatRelative(task.createdAt)
+        ))
+
+        // Completed or cancelled
+        if let completedAt = task.completedAt {
+            let label = task.isCancelled ? "Cancelled" : "Completed"
+            let icon = task.isCancelled ? "xmark.circle" : "checkmark.circle"
+            entries.append(ActivityEntry(
+                icon: icon,
+                label: label,
+                date: DateFormatting.formatRelative(completedAt)
+            ))
+        }
+
+        // Last updated (only if different from created)
+        if task.updatedAt != task.createdAt {
+            entries.append(ActivityEntry(
+                icon: "pencil.circle",
+                label: "Last modified",
+                date: DateFormatting.formatRelative(task.updatedAt)
+            ))
+        }
+
+        return entries.reversed() // Most recent first
     }
 }
