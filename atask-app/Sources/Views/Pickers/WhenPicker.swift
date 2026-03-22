@@ -56,7 +56,7 @@ struct WhenPicker: View {
                     } label: {
                         HStack {
                             let task = store.tasks.first { $0.id == taskId }
-                            Text(task?.startDate ?? "None")
+                            Text(task?.startDate.map { DateFormatting.formatRelative($0) } ?? "None")
                                 .font(.metadataRegular)
                                 .foregroundStyle(Theme.inkSecondary)
                             Spacer()
@@ -105,7 +105,7 @@ struct WhenPicker: View {
                     } label: {
                         HStack {
                             let task = store.tasks.first { $0.id == taskId }
-                            Text(task?.deadline ?? "None")
+                            Text(task?.deadline.map { DateFormatting.formatRelative($0) } ?? "None")
                                 .font(.metadataRegular)
                                 .foregroundStyle(Theme.inkSecondary)
                             Spacer()

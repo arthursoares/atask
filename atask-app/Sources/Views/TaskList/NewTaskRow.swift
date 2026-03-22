@@ -6,6 +6,7 @@ struct NewTaskRow: View {
 
     @State private var editing = false
     @State private var title = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         if editing {
@@ -18,9 +19,11 @@ struct NewTaskRow: View {
                 TextField("New Task", text: $title)
                     .textFieldStyle(.plain)
                     .font(.taskTitle)
+                    .focused($isFocused)
                     .onSubmit {
                         if !title.isEmpty { onCreate(title) }
                         title = ""
+                        isFocused = true
                     }
                     .onExitCommand {
                         title = ""

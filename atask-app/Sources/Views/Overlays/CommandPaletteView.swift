@@ -108,6 +108,9 @@ struct CommandPaletteView: View {
             selectedIndex = 0
             query = ""
         }
+        .onChange(of: query) { _, _ in
+            selectedIndex = 0
+        }
         .onKeyPress(.upArrow) {
             selectedIndex = max(0, selectedIndex - 1)
             return .handled

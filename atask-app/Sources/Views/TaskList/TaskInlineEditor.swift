@@ -28,7 +28,10 @@ struct TaskInlineEditor: View {
                     CheckboxView(
                         isChecked: task.isCompleted,
                         isToday: store.activeView == .today,
-                        onToggle: { store.completeTask(taskId) }
+                        onToggle: {
+                            if task.isCompleted { store.reopenTask(taskId) }
+                            else { store.completeTask(taskId) }
+                        }
                     )
 
                     TextField("What needs to happen?", text: $titleDraft)

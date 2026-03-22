@@ -21,8 +21,8 @@ struct SidebarView: View {
             Section {
                 navRow("Inbox", icon: "tray", color: nil, tag: .inbox, count: store.inbox.count)
                 navRow("Today", icon: "star.fill", color: Theme.todayStar, tag: .today, count: store.today.count)
-                navRow("Upcoming", icon: "calendar", color: nil, tag: .upcoming, count: 0)
-                navRow("Someday", icon: "clock", color: Theme.somedayTint, tag: .someday, count: 0)
+                navRow("Upcoming", icon: "calendar", color: nil, tag: .upcoming, count: store.upcoming.count)
+                navRow("Someday", icon: "clock", color: Theme.somedayTint, tag: .someday, count: store.someday.count)
                 navRow("Logbook", icon: "archivebox", color: nil, tag: .logbook, count: 0)
             }
 

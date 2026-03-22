@@ -261,7 +261,8 @@ actor APIClient {
 
     private func makeRequest(_ path: String, method: String) throws -> URLRequest {
         guard let base = baseURL else { throw APIError.notConfigured }
-        var request = URLRequest(url: base.appendingPathComponent(path))
+        guard let url = URL(string: path, relativeTo: base) else { throw APIError.invalidResponse }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

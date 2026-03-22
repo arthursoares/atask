@@ -90,16 +90,10 @@ class TaskStore {
     /// Returns true if the task was completed today (stays visible with strikethrough)
     private func completedToday(_ task: TaskModel) -> Bool {
         guard task.isCompleted, let completedAt = task.completedAt else { return false }
-        // Parse the ISO date and check if it's today in local timezone
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        guard let date = iso.date(from: completedAt) else {
-            // Fallback: try prefix match
+        guard let date = DateFormatting.parseDate(completedAt) else {
             return completedAt.hasPrefix(DateFormatting.todayString())
         }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        return fmt.string(from: date) == DateFormatting.todayString()
+        return DateFormatting.dateString(date) == DateFormatting.todayString()
     }
 
     // MARK: - Task Mutations (local-first)
@@ -122,7 +116,7 @@ class TaskStore {
         persist(task)
         tasks.append(task)
         let scheduleStr = ["inbox", "anytime", "someday"][task.schedule]
-        onMutation?("POST", "/tasks", "{\"title\":\"\(task.title)\",\"schedule\":\"\(scheduleStr)\"}")
+        onMutation?("POST", "/tasks", jsonBody(["title": task.title, "schedule": scheduleStr]))
         return task
     }
 
@@ -158,7 +152,7 @@ class TaskStore {
         tasks[idx].title = title
         tasks[idx].touch()
         persist(tasks[idx])
-        onMutation?("PUT", "/tasks/\(id)/title", "{\"title\":\"\(title)\"}")
+        onMutation?("PUT", "/tasks/\(id)/title", jsonBody(["title": title]))
     }
 
     func updateNotes(_ id: String, _ notes: String) {
@@ -166,7 +160,7 @@ class TaskStore {
         tasks[idx].notes = notes
         tasks[idx].touch()
         persist(tasks[idx])
-        onMutation?("PUT", "/tasks/\(id)/notes", "{\"notes\":\"\(notes)\"}")
+        onMutation?("PUT", "/tasks/\(id)/notes", jsonBody(["notes": notes]))
     }
 
     func setSchedule(_ id: String, _ schedule: Int) {
@@ -175,7 +169,7 @@ class TaskStore {
         tasks[idx].touch()
         persist(tasks[idx])
         let scheduleStr = ["inbox", "anytime", "someday"][schedule]
-        onMutation?("PUT", "/tasks/\(id)/schedule", "{\"schedule\":\"\(scheduleStr)\"}")
+        onMutation?("PUT", "/tasks/\(id)/schedule", jsonBody(["schedule": scheduleStr]))
     }
 
     func setTimeSlot(_ id: String, _ slot: String?) {
@@ -183,7 +177,7 @@ class TaskStore {
         tasks[idx].timeSlot = slot
         tasks[idx].touch()
         persist(tasks[idx])
-        let json = slot.map { "{\"time_slot\":\"\($0)\"}" } ?? "{\"time_slot\":null}"
+        let json = slot.map { jsonBody(["time_slot": $0]) } ?? jsonBody(["time_slot": NSNull()])
         onMutation?("PUT", "/tasks/\(id)/time-slot", json)
     }
 
@@ -192,7 +186,7 @@ class TaskStore {
         tasks[idx].startDate = date
         tasks[idx].touch()
         persist(tasks[idx])
-        let json = date.map { "{\"start_date\":\"\($0)\"}" } ?? "{\"start_date\":null}"
+        let json = date.map { jsonBody(["start_date": $0]) } ?? jsonBody(["start_date": NSNull()])
         onMutation?("PUT", "/tasks/\(id)/start-date", json)
     }
 
@@ -201,7 +195,7 @@ class TaskStore {
         tasks[idx].deadline = date
         tasks[idx].touch()
         persist(tasks[idx])
-        let json = date.map { "{\"deadline\":\"\($0)\"}" } ?? "{\"deadline\":null}"
+        let json = date.map { jsonBody(["deadline": $0]) } ?? jsonBody(["deadline": NSNull()])
         onMutation?("PUT", "/tasks/\(id)/deadline", json)
     }
 
@@ -211,7 +205,7 @@ class TaskStore {
         if projectId == nil { tasks[idx].sectionId = nil }
         tasks[idx].touch()
         persist(tasks[idx])
-        let json = projectId.map { "{\"project_id\":\"\($0)\"}" } ?? "{\"project_id\":null}"
+        let json = projectId.map { jsonBody(["project_id": $0]) } ?? jsonBody(["project_id": NSNull()])
         onMutation?("PUT", "/tasks/\(id)/project", json)
     }
 
@@ -240,6 +234,7 @@ class TaskStore {
             tasks[idx].touch()
             persist(tasks[idx])
         }
+        onMutation?("PUT", "/tasks/\(id)/reorder", jsonBody(["index": newIndex]))
     }
 
     func moveTaskUp(_ id: String) {
@@ -297,10 +292,10 @@ class TaskStore {
         }
         // Remove sections
         sections.removeAll { $0.projectId == id }
-        // Remove project
         projects.removeAll { $0.id == id }
         do {
             try db.dbQueue.write { db in
+                try db.execute(sql: "DELETE FROM sections WHERE projectId = ?", arguments: [id])
                 _ = try ProjectModel.deleteOne(db, id: id)
             }
         } catch {
@@ -508,10 +503,18 @@ class TaskStore {
     func persist(task: inout TaskModel) {
         do {
             try db.dbQueue.write { db in try task.save(db) }
-            tasks.append(task)
+            if !tasks.contains(where: { $0.id == task.id }) {
+                tasks.append(task)
+            }
         } catch {
             print("[TaskStore] Persist task failed: \(error)")
         }
+    }
+
+    private func jsonBody(_ dict: [String: Any?]) -> String? {
+        let cleaned = dict.compactMapValues { $0 }
+        guard let data = try? JSONSerialization.data(withJSONObject: cleaned) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     private func persist(_ record: some PersistableRecord) {

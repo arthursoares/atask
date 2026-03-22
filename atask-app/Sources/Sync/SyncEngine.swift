@@ -95,51 +95,7 @@ class SyncEngine {
         lastSyncError = nil
 
         do {
-            // Pull tasks
-            let remoteTasks = try await api.listTasks()
-            try await db.dbQueue.write { db in
-                for rt in remoteTasks {
-                    let status: Int = rt.status == "completed" ? 1 : rt.status == "cancelled" ? 2 : 0
-                    let schedule: Int = rt.schedule == "anytime" ? 1 : rt.schedule == "someday" ? 2 : 0
-                    try db.execute(sql: """
-                        INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt,
-                            \("index"), todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus)
-                        VALUES (?, ?, '', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 1)
-                        ON CONFLICT(id) DO UPDATE SET
-                            title=excluded.title, status=excluded.status, schedule=excluded.schedule,
-                            startDate=excluded.startDate, deadline=excluded.deadline, completedAt=excluded.completedAt,
-                            todayIndex=excluded.todayIndex, timeSlot=excluded.timeSlot,
-                            projectId=excluded.projectId, sectionId=excluded.sectionId, areaId=excluded.areaId,
-                            updatedAt=excluded.updatedAt, syncStatus=1
-                    """, arguments: [
-                        rt.id, rt.title, status, schedule,
-                        rt.startDate, rt.deadline, rt.completedAt,
-                        rt.todayIndex, rt.timeSlot,
-                        rt.projectId, rt.sectionId, rt.areaId,
-                        rt.createdAt, rt.updatedAt
-                    ])
-                }
-            }
-
-            // Pull projects
-            let remoteProjects = try await api.listProjects()
-            try await db.dbQueue.write { db in
-                for rp in remoteProjects {
-                    try db.execute(sql: """
-                        INSERT INTO projects (id, title, notes, status, color, areaId, \("index"), completedAt, createdAt, updatedAt)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            title=excluded.title, notes=excluded.notes, status=excluded.status,
-                            color=excluded.color, areaId=excluded.areaId, completedAt=excluded.completedAt,
-                            updatedAt=excluded.updatedAt
-                    """, arguments: [
-                        rp.id, rp.title, rp.notes, rp.status, rp.color,
-                        rp.areaId, rp.index, rp.completedAt, rp.createdAt, rp.updatedAt
-                    ])
-                }
-            }
-
-            // Pull areas
+            // Pull areas (before projects/tasks due to FK constraints)
             let remoteAreas = try await api.listAreas()
             try await db.dbQueue.write { db in
                 for ra in remoteAreas {
@@ -160,6 +116,50 @@ class SyncEngine {
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET title=excluded.title, updatedAt=excluded.updatedAt
                     """, arguments: [rt.id, rt.title, rt.index, rt.createdAt, rt.updatedAt])
+                }
+            }
+
+            // Pull projects (before tasks due to FK constraints)
+            let remoteProjects = try await api.listProjects()
+            try await db.dbQueue.write { db in
+                for rp in remoteProjects {
+                    try db.execute(sql: """
+                        INSERT INTO projects (id, title, notes, status, color, areaId, \("index"), completedAt, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title=excluded.title, notes=excluded.notes, status=excluded.status,
+                            color=excluded.color, areaId=excluded.areaId, completedAt=excluded.completedAt,
+                            updatedAt=excluded.updatedAt
+                    """, arguments: [
+                        rp.id, rp.title, rp.notes, rp.status, rp.color,
+                        rp.areaId, rp.index, rp.completedAt, rp.createdAt, rp.updatedAt
+                    ])
+                }
+            }
+
+            // Pull tasks (after projects/areas to satisfy FK constraints)
+            let remoteTasks = try await api.listTasks()
+            try await db.dbQueue.write { db in
+                for rt in remoteTasks {
+                    let status: Int = rt.status == "completed" ? 1 : rt.status == "cancelled" ? 2 : 0
+                    let schedule: Int = rt.schedule == "anytime" ? 1 : rt.schedule == "someday" ? 2 : 0
+                    try db.execute(sql: """
+                        INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt,
+                            \("index"), todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 1)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title=excluded.title, notes=excluded.notes, status=excluded.status, schedule=excluded.schedule,
+                            startDate=excluded.startDate, deadline=excluded.deadline, completedAt=excluded.completedAt,
+                            todayIndex=excluded.todayIndex, timeSlot=excluded.timeSlot,
+                            projectId=excluded.projectId, sectionId=excluded.sectionId, areaId=excluded.areaId,
+                            updatedAt=excluded.updatedAt, syncStatus=1
+                    """, arguments: [
+                        rt.id, rt.title, rt.notes, status, schedule,
+                        rt.startDate, rt.deadline, rt.completedAt,
+                        rt.todayIndex, rt.timeSlot,
+                        rt.projectId, rt.sectionId, rt.areaId,
+                        rt.createdAt, rt.updatedAt
+                    ])
                 }
             }
 
@@ -259,6 +259,12 @@ class SyncEngine {
                 // Allowlisted tables to prevent SQL injection via entityType
                 let allowedTables = ["task", "project", "area", "section", "tag"]
                 guard allowedTables.contains(delta.entityType) else { return }
+                let allowedFields: Set<String> = [
+                    "title", "notes", "status", "schedule", "startDate", "deadline",
+                    "completedAt", "index", "todayIndex", "timeSlot", "projectId",
+                    "sectionId", "areaId", "color", "archived"
+                ]
+                guard allowedFields.contains(delta.field) else { return }
                 let table = delta.entityType + "s"
                 let sql = "UPDATE \(table) SET \"\(delta.field)\" = ? WHERE id = ?"
                 try db.execute(sql: sql, arguments: [delta.newValue, delta.entityId])

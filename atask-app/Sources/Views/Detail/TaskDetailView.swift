@@ -247,6 +247,9 @@ struct TaskDetailView: View {
             }
             .frame(width: Spacing.detailWidth)
             .background(Theme.canvasElevated)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Theme.border).frame(width: 1)
+            }
             .onAppear { initDrafts(task) }
             .onChange(of: store.selectedTaskId) { _, _ in
                 if let newTask = store.tasks.first(where: { $0.id == store.selectedTaskId }) {

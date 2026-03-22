@@ -11,6 +11,10 @@ enum DateFormatting {
         dayFormatter.string(from: Date())
     }
 
+    static func dateString(_ date: Date) -> String {
+        dayFormatter.string(from: date)
+    }
+
     static func formatRelative(_ dateStr: String) -> String {
         guard let date = parseDate(dateStr) else { return dateStr }
         let cal = Calendar.current

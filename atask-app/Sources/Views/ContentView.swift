@@ -228,9 +228,9 @@ struct ContentView: View {
                     sectionHeader("This Evening")
                     projectGroupedTasks(evening)
                 }
+                NewTaskRow { title in store.createTask(title: title) }
             }
         }
-        NewTaskRow { title in store.createTask(title: title) }
     }
 
     // ── Upcoming: grouped by startDate ──
@@ -427,9 +427,12 @@ struct ContentView: View {
             .frame(width: 500)
         }
         .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture().onEnded {
+        .onTapGesture(count: 2) {
             store.selectedTaskId = task.id
             store.expandedTaskId = task.id
+        }
+        .simultaneousGesture(TapGesture().onEnded {
+            store.selectedTaskId = task.id
         })
         .dropDestination(for: String.self) { droppedIds, _ in
             guard let draggedId = droppedIds.first else { return false }
