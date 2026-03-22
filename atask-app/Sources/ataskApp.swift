@@ -22,6 +22,10 @@ struct ataskApp: App {
                     if !serverURL.isEmpty {
                         await syncEngine.api.configure(baseURL: serverURL, token: token)
                         syncEngine.startPeriodicSync()
+                        syncEngine.onRemoteChange = { [weak store] in store?.reload() }
+                        if let token {
+                            syncEngine.startSSE(baseURL: serverURL, token: token)
+                        }
                     }
                 }
         }

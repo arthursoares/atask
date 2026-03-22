@@ -19,6 +19,10 @@ class SyncEngine {
     private(set) var lastDeltaId: Int = 0
 
     private var syncTask: Task<Void, Never>?
+    private var sseClient: SSEClient?
+
+    /// Called when SSE receives a remote change — store should reload.
+    var onRemoteChange: (@Sendable @MainActor () -> Void)?
 
     init(api: APIClient, db: LocalDatabase) {
         self.api = api
@@ -41,6 +45,20 @@ class SyncEngine {
     func stopSync() {
         syncTask?.cancel()
         syncTask = nil
+        Task { await sseClient?.disconnect() }
+    }
+
+    /// Start SSE for real-time server push.
+    func startSSE(baseURL: String, token: String) {
+        sseClient = SSEClient { [weak self] eventType, _ in
+            print("[SSE] Event: \(eventType)")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.pullDeltas()
+                self.onRemoteChange?()
+            }
+        }
+        Task { await sseClient?.connect(baseURL: baseURL, token: token) }
     }
 
     // MARK: - Full Sync
@@ -57,10 +75,99 @@ class SyncEngine {
             try await flushPendingOps()
 
             // 2. Pull inbound deltas
-            try await pullDeltas()
+            try await pullDeltasInternal()
         } catch {
             lastSyncError = error.localizedDescription
             print("[SyncEngine] Sync failed: \(error)")
+        }
+
+        isSyncing = false
+    }
+
+    // MARK: - Initial Full Sync
+
+    /// Pull all entities from server on first connect.
+    /// Merges by ID — server data overwrites local for matching IDs,
+    /// local-only records are preserved.
+    func initialSync(reloadStore: @escaping () -> Void) async {
+        guard await api.isConfigured else { return }
+        isSyncing = true
+        lastSyncError = nil
+
+        do {
+            // Pull tasks
+            let remoteTasks = try await api.listTasks()
+            try await db.dbQueue.write { db in
+                for rt in remoteTasks {
+                    let status: Int = rt.status == "completed" ? 1 : rt.status == "cancelled" ? 2 : 0
+                    let schedule: Int = rt.schedule == "anytime" ? 1 : rt.schedule == "someday" ? 2 : 0
+                    try db.execute(sql: """
+                        INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt,
+                            \("index"), todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus)
+                        VALUES (?, ?, '', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 1)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title=excluded.title, status=excluded.status, schedule=excluded.schedule,
+                            startDate=excluded.startDate, deadline=excluded.deadline, completedAt=excluded.completedAt,
+                            todayIndex=excluded.todayIndex, timeSlot=excluded.timeSlot,
+                            projectId=excluded.projectId, sectionId=excluded.sectionId, areaId=excluded.areaId,
+                            updatedAt=excluded.updatedAt, syncStatus=1
+                    """, arguments: [
+                        rt.id, rt.title, status, schedule,
+                        rt.startDate, rt.deadline, rt.completedAt,
+                        rt.todayIndex, rt.timeSlot,
+                        rt.projectId, rt.sectionId, rt.areaId,
+                        rt.createdAt, rt.updatedAt
+                    ])
+                }
+            }
+
+            // Pull projects
+            let remoteProjects = try await api.listProjects()
+            try await db.dbQueue.write { db in
+                for rp in remoteProjects {
+                    try db.execute(sql: """
+                        INSERT INTO projects (id, title, notes, status, color, areaId, \("index"), completedAt, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title=excluded.title, notes=excluded.notes, status=excluded.status,
+                            color=excluded.color, areaId=excluded.areaId, completedAt=excluded.completedAt,
+                            updatedAt=excluded.updatedAt
+                    """, arguments: [
+                        rp.id, rp.title, rp.notes, rp.status, rp.color,
+                        rp.areaId, rp.index, rp.completedAt, rp.createdAt, rp.updatedAt
+                    ])
+                }
+            }
+
+            // Pull areas
+            let remoteAreas = try await api.listAreas()
+            try await db.dbQueue.write { db in
+                for ra in remoteAreas {
+                    try db.execute(sql: """
+                        INSERT INTO areas (id, title, \("index"), archived, createdAt, updatedAt)
+                        VALUES (?, ?, ?, 0, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updatedAt=excluded.updatedAt
+                    """, arguments: [ra.id, ra.title, ra.index, ra.createdAt, ra.updatedAt])
+                }
+            }
+
+            // Pull tags
+            let remoteTags = try await api.listTags()
+            try await db.dbQueue.write { db in
+                for rt in remoteTags {
+                    try db.execute(sql: """
+                        INSERT INTO tags (id, title, \("index"), createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updatedAt=excluded.updatedAt
+                    """, arguments: [rt.id, rt.title, rt.index, rt.createdAt, rt.updatedAt])
+                }
+            }
+
+            reloadStore()
+            UserDefaults.standard.set(true, forKey: "hasCompletedInitialSync")
+        } catch {
+            lastSyncError = error.localizedDescription
+            print("[SyncEngine] Initial sync failed: \(error)")
         }
 
         isSyncing = false
@@ -124,7 +231,15 @@ class SyncEngine {
 
     // MARK: - Inbound: Delta Events
 
-    private func pullDeltas() async throws {
+    func pullDeltas() async {
+        do {
+            try await pullDeltasInternal()
+        } catch {
+            print("[SyncEngine] Pull deltas failed: \(error)")
+        }
+    }
+
+    private func pullDeltasInternal() async throws {
         let deltas = try await api.fetchDeltas(since: lastDeltaId)
         guard !deltas.isEmpty else { return }
 

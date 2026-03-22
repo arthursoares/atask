@@ -47,6 +47,19 @@ struct ChecklistSection: View {
                         .font(.metadataRegular) // 12px
                         .foregroundStyle(item.isCompleted ? Theme.inkTertiary : Theme.inkPrimary)
                         .strikethrough(item.isCompleted, color: Theme.inkQuaternary)
+
+                    Spacer()
+
+                    Button {
+                        store.deleteChecklistItem(item.id)
+                        reload()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.inkQuaternary)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(0.6)
                 }
                 .padding(.vertical, 3)
             }

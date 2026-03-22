@@ -37,6 +37,13 @@ Thumbs.db
 # Superpowers brainstorm sessions
 .superpowers/
 
+# Swift / Xcode
+atask-app/build/
+DerivedData/
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
 # Environment
 .env
 .env.local

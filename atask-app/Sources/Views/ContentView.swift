@@ -4,6 +4,7 @@ struct ContentView: View {
     @Bindable var store: TaskStore
     var syncEngine: SyncEngine
     @State private var showLogin = false
+    @State private var hoveredTaskId: String?
 
     var body: some View {
         NavigationSplitView {
@@ -99,6 +100,9 @@ struct ContentView: View {
                     let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
                     Task {
                         await syncEngine.api.configure(baseURL: serverURL, token: token)
+                        if !UserDefaults.standard.bool(forKey: "hasCompletedInitialSync") {
+                            await syncEngine.initialSync(reloadStore: { store.reload() })
+                        }
                         syncEngine.startPeriodicSync()
                         await syncEngine.sync()
                         store.reload()
@@ -305,8 +309,16 @@ struct ContentView: View {
     private func taskRow(_ task: TaskModel) -> some View {
         let isToday = store.activeView == .today
         let isSelected = store.selectedTaskId == task.id
+        let isHovered = hoveredTaskId == task.id
 
         return HStack(spacing: Spacing.sp3) {
+            // Grip handle (visible on hover, drag affordance)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Theme.inkQuaternary)
+                .frame(width: 10)
+                .opacity(isHovered ? 1 : 0)
+
             // Checkbox: 20×20
             Button {
                 if task.isCompleted { store.reopenTask(task.id) }
@@ -349,14 +361,16 @@ struct ContentView: View {
         .padding(.horizontal, Spacing.sp4)
         .background(
             RoundedRectangle(cornerRadius: Radius.md)
-                .fill(isSelected ? Theme.sidebarSelected : Color.clear)
+                .fill(isSelected ? Theme.sidebarSelected :
+                      isHovered ? Theme.canvasSunken.opacity(0.5) : Color.clear)
         )
+        .onHover { hovering in hoveredTaskId = hovering ? task.id : nil }
+        .draggable(task.id)
         .contentShape(Rectangle())
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             store.selectedTaskId = task.id
             store.expandedTaskId = task.id
-        }
-        .draggable(task.id)
+        })
         .dropDestination(for: String.self) { droppedIds, _ in
             guard let draggedId = droppedIds.first else { return false }
             let list = currentViewTasks()
@@ -437,6 +451,25 @@ struct ContentView: View {
                         variant == .today ? Theme.todayStar :
                         Theme.inkTertiary
                     )
+            }
+
+            // Tags
+            let taskTags = store.tagsForTask(task.id)
+            if !taskTags.isEmpty {
+                ForEach(taskTags.prefix(2)) { tag in
+                    Text(tag.title)
+                        .font(.tagPill)
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Theme.accentSubtle)
+                        .clipShape(Capsule())
+                }
+                if taskTags.count > 2 {
+                    Text("+\(taskTags.count - 2)")
+                        .font(.tagPill)
+                        .foregroundStyle(Theme.inkTertiary)
+                }
             }
         }
     }

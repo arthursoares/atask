@@ -46,6 +46,14 @@ struct TaskInlineEditor: View {
                 }
                 .frame(height: Spacing.taskRowHeight)
 
+                // ── Notes (inline, 13px) ──
+                TextField("Notes", text: $notesDraft, axis: .vertical)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.inkSecondary)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...5)
+                    .padding(.leading, Spacing.attrBarLeftPad)
+
                 // ── Attribute bar ──
                 HStack(spacing: 6) {
                     // Schedule badge
