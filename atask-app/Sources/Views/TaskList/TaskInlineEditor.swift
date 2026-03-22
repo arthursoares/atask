@@ -32,7 +32,7 @@ struct TaskInlineEditor: View {
                     )
 
                     TextField("What needs to happen?", text: $titleDraft)
-                        .font(.inlineTitle)
+                        .font(.taskTitle)
                         .textFieldStyle(.plain)
                         .focused($titleFocused)
                         .onSubmit {
