@@ -15,6 +15,7 @@ class TaskStore {
     var expandedTaskId: String?
     var activeView: ActiveView = .today
     var sidebarSelection: SidebarItem? = .today
+    var showCommandPalette = false
 
     init(db: LocalDatabase) {
         self.db = db
@@ -193,6 +194,56 @@ class TaskStore {
         persist(tasks[idx])
     }
 
+    // MARK: - Reorder
+
+    /// Reorder a task within its current view list by moving it to a new position.
+    func reorderTask(_ id: String, toIndex newIndex: Int) {
+        let list = reorderableList()
+        guard let currentIdx = list.firstIndex(where: { $0.id == id }) else { return }
+        guard newIndex >= 0 && newIndex < list.count else { return }
+        guard currentIdx != newIndex else { return }
+
+        // Build the ordered ID list, move the task
+        var ids = list.map(\.id)
+        ids.remove(at: currentIdx)
+        ids.insert(id, at: min(newIndex, ids.count))
+
+        // Update index/todayIndex for all tasks in the list
+        for (i, taskId) in ids.enumerated() {
+            guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { continue }
+            if activeView == .today {
+                tasks[idx].todayIndex = i
+            } else {
+                tasks[idx].index = i
+            }
+            tasks[idx].touch()
+            persist(tasks[idx])
+        }
+    }
+
+    func moveTaskUp(_ id: String) {
+        let list = reorderableList()
+        guard let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        reorderTask(id, toIndex: idx - 1)
+    }
+
+    func moveTaskDown(_ id: String) {
+        let list = reorderableList()
+        guard let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        reorderTask(id, toIndex: idx + 1)
+    }
+
+    /// Returns the task list for the current view that supports reordering.
+    private func reorderableList() -> [TaskModel] {
+        switch activeView {
+        case .inbox: return inbox
+        case .today: return today
+        case .someday: return someday
+        case .project(let id): return tasksForProject(id)
+        default: return []
+        }
+    }
+
     func deleteTask(_ id: String) {
         tasks.removeAll { $0.id == id }
         do {
@@ -212,6 +263,38 @@ class TaskStore {
         persist(project)
         projects.append(project)
         return project
+    }
+
+    func deleteProject(_ id: String) {
+        // Remove tasks from project first
+        for i in tasks.indices where tasks[i].projectId == id {
+            tasks[i].projectId = nil
+            tasks[i].sectionId = nil
+            tasks[i].touch()
+            persist(tasks[i])
+        }
+        // Remove sections
+        sections.removeAll { $0.projectId == id }
+        // Remove project
+        projects.removeAll { $0.id == id }
+        do {
+            try db.dbQueue.write { db in
+                _ = try ProjectModel.deleteOne(db, id: id)
+            }
+        } catch {
+            print("[TaskStore] Delete project failed: \(error)")
+        }
+        if case .project(let pid) = activeView, pid == id {
+            activeView = .inbox
+            sidebarSelection = .inbox
+        }
+    }
+
+    func moveProjectToArea(_ projectId: String, _ areaId: String?) {
+        guard let idx = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        projects[idx].areaId = areaId
+        projects[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        persist(projects[idx])
     }
 
     // MARK: - Area Mutations
@@ -239,6 +322,48 @@ class TaskStore {
         }
     }
 
+    // MARK: - Task-Tag Associations
+
+    func tagsForTask(_ taskId: String) -> [TagModel] {
+        do {
+            return try db.dbQueue.read { db in
+                let sql = """
+                    SELECT tags.* FROM tags
+                    JOIN taskTags ON taskTags.tagId = tags.id
+                    WHERE taskTags.taskId = ?
+                    ORDER BY tags.title
+                """
+                return try TagModel.fetchAll(db, sql: sql, arguments: [taskId])
+            }
+        } catch { return [] }
+    }
+
+    func addTagToTask(_ taskId: String, tagId: String) {
+        do {
+            try db.dbQueue.write { db in
+                try db.execute(
+                    sql: "INSERT OR IGNORE INTO taskTags (taskId, tagId) VALUES (?, ?)",
+                    arguments: [taskId, tagId]
+                )
+            }
+        } catch {
+            print("[TaskStore] Add tag to task failed: \(error)")
+        }
+    }
+
+    func removeTagFromTask(_ taskId: String, tagId: String) {
+        do {
+            try db.dbQueue.write { db in
+                try db.execute(
+                    sql: "DELETE FROM taskTags WHERE taskId = ? AND tagId = ?",
+                    arguments: [taskId, tagId]
+                )
+            }
+        } catch {
+            print("[TaskStore] Remove tag from task failed: \(error)")
+        }
+    }
+
     // MARK: - Section Mutations
 
     @discardableResult
@@ -250,6 +375,46 @@ class TaskStore {
     }
 
     // MARK: - Persistence Helpers
+
+    // MARK: - Checklist
+
+    func checklistFor(_ taskId: String) -> [ChecklistItemModel] {
+        do {
+            return try db.dbQueue.read { db in
+                try ChecklistItemModel
+                    .filter(Column("taskId") == taskId)
+                    .order(Column("index"))
+                    .fetchAll(db)
+            }
+        } catch { return [] }
+    }
+
+    @discardableResult
+    func addChecklistItem(title: String, taskId: String) -> ChecklistItemModel {
+        let item = ChecklistItemModel.create(title: title, taskId: taskId)
+        persist(item)
+        return item
+    }
+
+    func toggleChecklistItem(_ id: String) {
+        do {
+            try db.dbQueue.write { db in
+                if var item = try ChecklistItemModel.fetchOne(db, id: id) {
+                    item.status = item.isCompleted ? 0 : 1
+                    item.updatedAt = ISO8601DateFormatter().string(from: Date())
+                    try item.update(db)
+                }
+            }
+        } catch { print("[TaskStore] Toggle checklist failed: \(error)") }
+    }
+
+    func deleteChecklistItem(_ id: String) {
+        do {
+            try db.dbQueue.write { db in
+                _ = try ChecklistItemModel.deleteOne(db, id: id)
+            }
+        } catch { print("[TaskStore] Delete checklist failed: \(error)") }
+    }
 
     /// Look up project for a task
     func projectFor(_ task: TaskModel) -> ProjectModel? {

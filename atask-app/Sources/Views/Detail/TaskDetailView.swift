@@ -16,6 +16,10 @@ struct TaskDetailView: View {
     @State private var titleDraft = ""
     @State private var notesDraft = ""
     @State private var initialized = false
+    @State private var showStartDatePicker = false
+    @State private var showDeadlinePicker = false
+    @State private var showProjectPicker = false
+    @State private var showTagPicker = false
 
     var body: some View {
         if let taskId = store.selectedTaskId,
@@ -54,9 +58,15 @@ struct TaskDetailView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         // PROJECT
                         fieldRow("PROJECT") {
-                            Text(store.projectFor(task)?.title ?? "None")
-                                .font(.metadataRegular)
-                                .foregroundStyle(Theme.inkSecondary)
+                            Button { showProjectPicker = true } label: {
+                                Text(store.projectFor(task)?.title ?? "None")
+                                    .font(.metadataRegular)
+                                    .foregroundStyle(store.projectFor(task) != nil ? Theme.inkSecondary : Theme.inkTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $showProjectPicker) {
+                                ProjectPicker(store: store, taskId: taskId, isPresented: $showProjectPicker)
+                            }
                         }
 
                         // SCHEDULE
@@ -68,41 +78,121 @@ struct TaskDetailView: View {
 
                         // START DATE
                         fieldRow("START DATE") {
-                            if let d = task.startDate {
-                                Text(DateFormatting.formatRelative(d))
-                                    .font(.metadataRegular)
-                                    .foregroundStyle(Theme.inkSecondary)
-                            } else {
-                                Text("None")
-                                    .font(.metadataRegular)
-                                    .foregroundStyle(Theme.inkTertiary)
+                            HStack {
+                                Button { showStartDatePicker.toggle() } label: {
+                                    if let d = task.startDate {
+                                        Text(DateFormatting.formatRelative(d))
+                                            .font(.metadataRegular)
+                                            .foregroundStyle(Theme.inkSecondary)
+                                    } else {
+                                        Text("None")
+                                            .font(.metadataRegular)
+                                            .foregroundStyle(Theme.inkTertiary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .popover(isPresented: $showStartDatePicker) {
+                                    DatePicker("", selection: Binding(
+                                        get: { DateFormatting.parseDate(task.startDate ?? "") ?? Date() },
+                                        set: { date in
+                                            let fmt = DateFormatter()
+                                            fmt.dateFormat = "yyyy-MM-dd"
+                                            store.setStartDate(taskId, fmt.string(from: date))
+                                        }
+                                    ), displayedComponents: .date)
+                                    .datePickerStyle(.graphical)
+                                    .padding(12)
+                                    .frame(width: 280)
+                                }
+
+                                if task.startDate != nil {
+                                    Button { store.setStartDate(taskId, nil) } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Theme.inkTertiary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
 
                         // DEADLINE
                         fieldRow("DEADLINE") {
-                            if let d = task.deadline {
-                                let (label, variant) = DateFormatting.formatDeadline(d)
-                                Text(label)
-                                    .font(.metadataRegular)
-                                    .foregroundStyle(
-                                        variant == .overdue ? Theme.deadlineRed :
-                                        variant == .today ? Theme.todayStar :
-                                        Theme.inkSecondary
-                                    )
-                            } else {
-                                Text("None")
-                                    .font(.metadataRegular)
-                                    .foregroundStyle(Theme.inkTertiary)
+                            HStack {
+                                Button { showDeadlinePicker.toggle() } label: {
+                                    if let d = task.deadline {
+                                        let (label, variant) = DateFormatting.formatDeadline(d)
+                                        Text(label)
+                                            .font(.metadataRegular)
+                                            .foregroundStyle(
+                                                variant == .overdue ? Theme.deadlineRed :
+                                                variant == .today ? Theme.todayStar :
+                                                Theme.inkSecondary
+                                            )
+                                    } else {
+                                        Text("None")
+                                            .font(.metadataRegular)
+                                            .foregroundStyle(Theme.inkTertiary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .popover(isPresented: $showDeadlinePicker) {
+                                    DatePicker("", selection: Binding(
+                                        get: { DateFormatting.parseDate(task.deadline ?? "") ?? Date() },
+                                        set: { date in
+                                            let fmt = DateFormatter()
+                                            fmt.dateFormat = "yyyy-MM-dd"
+                                            store.setDeadline(taskId, fmt.string(from: date))
+                                        }
+                                    ), displayedComponents: .date)
+                                    .datePickerStyle(.graphical)
+                                    .padding(12)
+                                    .frame(width: 280)
+                                }
+
+                                if task.deadline != nil {
+                                    Button { store.setDeadline(taskId, nil) } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Theme.inkTertiary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
 
                         // TAGS
                         fieldRow("TAGS") {
-                            Text("None")
-                                .font(.metadataRegular)
-                                .foregroundStyle(Theme.inkTertiary)
-                            // TODO: show tag pills + add button
+                            let taskTags = store.tagsForTask(taskId)
+                            if taskTags.isEmpty {
+                                Button { showTagPicker = true } label: {
+                                    Text("None")
+                                        .font(.metadataRegular)
+                                        .foregroundStyle(Theme.inkTertiary)
+                                }
+                                .buttonStyle(.plain)
+                                .popover(isPresented: $showTagPicker) {
+                                    TagPicker(store: store, taskId: taskId, isPresented: $showTagPicker)
+                                }
+                            } else {
+                                HStack(spacing: 4) {
+                                    ForEach(taskTags) { tag in
+                                        tagPill(tag.title, bg: Theme.accentSubtle, fg: Theme.accent)
+                                    }
+                                    Button { showTagPicker = true } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(Theme.inkTertiary)
+                                            .frame(width: 18, height: 18)
+                                            .background(Theme.canvasSunken)
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .popover(isPresented: $showTagPicker) {
+                                        TagPicker(store: store, taskId: taskId, isPresented: $showTagPicker)
+                                    }
+                                }
+                            }
                         }
 
                         // NOTES
@@ -122,19 +212,7 @@ struct TaskDetailView: View {
                         .padding(.bottom, Spacing.sp4)
 
                         // CHECKLIST
-                        VStack(alignment: .leading, spacing: Spacing.sp1) {
-                            Text("CHECKLIST")
-                                .font(.groupLabel)
-                                .foregroundStyle(Theme.inkTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-
-                            // TODO: checklist items from store
-                            Text("No checklist items")
-                                .font(.metadataRegular)
-                                .foregroundStyle(Theme.inkTertiary)
-                        }
-                        .padding(.bottom, Spacing.sp4)
+                        ChecklistSection(store: store, taskId: taskId)
 
                         // ACTIVITY
                         VStack(alignment: .leading, spacing: Spacing.sp1) {

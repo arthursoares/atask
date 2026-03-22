@@ -15,6 +15,9 @@ struct TaskInlineEditor: View {
     @State private var titleDraft = ""
     @State private var notesDraft = ""
     @State private var initialized = false
+    @State private var showWhenPicker = false
+    @State private var showTagPicker = false
+    @State private var showProjectPicker = false
     @FocusState private var titleFocused: Bool
 
     var body: some View {
@@ -54,12 +57,43 @@ struct TaskInlineEditor: View {
 
                     // Project
                     if let project = store.projectFor(task) {
-                        attrPill("● \(project.title)", variant: .project)
+                        Button { showProjectPicker = true } label: {
+                            attrPill("● \(project.title)", variant: .project)
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $showProjectPicker) {
+                            ProjectPicker(store: store, taskId: taskId, isPresented: $showProjectPicker)
+                        }
                     }
 
-                    // Action buttons
-                    attrPill("📅 When", variant: .add)
-                    attrPill("🏷 +Tag", variant: .add)
+                    // When picker
+                    Button { showWhenPicker = true } label: {
+                        attrPill("📅 When", variant: .add)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showWhenPicker) {
+                        WhenPicker(store: store, taskId: taskId, isPresented: $showWhenPicker)
+                    }
+
+                    // Tag picker
+                    Button { showTagPicker = true } label: {
+                        attrPill("🏷 +Tag", variant: .add)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showTagPicker) {
+                        TagPicker(store: store, taskId: taskId, isPresented: $showTagPicker)
+                    }
+
+                    // Project picker (if no project assigned)
+                    if store.projectFor(task) == nil {
+                        Button { showProjectPicker = true } label: {
+                            attrPill("📁 Project", variant: .add)
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $showProjectPicker) {
+                            ProjectPicker(store: store, taskId: taskId, isPresented: $showProjectPicker)
+                        }
+                    }
                 }
                 .padding(.top, Spacing.sp1)
                 .padding(.leading, Spacing.attrBarLeftPad)

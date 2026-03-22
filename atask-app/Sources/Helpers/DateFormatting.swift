@@ -117,7 +117,7 @@ enum DateFormatting {
 
     // MARK: - Parsing
 
-    private static func parseDate(_ str: String) -> Date? {
+    static func parseDate(_ str: String) -> Date? {
         // YYYY-MM-DD
         if let d = dayFormatter.date(from: str) { return d }
         // ISO8601 with fractional seconds (Go API format)

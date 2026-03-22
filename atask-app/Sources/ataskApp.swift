@@ -2,15 +2,30 @@ import SwiftUI
 
 @main
 struct ataskApp: App {
-    @State private var store = TaskStore(db: try! LocalDatabase())
+    private static let database = try! LocalDatabase()
+    @State private var store = TaskStore(db: database)
+    @State private var syncEngine = SyncEngine(api: APIClient(), db: database)
 
     var body: some Scene {
         WindowGroup {
-            ContentView(store: store)
+            ContentView(store: store, syncEngine: syncEngine)
                 .frame(minWidth: 640, minHeight: 480)
+                .task {
+                    // Configure API from saved settings
+                    let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+                    let token = UserDefaults.standard.string(forKey: "authToken")
+                    if !serverURL.isEmpty {
+                        await syncEngine.api.configure(baseURL: serverURL, token: token)
+                        syncEngine.startPeriodicSync()
+                    }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 720)
+
+        Settings {
+            SettingsView()
+        }
         .commands {
             // ⌘N — New Task (replaces default New Window)
             CommandGroup(replacing: .newItem) {
@@ -52,10 +67,30 @@ struct ataskApp: App {
 
                 Divider()
 
+                Button("Move Up") {
+                    if let id = store.selectedTaskId { store.moveTaskUp(id) }
+                }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+
+                Button("Move Down") {
+                    if let id = store.selectedTaskId { store.moveTaskDown(id) }
+                }
+                .keyboardShortcut(.downArrow, modifiers: .command)
+
+                Divider()
+
                 Button("Delete Task") {
                     if let id = store.selectedTaskId { store.deleteTask(id) }
                 }
                 .keyboardShortcut(.delete)
+            }
+
+            // ⇧⌘O — Command Palette
+            CommandGroup(after: .toolbar) {
+                Button("Command Palette") {
+                    store.showCommandPalette.toggle()
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
             }
 
             // ⌘1-6 — View Navigation

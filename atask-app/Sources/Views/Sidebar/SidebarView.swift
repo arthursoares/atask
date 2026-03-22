@@ -120,10 +120,17 @@ struct SidebarView: View {
         }
         .tag(SidebarItem.project(project.id))
         .contextMenu {
-            Button("Rename...") { }
-            Button("Set Color...") { }
+            if !store.areas.isEmpty {
+                Menu("Move to Area") {
+                    Button("No Area") { store.moveProjectToArea(project.id, nil) }
+                    Divider()
+                    ForEach(store.areas) { area in
+                        Button(area.title) { store.moveProjectToArea(project.id, area.id) }
+                    }
+                }
+            }
             Divider()
-            Button("Delete", role: .destructive) { }
+            Button("Delete", role: .destructive) { store.deleteProject(project.id) }
         }
     }
 

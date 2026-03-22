@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: TaskStore
+    var syncEngine: SyncEngine
+    @State private var showLogin = false
 
     var body: some View {
         NavigationSplitView {
@@ -63,6 +65,13 @@ struct ContentView: View {
                     }
                     return .handled
                 }
+                .onKeyPress(.space) {
+                    // Space — create new task below selected
+                    guard store.expandedTaskId == nil else { return .ignored }
+                    let task = store.createTask(title: "")
+                    store.expandedTaskId = task.id
+                    return .handled
+                }
                 .onTapGesture {
                     if store.expandedTaskId != nil {
                         store.expandedTaskId = nil
@@ -77,6 +86,27 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .overlay {
+            if store.showCommandPalette {
+                CommandPaletteView(store: store, isOpen: $store.showCommandPalette)
+            }
+        }
+        .sheet(isPresented: $showLogin) {
+            LoginView(
+                api: syncEngine.api,
+                onSuccess: { token in
+                    UserDefaults.standard.set(token, forKey: "authToken")
+                    let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+                    Task {
+                        await syncEngine.api.configure(baseURL: serverURL, token: token)
+                        syncEngine.startPeriodicSync()
+                        await syncEngine.sync()
+                        store.reload()
+                    }
+                },
+                isPresented: $showLogin
+            )
+        }
     }
 
     // ── Arrow key navigation ──
@@ -326,12 +356,45 @@ struct ContentView: View {
             store.selectedTaskId = task.id
             store.expandedTaskId = task.id
         }
+        .draggable(task.id)
+        .dropDestination(for: String.self) { droppedIds, _ in
+            guard let draggedId = droppedIds.first else { return false }
+            let list = currentViewTasks()
+            guard let targetIdx = list.firstIndex(where: { $0.id == task.id }) else { return false }
+            store.reorderTask(draggedId, toIndex: targetIdx)
+            return true
+        }
         .contextMenu {
-            Button { store.completeTask(task.id) } label: { Label("Complete", systemImage: "checkmark") }
-            Button { store.setSchedule(task.id, 1) } label: { Label("Schedule for Today", systemImage: "star") }
-            Button { store.setSchedule(task.id, 2) } label: { Label("Defer to Someday", systemImage: "clock") }
+            if task.isCompleted {
+                Button { store.reopenTask(task.id) } label: { Label("Reopen", systemImage: "arrow.uturn.backward") }
+            } else {
+                Button { store.completeTask(task.id) } label: { Label("Complete", systemImage: "checkmark") }
+                Button { store.cancelTask(task.id) } label: { Label("Cancel", systemImage: "xmark") }
+            }
+
             Divider()
-            Button { store.setSchedule(task.id, 0) } label: { Label("Move to Inbox", systemImage: "tray") }
+
+            Menu("Schedule") {
+                Button { store.setSchedule(task.id, 0) } label: { Label("Inbox", systemImage: "tray") }
+                Button { store.setSchedule(task.id, 1) } label: { Label("Today", systemImage: "star") }
+                Button { store.setTimeSlot(task.id, "evening") } label: { Label("This Evening", systemImage: "moon") }
+                Button { store.setSchedule(task.id, 2) } label: { Label("Someday", systemImage: "clock") }
+            }
+
+            if !store.projects.isEmpty {
+                Menu("Move to Project") {
+                    Button { store.moveToProject(task.id, nil) } label: { Label("No Project", systemImage: "minus.circle") }
+                    Divider()
+                    ForEach(store.projects) { project in
+                        Button {
+                            store.moveToProject(task.id, project.id)
+                        } label: {
+                            Label(project.title, systemImage: "circle.fill")
+                        }
+                    }
+                }
+            }
+
             Divider()
             Button(role: .destructive) { store.deleteTask(task.id) } label: { Label("Delete", systemImage: "trash") }
         }
