@@ -11,6 +11,9 @@ struct SidebarView: View {
     @State private var projectTitle = ""
     @State private var addingArea = false
     @State private var areaTitle = ""
+    @State private var renamingProjectId: String?
+    @State private var renamingAreaId: String?
+    @State private var renameDraft = ""
 
     var body: some View {
         List(selection: $store.sidebarSelection) {
@@ -30,12 +33,33 @@ struct SidebarView: View {
                         projectRow(project)
                     }
                 } header: {
-                    Text(area.title)
-                        .font(.groupLabel)
-                        .foregroundStyle(Theme.inkTertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                        .dropDestination(for: String.self) { projectIds, _ in
+                    Group {
+                        if renamingAreaId == area.id {
+                            TextField("Area name", text: $renameDraft)
+                                .font(.groupLabel)
+                                .textFieldStyle(.plain)
+                                .onSubmit {
+                                    if !renameDraft.isEmpty { store.renameArea(area.id, renameDraft) }
+                                    renamingAreaId = nil
+                                }
+                                .onExitCommand { renamingAreaId = nil }
+                        } else {
+                            Text(area.title)
+                                .font(.groupLabel)
+                                .foregroundStyle(Theme.inkTertiary)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+                        }
+                    }
+                    .contextMenu {
+                        Button("Rename") {
+                            renameDraft = area.title
+                            renamingAreaId = area.id
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) { store.deleteArea(area.id) }
+                    }
+                    .dropDestination(for: String.self) { projectIds, _ in
                             guard let projectId = projectIds.first else { return false }
                             // Only accept if it's a project ID (not a task)
                             if store.projects.contains(where: { $0.id == projectId }) {
@@ -133,12 +157,20 @@ struct SidebarView: View {
     // ── Project row ──
     private func projectRow(_ project: ProjectModel) -> some View {
         HStack {
-            Label {
+            Circle()
+                .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                .frame(width: Spacing.sidebarDot, height: Spacing.sidebarDot)
+            if renamingProjectId == project.id {
+                TextField("Project name", text: $renameDraft)
+                    .font(.taskTitle)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        if !renameDraft.isEmpty { store.renameProject(project.id, renameDraft) }
+                        renamingProjectId = nil
+                    }
+                    .onExitCommand { renamingProjectId = nil }
+            } else {
                 Text(project.title).font(.taskTitle)
-            } icon: {
-                Circle()
-                    .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
-                    .frame(width: Spacing.sidebarDot, height: Spacing.sidebarDot)
             }
             Spacer()
         }
@@ -165,6 +197,11 @@ struct SidebarView: View {
             return true
         }
         .contextMenu {
+            Button("Rename") {
+                renameDraft = project.title
+                renamingProjectId = project.id
+            }
+
             if !store.areas.isEmpty {
                 Menu("Move to Area") {
                     Button("No Area") { store.moveProjectToArea(project.id, nil) }
@@ -174,6 +211,7 @@ struct SidebarView: View {
                     }
                 }
             }
+
             Divider()
             Button("Delete", role: .destructive) { store.deleteProject(project.id) }
         }

@@ -312,6 +312,20 @@ class TaskStore {
         }
     }
 
+    func renameProject(_ id: String, _ title: String) {
+        guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[idx].title = title
+        projects[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        persist(projects[idx])
+    }
+
+    func setProjectColor(_ id: String, _ color: String) {
+        guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[idx].color = color
+        projects[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        persist(projects[idx])
+    }
+
     func moveProjectToArea(_ projectId: String, _ areaId: String?) {
         guard let idx = projects.firstIndex(where: { $0.id == projectId }) else { return }
         projects[idx].areaId = areaId
@@ -329,6 +343,28 @@ class TaskStore {
         return area
     }
 
+    func renameArea(_ id: String, _ title: String) {
+        guard let idx = areas.firstIndex(where: { $0.id == id }) else { return }
+        areas[idx].title = title
+        areas[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        persist(areas[idx])
+    }
+
+    func deleteArea(_ id: String) {
+        // Move projects out of this area
+        for i in projects.indices where projects[i].areaId == id {
+            projects[i].areaId = nil
+            projects[i].updatedAt = ISO8601DateFormatter().string(from: Date())
+            persist(projects[i])
+        }
+        areas.removeAll { $0.id == id }
+        do {
+            try db.dbQueue.write { db in _ = try AreaModel.deleteOne(db, id: id) }
+        } catch {
+            print("[TaskStore] Delete area failed: \(error)")
+        }
+    }
+
     // MARK: - Tag Mutations
 
     @discardableResult
@@ -341,6 +377,30 @@ class TaskStore {
         } catch {
             print("[TaskStore] Create tag failed (duplicate?): \(error)")
             return nil
+        }
+    }
+
+    func renameTag(_ id: String, _ title: String) {
+        guard let idx = tags.firstIndex(where: { $0.id == id }) else { return }
+        tags[idx].title = title
+        tags[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        do {
+            try db.dbQueue.write { db in try tags[idx].update(db) }
+        } catch {
+            print("[TaskStore] Rename tag failed: \(error)")
+        }
+    }
+
+    func deleteTag(_ id: String) {
+        do {
+            try db.dbQueue.write { db in
+                // Remove all task-tag associations first
+                try db.execute(sql: "DELETE FROM taskTags WHERE tagId = ?", arguments: [id])
+                _ = try TagModel.deleteOne(db, id: id)
+            }
+            tags.removeAll { $0.id == id }
+        } catch {
+            print("[TaskStore] Delete tag failed: \(error)")
         }
     }
 
