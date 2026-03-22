@@ -213,7 +213,7 @@ struct ContentView: View {
         }
     }
 
-    // ── Today: morning + evening sections ──
+    // ── Today: morning + evening sections, grouped by project ──
     @ViewBuilder
     private var todayView: some View {
         let morning = store.todayMorning
@@ -223,10 +223,10 @@ struct ContentView: View {
             emptyState("Your day is clear.")
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(morning) { task in taskOrEditor(task) }
+                projectGroupedTasks(morning)
                 if !evening.isEmpty {
                     sectionHeader("This Evening")
-                    ForEach(evening) { task in taskOrEditor(task) }
+                    projectGroupedTasks(evening)
                 }
             }
         }
@@ -287,12 +287,50 @@ struct ContentView: View {
             if tasks.isEmpty {
                 emptyState(empty, color: emptyColor)
             } else {
-                ForEach(tasks) { task in taskOrEditor(task) }
+                projectGroupedTasks(tasks)
             }
             if store.activeView != .logbook && store.activeView != .upcoming {
                 NewTaskRow { title in store.createTask(title: title) }
             }
         }
+    }
+
+    // ── Tasks grouped by project with headings ──
+    @ViewBuilder
+    private func projectGroupedTasks(_ tasks: [TaskModel]) -> some View {
+        let noProject = tasks.filter { $0.projectId == nil }
+        let withProject = tasks.filter { $0.projectId != nil }
+        // Preserve order, deduplicate
+        var seen = Set<String>()
+        let projectIds = withProject.compactMap(\.projectId).filter { seen.insert($0).inserted }
+
+        ForEach(noProject) { task in taskOrEditor(task) }
+
+        ForEach(projectIds, id: \.self) { pid in
+            if let project = store.projects.first(where: { $0.id == pid }) {
+                projectHeading(project)
+            }
+            ForEach(withProject.filter { $0.projectId == pid }) { task in
+                taskOrEditor(task)
+            }
+        }
+    }
+
+    // ── Project heading (colored dot + title) ──
+    private func projectHeading(_ project: ProjectModel) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                .frame(width: Spacing.sidebarDot, height: Spacing.sidebarDot)
+            Text(project.title)
+                .font(.atkinson(14, weight: .bold))
+                .foregroundStyle(Theme.inkPrimary)
+            Rectangle()
+                .fill(Theme.separator)
+                .frame(height: 1)
+        }
+        .padding(.top, Spacing.sp3)
+        .padding(.bottom, Spacing.sp1)
     }
 
     // ── Task or inline editor ──
@@ -442,29 +480,11 @@ struct ContentView: View {
         }
     }
 
-    // ── Task metadata: project pill + deadline ──
+    // ── Task metadata: deadline + tags ──
     @ViewBuilder
     private func taskMeta(_ task: TaskModel) -> some View {
         HStack(spacing: Spacing.sp2) {
-            if let project = store.projectFor(task) {
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
-                        .frame(width: Spacing.metaDot, height: Spacing.metaDot)
-                    Text(project.title)
-                        .font(.tagPill)
-                        .foregroundStyle(Theme.inkSecondary)
-                }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 1)
-                .background(Theme.canvasSunken)
-                .clipShape(Capsule())
-            }
-
             if let deadline = task.deadline {
-                if task.projectId != nil {
-                    Text("·").font(.tagPill).foregroundStyle(Theme.inkQuaternary)
-                }
                 let (label, variant) = DateFormatting.formatDeadline(deadline)
                 Text(label)
                     .font(.metadata)
