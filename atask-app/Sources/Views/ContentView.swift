@@ -398,6 +398,12 @@ struct ContentView: View {
             Divider()
             Button(role: .destructive) { store.deleteTask(task.id) } label: { Label("Delete", systemImage: "trash") }
         }
+        .popover(isPresented: Binding(
+            get: { store.showWhenPicker && store.selectedTaskId == task.id },
+            set: { store.showWhenPicker = $0 }
+        )) {
+            WhenPicker(store: store, taskId: task.id, isPresented: $store.showWhenPicker)
+        }
     }
 
     // ── Task metadata: project pill + deadline ──

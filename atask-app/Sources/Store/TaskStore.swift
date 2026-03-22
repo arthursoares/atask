@@ -16,6 +16,7 @@ class TaskStore {
     var activeView: ActiveView = .today
     var sidebarSelection: SidebarItem? = .today
     var showCommandPalette = false
+    var showWhenPicker = false
 
     /// Called on every mutation — sync engine hooks this to enqueue outbound ops.
     var onMutation: ((_ method: String, _ path: String, _ body: String?) -> Void)?

@@ -90,6 +90,16 @@ struct ataskApp: App {
                 .keyboardShortcut(.delete)
             }
 
+            // ⌘S — When Picker (replaces Save since we auto-save)
+            CommandGroup(replacing: .saveItem) {
+                Button("When...") {
+                    if store.selectedTaskId != nil {
+                        store.showWhenPicker.toggle()
+                    }
+                }
+                .keyboardShortcut("s", modifiers: .command)
+            }
+
             // ⇧⌘O — Command Palette
             CommandGroup(after: .toolbar) {
                 Button("Command Palette") {
