@@ -11,6 +11,11 @@ struct ataskApp: App {
             ContentView(store: store, syncEngine: syncEngine)
                 .frame(minWidth: 640, minHeight: 480)
                 .task {
+                    // Wire sync: mutations → pending ops queue
+                    store.onMutation = { method, path, body in
+                        syncEngine.enqueue(method: method, path: path, body: body)
+                    }
+
                     // Configure API from saved settings
                     let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
                     let token = UserDefaults.standard.string(forKey: "authToken")

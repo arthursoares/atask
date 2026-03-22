@@ -17,6 +17,9 @@ class TaskStore {
     var sidebarSelection: SidebarItem? = .today
     var showCommandPalette = false
 
+    /// Called on every mutation — sync engine hooks this to enqueue outbound ops.
+    var onMutation: ((_ method: String, _ path: String, _ body: String?) -> Void)?
+
     init(db: LocalDatabase) {
         self.db = db
         reload()
@@ -117,6 +120,8 @@ class TaskStore {
         }
         persist(task)
         tasks.append(task)
+        let scheduleStr = ["inbox", "anytime", "someday"][task.schedule]
+        onMutation?("POST", "/tasks", "{\"title\":\"\(task.title)\",\"schedule\":\"\(scheduleStr)\"}")
         return task
     }
 
@@ -126,6 +131,7 @@ class TaskStore {
         tasks[idx].completedAt = ISO8601DateFormatter().string(from: Date())
         tasks[idx].touch()
         persist(tasks[idx])
+        onMutation?("POST", "/tasks/\(id)/complete", nil)
     }
 
     func cancelTask(_ id: String) {
@@ -134,6 +140,7 @@ class TaskStore {
         tasks[idx].completedAt = ISO8601DateFormatter().string(from: Date())
         tasks[idx].touch()
         persist(tasks[idx])
+        onMutation?("POST", "/tasks/\(id)/cancel", nil)
     }
 
     func reopenTask(_ id: String) {
@@ -142,6 +149,7 @@ class TaskStore {
         tasks[idx].completedAt = nil
         tasks[idx].touch()
         persist(tasks[idx])
+        onMutation?("POST", "/tasks/\(id)/reopen", nil)
     }
 
     func updateTitle(_ id: String, _ title: String) {
@@ -149,6 +157,7 @@ class TaskStore {
         tasks[idx].title = title
         tasks[idx].touch()
         persist(tasks[idx])
+        onMutation?("PUT", "/tasks/\(id)/title", "{\"title\":\"\(title)\"}")
     }
 
     func updateNotes(_ id: String, _ notes: String) {
@@ -156,6 +165,7 @@ class TaskStore {
         tasks[idx].notes = notes
         tasks[idx].touch()
         persist(tasks[idx])
+        onMutation?("PUT", "/tasks/\(id)/notes", "{\"notes\":\"\(notes)\"}")
     }
 
     func setSchedule(_ id: String, _ schedule: Int) {
@@ -163,6 +173,8 @@ class TaskStore {
         tasks[idx].schedule = schedule
         tasks[idx].touch()
         persist(tasks[idx])
+        let scheduleStr = ["inbox", "anytime", "someday"][schedule]
+        onMutation?("PUT", "/tasks/\(id)/schedule", "{\"schedule\":\"\(scheduleStr)\"}")
     }
 
     func setTimeSlot(_ id: String, _ slot: String?) {
@@ -170,6 +182,8 @@ class TaskStore {
         tasks[idx].timeSlot = slot
         tasks[idx].touch()
         persist(tasks[idx])
+        let json = slot.map { "{\"time_slot\":\"\($0)\"}" } ?? "{\"time_slot\":null}"
+        onMutation?("PUT", "/tasks/\(id)/time-slot", json)
     }
 
     func setStartDate(_ id: String, _ date: String?) {
@@ -177,6 +191,8 @@ class TaskStore {
         tasks[idx].startDate = date
         tasks[idx].touch()
         persist(tasks[idx])
+        let json = date.map { "{\"start_date\":\"\($0)\"}" } ?? "{\"start_date\":null}"
+        onMutation?("PUT", "/tasks/\(id)/start-date", json)
     }
 
     func setDeadline(_ id: String, _ date: String?) {
@@ -184,6 +200,8 @@ class TaskStore {
         tasks[idx].deadline = date
         tasks[idx].touch()
         persist(tasks[idx])
+        let json = date.map { "{\"deadline\":\"\($0)\"}" } ?? "{\"deadline\":null}"
+        onMutation?("PUT", "/tasks/\(id)/deadline", json)
     }
 
     func moveToProject(_ id: String, _ projectId: String?) {
@@ -192,6 +210,8 @@ class TaskStore {
         if projectId == nil { tasks[idx].sectionId = nil }
         tasks[idx].touch()
         persist(tasks[idx])
+        let json = projectId.map { "{\"project_id\":\"\($0)\"}" } ?? "{\"project_id\":null}"
+        onMutation?("PUT", "/tasks/\(id)/project", json)
     }
 
     // MARK: - Reorder
@@ -253,6 +273,7 @@ class TaskStore {
         } catch {
             print("[TaskStore] Delete failed: \(error)")
         }
+        onMutation?("DELETE", "/tasks/\(id)", nil)
     }
 
     // MARK: - Project Mutations
