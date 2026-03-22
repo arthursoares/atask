@@ -143,7 +143,22 @@ struct SidebarView: View {
             Spacer()
         }
         .tag(SidebarItem.project(project.id))
-        .draggable(project.id)
+        .draggable(project.id) {
+            HStack(spacing: Spacing.sp3) {
+                Circle()
+                    .fill(Color(hex: project.color.isEmpty ? "#4670a0" : project.color))
+                    .frame(width: Spacing.sidebarDot, height: Spacing.sidebarDot)
+                Text(project.title)
+                    .font(.taskTitle)
+                    .foregroundStyle(Theme.inkPrimary)
+            }
+            .padding(.horizontal, Spacing.sp3)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill(Theme.sidebarSelected)
+            )
+        }
         .dropDestination(for: String.self) { taskIds, _ in
             guard let taskId = taskIds.first else { return false }
             store.moveToProject(taskId, project.id)

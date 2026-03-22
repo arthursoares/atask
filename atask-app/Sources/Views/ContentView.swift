@@ -312,13 +312,6 @@ struct ContentView: View {
         let isHovered = hoveredTaskId == task.id
 
         return HStack(spacing: Spacing.sp3) {
-            // Grip handle (visible on hover, drag affordance)
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(Theme.inkQuaternary)
-                .frame(width: 10)
-                .opacity(isHovered ? 1 : 0)
-
             // Checkbox: 20×20
             Button {
                 if task.isCompleted { store.reopenTask(task.id) }
@@ -365,7 +358,36 @@ struct ContentView: View {
                       isHovered ? Theme.canvasSunken.opacity(0.5) : Color.clear)
         )
         .onHover { hovering in hoveredTaskId = hovering ? task.id : nil }
-        .draggable(task.id)
+        .draggable(task.id) {
+            // Drag preview — full row like Things
+            HStack(spacing: Spacing.sp3) {
+                Circle()
+                    .strokeBorder(
+                        task.isCompleted ? Theme.accent :
+                        isToday ? Theme.todayStar :
+                        Theme.inkQuaternary,
+                        lineWidth: Spacing.checkboxBorder
+                    )
+                    .frame(width: Spacing.checkboxSize, height: Spacing.checkboxSize)
+
+                Text(task.title.isEmpty ? "Untitled" : task.title)
+                    .font(.taskTitle)
+                    .lineLimit(1)
+                    .foregroundStyle(Theme.inkPrimary)
+
+                Spacer()
+
+                taskMeta(task)
+            }
+            .frame(height: Spacing.taskRowHeight)
+            .padding(.vertical, 6)
+            .padding(.horizontal, Spacing.sp4)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.md)
+                    .fill(Theme.sidebarSelected)
+            )
+            .frame(width: 500)
+        }
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded {
             store.selectedTaskId = task.id
