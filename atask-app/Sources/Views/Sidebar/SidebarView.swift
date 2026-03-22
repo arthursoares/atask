@@ -35,6 +35,15 @@ struct SidebarView: View {
                         .foregroundStyle(Theme.inkTertiary)
                         .textCase(.uppercase)
                         .tracking(0.8)
+                        .dropDestination(for: String.self) { projectIds, _ in
+                            guard let projectId = projectIds.first else { return false }
+                            // Only accept if it's a project ID (not a task)
+                            if store.projects.contains(where: { $0.id == projectId }) {
+                                store.moveProjectToArea(projectId, area.id)
+                                return true
+                            }
+                            return false
+                        }
                 }
             }
 
@@ -104,6 +113,21 @@ struct SidebarView: View {
             }
         }
         .tag(tag)
+        .dropDestination(for: String.self) { taskIds, _ in
+            guard let taskId = taskIds.first else { return false }
+            switch tag {
+            case .inbox:
+                store.setSchedule(taskId, 0)
+                store.moveToProject(taskId, nil)
+            case .today:
+                store.setSchedule(taskId, 1)
+            case .someday:
+                store.setSchedule(taskId, 2)
+            default:
+                return false
+            }
+            return true
+        }
     }
 
     // ── Project row ──
@@ -119,6 +143,12 @@ struct SidebarView: View {
             Spacer()
         }
         .tag(SidebarItem.project(project.id))
+        .draggable(project.id)
+        .dropDestination(for: String.self) { taskIds, _ in
+            guard let taskId = taskIds.first else { return false }
+            store.moveToProject(taskId, project.id)
+            return true
+        }
         .contextMenu {
             if !store.areas.isEmpty {
                 Menu("Move to Area") {

@@ -63,7 +63,7 @@ struct CommandPaletteView: View {
                                     HStack(spacing: Spacing.sp3) {
                                         Text(cmd.icon)
                                             .frame(width: 20)
-                                            .font(.system(size: 14))
+                                            .font(.taskTitle)
                                         Text(cmd.label)
                                             .font(.taskTitle)
                                         Spacer()
