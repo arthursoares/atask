@@ -153,13 +153,18 @@ func (s *TaskService) publishEvent(
 }
 
 // Create creates a new task in inbox with the given title.
-func (s *TaskService) Create(ctx context.Context, title, actorID string) (*domain.Task, error) {
+func (s *TaskService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Task, error) {
 	if title == "" {
 		return nil, errors.New("task title must not be empty")
 	}
 
 	now := timeNow()
-	id := uuid.New().String()
+	id := ""
+	if len(opts) > 0 && opts[0] != "" {
+		id = opts[0] // Client-provided ID for sync
+	} else {
+		id = uuid.New().String()
+	}
 
 	row, err := s.queries.CreateTask(ctx, sqlc.CreateTaskParams{
 		ID:        id,

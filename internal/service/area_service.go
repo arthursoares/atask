@@ -54,13 +54,17 @@ func areaFromRow(row sqlc.Area) *domain.Area {
 }
 
 // Create validates, persists, emits delta and domain events, then publishes to the bus.
-func (s *AreaService) Create(ctx context.Context, title, actorID string) (*domain.Area, error) {
+// An optional client-provided ID can be passed as opts[0]; if empty or omitted, a new UUID is generated.
+func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Area, error) {
 	if title == "" {
 		return nil, errors.New("area title must not be empty")
 	}
 
 	now := timeNow()
 	id := uuid.New().String()
+	if len(opts) > 0 && opts[0] != "" {
+		id = opts[0]
+	}
 
 	row, err := s.queries.CreateArea(ctx, sqlc.CreateAreaParams{
 		ID:        id,

@@ -40,13 +40,14 @@ func (h *ProjectHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	project, err := h.projects.Create(r.Context(), body.Title, actorFromRequest(r))
+	project, err := h.projects.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

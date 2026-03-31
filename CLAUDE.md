@@ -2,10 +2,11 @@
 
 ## Project Overview
 
-atask is an AI-first task manager. Go backend with SQLite, event-sourced, semantic REST API. Agents are first-class citizens.
+atask is an AI-first task manager. Go backend with SQLite, event-sourced, semantic REST API. Tauri 2 desktop app with React 19 + nanostores. Agents are first-class citizens.
 
 ## Quick Commands
 
+### Go Backend
 ```bash
 make build          # Build binary
 make run            # Run server (default :8080)
@@ -16,82 +17,89 @@ make sqlc           # Regenerate sqlc code after changing .sql files
 make migrate        # Run migrations against atask.db
 ```
 
+### Tauri Desktop App (`atask-v4/`)
+```bash
+cd atask-v4
+npm run dev             # Dev server (Vite + Tauri)
+npm run build           # Build frontend
+npx tauri build --debug # Build debug .app bundle
+npx tsc --noEmit        # Type check
+npx wdio run wdio.conf.ts  # Run E2E tests (requires built .app)
+```
+
 ## Architecture
 
+### Go Backend
 ```
 cmd/atask/main.go       → entry point, wires everything
 internal/
-  domain/                     → pure Go types, validation, zero dependencies
-  store/                      → SQLite, migrations, sqlc-generated queries
-  event/                      → delta events, domain events, pub/sub bus, SSE
-  service/                    → business logic (validate → persist → emit events)
-  api/                        → HTTP handlers, middleware, response helpers
+  domain/               → pure Go types, validation, zero dependencies
+  store/                → SQLite, migrations, sqlc-generated queries
+  event/                → delta events, domain events, pub/sub bus, SSE
+  service/              → business logic (validate → persist → emit events)
+  api/                  → HTTP handlers, middleware, response helpers
 ```
 
-**Dependency flow:** `api → service → domain + event + store`
-
-- `domain/` has ZERO imports from other internal packages
-- `api/` handlers are thin: parse request → call service → write response
-- `service/` orchestrates: validate domain rules → persist via sqlc → emit events
-- Every mutation emits both delta events (sync) and domain events (intelligence)
+### Tauri Desktop App
+```
+atask-v4/
+  src-tauri/src/
+    commands.rs         → Tauri IPC commands (all CRUD + queue_pending_op for sync)
+    sync.rs             → Sync worker (pending ops flush + delta pull)
+    sync_commands.rs    → Sync Tauri commands (trigger_sync, test_connection)
+    db.rs               → Database struct (Arc<Mutex<Connection>>)
+    models.rs           → Rust model structs
+    lib.rs              → App setup, plugin registration, system menus
+  src/
+    store/              → Nanostores state management
+      mutations.ts      → All async Tauri-calling actions + sync notification
+      selectors.ts      → Cross-domain computed views (useInbox, useTodayMorning, etc.)
+      ui.ts             → UI state atoms
+      tasks.ts, projects.ts, areas.ts, sections.ts, tags.ts, checklist.ts
+    components/         → React components
+    views/              → View components (Inbox, Today, Project, Area, etc.)
+    hooks/              → useKeyboard, useSync, useDragReorder, useTauri
+    lib/dates.ts        → todayLocal() — always use local timezone, never UTC
+  tests/e2e/            → 28 WebDriverIO E2E test suites (~190 tests)
+```
 
 ## Key Patterns
 
-### Adding a new endpoint
-
-1. Add the sqlc query in `internal/store/queries/*.sql`
-2. Run `make sqlc` to regenerate
-3. Add the service method in `internal/service/*_service.go`
-4. Add the HTTP handler in `internal/api/*.go`
-5. Register the route in the handler's `RegisterRoutes` method
-
-### Service method pattern
-
-Every service method follows this pattern:
-```go
-func (s *FooService) DoThing(ctx context.Context, id, actorID string) error {
-    // 1. Validate
-    // 2. Persist via s.queries.SomeQuery(ctx, params)
-    // 3. Emit domain event: s.events.AppendDomainEvent(ctx, ...)
-    // 4. Publish to bus: s.bus.Publish(domain.NewDomainEvent(...))
-    return nil
-}
+### Store pattern (nanostores)
+```typescript
+const tasks = useStore($tasks);              // Subscribe to atom
+import { createTask } from '../store';       // Import mutation
+const id = $selectedTaskId.get();            // Imperative read
+$activeView.set('inbox');                    // Direct write
 ```
 
-### Event system
+### Adding a Tauri feature
+1. Add command in `src-tauri/src/commands.rs` (with `queue_pending_op` for sync)
+2. Add invoke wrapper in `src/hooks/useTauri.ts`
+3. Add mutation in `src/store/mutations.ts` (with `notifySync()`)
 
-Two streams:
-- **Delta events** — field-level changes, used for sync (`GET /sync/deltas?since=N`)
-- **Domain events** — semantic events (`task.completed`), delivered via SSE (`GET /events/stream?topics=task.*`)
+### Sync Engine
+- Every mutation inserts a `pendingOps` row when sync is enabled
+- `trigger_sync`: flush pending ops → pull deltas → upsert local SQLite
+- Triggers: after mutations (debounced 1s), window focus, view change, 5-min fallback
+- Conflict resolution: server wins (newer `updatedAt`)
+- All Create endpoints accept client-provided `id` for consistent UUIDs
 
-### Auth
-
-- Users authenticate with JWT (`Authorization: Bearer <token>`)
-- Agents authenticate with API keys (`Authorization: ApiKey <key>`)
-- Both are set in request context and available via `actorFromRequest(r)`
-- `/health` and `/auth/*` routes skip auth middleware
+### Auth (Go)
+- JWT: `Authorization: Bearer <token>` / API keys: `Authorization: ApiKey <key>`
+- Only `/health`, `/auth/login`, `/auth/register` are public
 
 ## Testing
 
-- All tests use in-memory SQLite (`:memory:`) with real migrations
-- Service tests use a shared `setupTest(t)` helper
-- API tests use `httptest` with real services (integration tests)
-- Run `go test -race ./...` to check for race conditions
+### Go: `go test -race ./...`
+### Tauri E2E: `npx wdio run wdio.conf.ts` (from `atask-v4/`)
+- Uses `browser.execute()` with raw DOM queries
+- Sync integration tests need running Go server: `DB_PATH=/tmp/test.db ./bin/atask`
 
-## Database
+## Domain Model
 
-- SQLite with WAL mode, foreign keys enabled, single-writer (`MaxOpenConns=1`)
-- Migrations embedded in binary via `//go:embed`
-- Schema in `internal/store/migrations/001_initial_schema.sql`
-- Query files in `internal/store/queries/*.sql` → generated Go in `internal/store/sqlc/`
-- **Never edit files in `internal/store/sqlc/`** — they're generated by sqlc
-
-## Domain Model Constraints
-
-- Projects don't nest (no sub-projects)
-- Sections only exist inside projects
-- Checklist items are not tasks (no dates, tags, or nesting)
-- Areas don't complete (permanent life categories, can be archived)
-- No explicit priorities (ordering within lists is the priority)
-- No hard dependencies (soft links only, advisory)
-- Tasks always know their project_id even when in a section
+- Projects don't nest. Sections only exist inside projects.
+- Areas are permanent life categories (can be archived, not completed).
+- Checklist items are not tasks (no dates, tags, or nesting).
+- No explicit priorities — ordering within lists is the priority.
+- Use `todayLocal()` for dates, never `new Date().toISOString().slice(0,10)`.

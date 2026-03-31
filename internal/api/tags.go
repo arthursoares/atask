@@ -31,13 +31,14 @@ func (h *TagHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	tag, err := h.tags.Create(r.Context(), body.Title, actorFromRequest(r))
+	tag, err := h.tags.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

@@ -99,7 +99,8 @@ func (s *SectionService) publishSectionEvent(
 }
 
 // Create validates, persists, emits events, then publishes to the bus.
-func (s *SectionService) Create(ctx context.Context, title, projectID, actorID string) (*domain.Section, error) {
+// An optional client-provided ID can be passed as opts[0]; if empty or omitted, a new UUID is generated.
+func (s *SectionService) Create(ctx context.Context, title, projectID, actorID string, opts ...string) (*domain.Section, error) {
 	if title == "" {
 		return nil, errors.New("section title must not be empty")
 	}
@@ -109,6 +110,9 @@ func (s *SectionService) Create(ctx context.Context, title, projectID, actorID s
 
 	now := timeNow()
 	id := uuid.New().String()
+	if len(opts) > 0 && opts[0] != "" {
+		id = opts[0]
+	}
 
 	row, err := s.queries.CreateSection(ctx, sqlc.CreateSectionParams{
 		ID:        id,

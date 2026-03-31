@@ -33,13 +33,14 @@ func (h *AreaHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	area, err := h.areas.Create(r.Context(), body.Title, actorFromRequest(r))
+	area, err := h.areas.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

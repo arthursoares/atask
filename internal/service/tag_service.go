@@ -104,13 +104,17 @@ func (s *TagService) publishTagEvent(
 }
 
 // Create validates, persists, emits events, then publishes to the bus.
-func (s *TagService) Create(ctx context.Context, title, actorID string) (*domain.Tag, error) {
+// An optional client-provided ID can be passed as opts[0]; if empty or omitted, a new UUID is generated.
+func (s *TagService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Tag, error) {
 	if title == "" {
 		return nil, errors.New("tag title must not be empty")
 	}
 
 	now := timeNow()
 	id := uuid.New().String()
+	if len(opts) > 0 && opts[0] != "" {
+		id = opts[0]
+	}
 
 	row, err := s.queries.CreateTag(ctx, sqlc.CreateTagParams{
 		ID:        id,

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/atask/atask/internal/service"
@@ -58,14 +57,20 @@ func NewRouter(
 	return handler
 }
 
-// authMiddleware wraps the Auth middleware but skips paths that don't require authentication:
-// /health and anything under /auth/.
+// authMiddleware wraps the Auth middleware but skips public paths.
+// Only /health, /auth/login, and /auth/register are public.
+// /auth/me and /auth/api-keys require authentication.
 func authMiddleware(authService *service.AuthService) func(http.Handler) http.Handler {
 	inner := Auth(authService)
+	publicPaths := map[string]bool{
+		"/health":        true,
+		"/auth/login":    true,
+		"/auth/register": true,
+	}
 	return func(next http.Handler) http.Handler {
 		protected := inner(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" || strings.HasPrefix(r.URL.Path, "/auth/") {
+			if publicPaths[r.URL.Path] {
 				next.ServeHTTP(w, r)
 				return
 			}

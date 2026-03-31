@@ -50,13 +50,14 @@ func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	task, err := h.tasks.Create(r.Context(), body.Title, actorFromRequest(r))
+	task, err := h.tasks.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

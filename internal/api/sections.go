@@ -32,13 +32,14 @@ func (h *SectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	section, err := h.sections.Create(r.Context(), body.Title, projectID, actorFromRequest(r))
+	section, err := h.sections.Create(r.Context(), body.Title, projectID, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
