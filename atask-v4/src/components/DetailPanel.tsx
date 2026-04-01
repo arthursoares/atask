@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { $tasks, $projects, $selectedTaskId, useTagsForTask, updateTask } from '../store/index';
-import TagPill from './TagPill';
+import { $tasks, $projects, closeTaskEditor, clearSelectedTask, useTagsForTask, updateTask } from '../store/index';
 import ChecklistSection from './ChecklistSection';
 import ActivityFeed from './ActivityFeed';
 import WhenPicker from './WhenPicker';
 import TagPicker from './TagPicker';
 import ProjectPicker from './ProjectPicker';
+import { TagPill } from '../ui';
 
 interface DetailPanelProps {
   taskId: string;
@@ -24,7 +24,6 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
   const tasks = useStore($tasks);
   const projects = useStore($projects);
   const task = tasks.find((t) => t.id === taskId);
-  const setSelectedTaskId = (id: string | null) => $selectedTaskId.set(id);
 
   const tags = useTagsForTask(taskId);
 
@@ -52,10 +51,11 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setSelectedTaskId(null);
+        closeTaskEditor();
+        clearSelectedTask();
       }
     },
-    [setSelectedTaskId],
+    [],
   );
 
   useEffect(() => {
@@ -97,20 +97,11 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
 
   return (
     <div className="detail-panel">
-      {/* Header */}
       <div className="detail-header">
         <input
           className="detail-title"
           value={titleValue}
           onChange={handleTitleChange}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            width: '100%',
-            display: 'block',
-            fontFamily: 'inherit',
-          }}
         />
         {tags.length > 0 && (
           <div className="detail-meta-row">
@@ -121,32 +112,24 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
         )}
       </div>
 
-      {/* Body */}
       <div className="detail-body">
-        {/* Project */}
-        <div className="detail-field" style={{ position: 'relative' }}>
+        <div className="detail-field detail-field-popover">
           <div className="detail-field-label">Project</div>
           <div className="detail-field-value">
             <span
-              style={{ cursor: 'pointer' }}
+              className="detail-field-trigger"
               onClick={() => setShowProjectPicker((v) => !v)}
             >
               {project ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span className="detail-project-value">
                   <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: project.color || 'var(--accent)',
-                      flexShrink: 0,
-                      display: 'inline-block',
-                    }}
+                    className="detail-project-dot"
+                    style={{ background: project.color || 'var(--accent)' }}
                   />
                   {project.title}
                 </span>
               ) : (
-                <span style={{ color: 'var(--ink-quaternary)' }}>None</span>
+                <span className="detail-empty-value">None</span>
               )}
             </span>
             {showProjectPicker && (
@@ -158,12 +141,11 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
           </div>
         </div>
 
-        {/* Schedule */}
-        <div className="detail-field" style={{ position: 'relative' }}>
+        <div className="detail-field detail-field-popover">
           <div className="detail-field-label">Schedule</div>
           <div className="detail-field-value">
             <span
-              style={{ cursor: 'pointer' }}
+              className="detail-field-trigger"
               onClick={() => setShowWhenPicker((v) => !v)}
             >
               {scheduleLabel(task.schedule, task.timeSlot)}
@@ -181,74 +163,51 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
           </div>
         </div>
 
-        {/* Start Date */}
         <div className="detail-field">
           <div className="detail-field-label">Start Date</div>
-          <div className="detail-field-value" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <div className="detail-field-value detail-inline-field">
             <input
+              className="detail-date-input"
               type="date"
               value={task.startDate?.slice(0, 10) ?? ''}
               onChange={(e) => updateTask({ id: taskId, startDate: e.target.value || null })}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--ink-secondary)',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
             />
             {task.startDate && (
               <span
-                style={{ cursor: 'pointer', color: 'var(--ink-quaternary)', fontSize: 'var(--text-xs)' }}
+                className="detail-clear-btn"
                 onClick={() => updateTask({ id: taskId, startDate: null })}
               >×</span>
             )}
           </div>
         </div>
 
-        {/* Deadline */}
         <div className="detail-field">
           <div className="detail-field-label">Deadline</div>
-          <div className="detail-field-value" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <div className="detail-field-value detail-inline-field">
             <input
+              className="detail-date-input"
               type="date"
               value={task.deadline?.slice(0, 10) ?? ''}
               onChange={(e) => updateTask({ id: taskId, deadline: e.target.value || null })}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--ink-secondary)',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
             />
             {task.deadline && (
               <span
-                style={{ cursor: 'pointer', color: 'var(--ink-quaternary)', fontSize: 'var(--text-xs)' }}
+                className="detail-clear-btn"
                 onClick={() => updateTask({ id: taskId, deadline: null })}
               >×</span>
             )}
           </div>
         </div>
 
-        {/* Tags */}
-        <div className="detail-field" style={{ position: 'relative' }}>
+        <div className="detail-field detail-field-popover">
           <div className="detail-field-label">Tags</div>
           <div className="detail-field-value">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-1)', alignItems: 'center' }}>
+            <div className="detail-tag-row">
               {tags.map((tag) => (
                 <TagPill key={tag.id} label={tag.title} variant="default" />
               ))}
               <span
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--accent)',
-                  cursor: 'pointer',
-                }}
+                className="detail-add-link"
                 onClick={() => setShowTagPicker((v) => !v)}
               >
                 + Add
@@ -263,40 +222,26 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
           </div>
         </div>
 
-        {/* Notes */}
         <div className="detail-field">
           <div className="detail-field-label">Notes</div>
           <div className="detail-field-value">
             <textarea
+              className="detail-notes-input"
               value={notesValue}
               onChange={handleNotesChange}
               placeholder="Add notes…"
               rows={3}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                resize: 'vertical',
-                width: '100%',
-                fontFamily: 'inherit',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--ink-secondary)',
-                lineHeight: 'var(--leading-relaxed)',
-                padding: 0,
-              }}
             />
           </div>
         </div>
 
-        {/* Checklist */}
         <div className="detail-field">
           <div className="detail-field-label">Checklist</div>
           <ChecklistSection taskId={taskId} />
         </div>
 
-        {/* Activity */}
-        <div style={{ borderTop: '1px solid var(--separator)', marginTop: 'var(--sp-2)', paddingTop: 'var(--sp-4)' }}>
-          <div className="detail-field-label" style={{ marginBottom: 'var(--sp-2)' }}>Activity</div>
+        <div className="detail-activity">
+          <div className="detail-field-label detail-activity-label">Activity</div>
           <ActivityFeed taskId={taskId} />
         </div>
       </div>

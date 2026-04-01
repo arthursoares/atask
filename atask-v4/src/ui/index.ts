@@ -1,7 +1,15 @@
 export { default as Button } from "./Button";
+export { default as EmptyState } from "./EmptyState";
 export { default as Field } from "./Field";
 export { default as MenuList } from "./MenuList";
+export { default as ProgressBar } from "./ProgressBar";
+export { default as SectionHeader } from "./SectionHeader";
 export { default as Surface } from "./Surface";
+export { default as TagPill } from "./TagPill";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
+export type { EmptyStateProps } from "./EmptyState";
 export type { FieldProps } from "./Field";
 export type { MenuListItem } from "./MenuList";
+export type { ProgressBarProps } from "./ProgressBar";
+export type { SectionHeaderProps } from "./SectionHeader";
+export type { TagPillProps, TagVariant } from "./TagPill";
