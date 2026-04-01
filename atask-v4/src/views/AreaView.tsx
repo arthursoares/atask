@@ -11,10 +11,10 @@ import {
   closeTaskEditor,
   useActiveProjects,
 } from '../store/index';
-import TaskRow from '../components/TaskRow';
-import TaskInlineEditor from '../components/TaskInlineEditor';
 import EmptyState from '../components/EmptyState';
 import ProgressBar from '../components/ProgressBar';
+import AreaProjectList from './area-view/AreaProjectList';
+import AreaTaskList from './area-view/AreaTaskList';
 
 const AreaIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -53,95 +53,29 @@ export default function AreaView({ areaId }: AreaViewProps) {
 
   return (
     <div>
-      {/* Area overview stats */}
-      <div style={{ marginBottom: "var(--sp-4)" }}>
+      <div className="area-summary">
         <ProgressBar completed={completedTasks} total={totalTasks} />
-        <div style={{
-          display: "flex",
-          gap: "var(--sp-5)",
-          marginTop: "var(--sp-3)",
-          fontSize: "var(--text-sm)",
-          color: "var(--ink-tertiary)",
-        }}>
-          <span>{areaProjects.length} project{areaProjects.length !== 1 ? "s" : ""}</span>
-          <span>{areaTasks.length} direct task{areaTasks.length !== 1 ? "s" : ""}</span>
+        <div className="area-summary-stats">
+          <span>{areaProjects.length} project{areaProjects.length !== 1 ? 's' : ''}</span>
+          <span>{areaTasks.length} direct task{areaTasks.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
-      {/* Projects in this area */}
-      {areaProjects.length > 0 && (
-        <div style={{ marginBottom: "var(--sp-4)" }}>
-          <div style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: 700,
-            color: "var(--ink-tertiary)",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-            marginBottom: "var(--sp-2)",
-          }}>
-            Projects
-          </div>
-          {areaProjects.map((project) => {
-            const projectTasks = tasks.filter((t) => t.projectId === project.id && t.status === 0);
-            return (
-              <div
-                key={project.id}
-                className="sidebar-item"
-                style={{ padding: "var(--sp-2) var(--sp-3)", cursor: "pointer" }}
-                onClick={() => setActiveView(`project-${project.id}`)}
-              >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: project.color || "var(--accent)",
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ flex: 1 }}>{project.title}</span>
-                <span style={{ fontSize: "var(--text-xs)", color: "var(--ink-tertiary)" }}>
-                  {projectTasks.length}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <AreaProjectList
+        projects={areaProjects}
+        tasks={tasks}
+        onOpenProject={(projectId) => setActiveView(`project-${projectId}`)}
+      />
 
-      {/* Direct tasks (tasks assigned to area but not in a project) */}
-      {areaTasks.length > 0 && (
-        <div>
-          <div style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: 700,
-            color: "var(--ink-tertiary)",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-            marginBottom: "var(--sp-2)",
-          }}>
-            Tasks
-          </div>
-          {areaTasks.map((task) =>
-            expandedTaskId === task.id ? (
-              <TaskInlineEditor
-                key={task.id}
-                task={task}
-                onClose={closeTaskEditor}
-              />
-            ) : (
-              <TaskRow
-                key={task.id}
-                task={task}
-                isSelected={selectedTaskId === task.id}
-                isMultiSelected={selectedTaskIds.has(task.id)}
-                onClick={() => selectTask(task.id)}
-                onDoubleClick={() => openTaskEditor(task.id)}
-              />
-            ),
-          )}
-        </div>
-      )}
+      <AreaTaskList
+        tasks={areaTasks}
+        selectedTaskId={selectedTaskId}
+        selectedTaskIds={selectedTaskIds}
+        expandedTaskId={expandedTaskId}
+        onSelectTask={selectTask}
+        onExpandTask={openTaskEditor}
+        onCloseExpandedTask={closeTaskEditor}
+      />
 
       {areaProjects.length === 0 && areaTasks.length === 0 && (
         <EmptyState icon={AreaIcon} text="No projects or tasks in this area" />
