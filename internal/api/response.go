@@ -2,8 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 )
+
+const maxJSONBodyBytes = 1 << 20
 
 // RespondJSON writes a JSON response with the given status code.
 func RespondJSON(w http.ResponseWriter, status int, data any) {
@@ -38,5 +43,22 @@ func RespondError(w http.ResponseWriter, status int, message string) {
 
 // DecodeJSON reads and decodes JSON from the request body into dst.
 func DecodeJSON(r *http.Request, dst any) error {
-	return json.NewDecoder(r.Body).Decode(dst)
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxJSONBodyBytes+1))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	if dec.InputOffset() > maxJSONBodyBytes {
+		return fmt.Errorf("request body exceeds %d bytes", maxJSONBodyBytes)
+	}
+
+	if err := dec.Decode(&struct{}{}); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return errors.New("request body must contain a single JSON object")
+	}
+
+	return errors.New("request body must contain a single JSON object")
 }

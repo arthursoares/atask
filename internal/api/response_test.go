@@ -153,3 +153,31 @@ func TestDecodeJSON_InvalidBody(t *testing.T) {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
 }
+
+func TestDecodeJSON_RejectsUnknownFields(t *testing.T) {
+	type payload struct {
+		Name string `json:"name"`
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"hello","extra":true}`))
+	r.Header.Set("Content-Type", "application/json")
+
+	var dst payload
+	if err := DecodeJSON(r, &dst); err == nil {
+		t.Fatal("expected error for unknown fields, got nil")
+	}
+}
+
+func TestDecodeJSON_RejectsTrailingJSON(t *testing.T) {
+	type payload struct {
+		Name string `json:"name"`
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"hello"}{"name":"again"}`))
+	r.Header.Set("Content-Type", "application/json")
+
+	var dst payload
+	if err := DecodeJSON(r, &dst); err == nil {
+		t.Fatal("expected error for trailing JSON, got nil")
+	}
+}

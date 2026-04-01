@@ -129,7 +129,7 @@ func (h *ViewHandler) Inbox(w http.ResponseWriter, r *http.Request) {
 
 // Today handles GET /views/today — returns tasks with schedule=1, status=0, start_date IS NULL OR <= today.
 func (h *ViewHandler) Today(w http.ResponseWriter, r *http.Request) {
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().UTC().Format("2006-01-02")
 	rows, err := h.queries.ViewToday(r.Context(), sql.NullString{String: today, Valid: true})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -145,7 +145,7 @@ func (h *ViewHandler) Today(w http.ResponseWriter, r *http.Request) {
 
 // Upcoming handles GET /views/upcoming — returns tasks with start_date > today.
 func (h *ViewHandler) Upcoming(w http.ResponseWriter, r *http.Request) {
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().UTC().Format("2006-01-02")
 	rows, err := h.queries.ViewUpcoming(r.Context(), sql.NullString{String: today, Valid: true})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
