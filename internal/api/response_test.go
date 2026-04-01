@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -180,4 +182,26 @@ func TestDecodeJSON_RejectsTrailingJSON(t *testing.T) {
 	if err := DecodeJSON(r, &dst); err == nil {
 		t.Fatal("expected error for trailing JSON, got nil")
 	}
+}
+
+func TestDecodeErrorMessage(t *testing.T) {
+	t.Run("empty body", func(t *testing.T) {
+		if got := decodeErrorMessage(io.EOF); got != "request body must not be empty" {
+			t.Fatalf("unexpected message: %q", got)
+		}
+	})
+
+	t.Run("unknown field", func(t *testing.T) {
+		err := errors.New(`json: unknown field "extra"`)
+		if got := decodeErrorMessage(err); got != `request body contains unknown field "extra"` {
+			t.Fatalf("unexpected message: %q", got)
+		}
+	})
+
+	t.Run("trailing json", func(t *testing.T) {
+		err := errors.New("request body must contain a single JSON object")
+		if got := decodeErrorMessage(err); got != "request body must contain a single JSON object" {
+			t.Fatalf("unexpected message: %q", got)
+		}
+	})
 }

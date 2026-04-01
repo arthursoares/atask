@@ -35,7 +35,7 @@ func (h *ChecklistHandler) AddItem(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *ChecklistHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

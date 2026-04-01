@@ -34,7 +34,7 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Name  string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 	name := body.Name
@@ -81,7 +81,7 @@ func (h *LocationHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		Name  string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 	name := body.Name

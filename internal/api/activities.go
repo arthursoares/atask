@@ -31,7 +31,7 @@ func (h *ActivityHandler) Add(w http.ResponseWriter, r *http.Request) {
 		Content   string `json:"content"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

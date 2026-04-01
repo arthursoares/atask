@@ -53,7 +53,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *TaskHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *TaskHandler) UpdateNotes(w http.ResponseWriter, r *http.Request) {
 		Notes string `json:"notes"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -237,7 +237,7 @@ func (h *TaskHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		Schedule string `json:"schedule"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -265,7 +265,7 @@ func (h *TaskHandler) SetStartDate(w http.ResponseWriter, r *http.Request) {
 		Date *string `json:"date"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -297,7 +297,7 @@ func (h *TaskHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
 		Date *string `json:"date"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -329,7 +329,7 @@ func (h *TaskHandler) MoveToProject(w http.ResponseWriter, r *http.Request) {
 		ID *string `json:"id"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -351,7 +351,7 @@ func (h *TaskHandler) MoveToSection(w http.ResponseWriter, r *http.Request) {
 		ID *string `json:"id"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -373,7 +373,7 @@ func (h *TaskHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {
 		ID *string `json:"id"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -395,7 +395,7 @@ func (h *TaskHandler) SetLocation(w http.ResponseWriter, r *http.Request) {
 		ID *string `json:"id"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -415,7 +415,7 @@ func (h *TaskHandler) SetRecurrence(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body *domain.RecurrenceRule
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -501,7 +501,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		Index int `json:"index"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -523,7 +523,7 @@ func (h *TaskHandler) SetTodayIndex(w http.ResponseWriter, r *http.Request) {
 		Index *int `json:"index"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

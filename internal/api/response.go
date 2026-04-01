@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 const maxJSONBodyBytes = 1 << 20
@@ -61,4 +62,40 @@ func DecodeJSON(r *http.Request, dst any) error {
 	}
 
 	return errors.New("request body must contain a single JSON object")
+}
+
+func decodeErrorMessage(err error) string {
+	if errors.Is(err, io.EOF) {
+		return "request body must not be empty"
+	}
+
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return "request body contains malformed JSON"
+	}
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		if typeErr.Field != "" {
+			return fmt.Sprintf("request body contains an invalid value for %q", typeErr.Field)
+		}
+		return "request body contains an invalid value"
+	}
+
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "json: unknown field "):
+		field := strings.TrimPrefix(msg, "json: unknown field ")
+		return fmt.Sprintf("request body contains unknown field %s", field)
+	case strings.HasPrefix(msg, "request body exceeds "):
+		return msg
+	case msg == "request body must contain a single JSON object":
+		return msg
+	default:
+		return "invalid JSON"
+	}
+}
+
+func RespondDecodeError(w http.ResponseWriter, err error) {
+	RespondError(w, http.StatusBadRequest, decodeErrorMessage(err))
 }

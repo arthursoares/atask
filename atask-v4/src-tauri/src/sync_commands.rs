@@ -47,7 +47,10 @@ pub fn get_sync_status(db: tauri::State<'_, Database>) -> Result<SyncStatus, Str
 }
 
 #[tauri::command]
-pub fn trigger_sync(db: tauri::State<'_, Database>, app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn trigger_sync(
+    db: tauri::State<'_, Database>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
     // Perform a full sync cycle: flush pending ops + pull deltas
     crate::sync::sync_now_blocking(&db.conn, &app_handle)
 }
