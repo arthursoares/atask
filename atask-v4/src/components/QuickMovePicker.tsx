@@ -196,15 +196,8 @@ export default function QuickMovePicker() {
                 >
                   {opt.id ? (
                     <span
-                      className="cmd-item-icon"
-                      style={{
-                        display: "inline-block",
-                        width: 10,
-                        height: 10,
-                        borderRadius: "50%",
-                        backgroundColor: opt.color || "var(--accent)",
-                        flexShrink: 0,
-                      }}
+                      className="cmd-item-icon cmd-item-dot"
+                      style={{ backgroundColor: opt.color || "var(--accent)" }}
                     />
                   ) : (
                     <span className="cmd-item-icon">{"📥"}</span>

@@ -219,27 +219,17 @@ export default function SearchOverlay() {
                 <span className="cmd-item-label">
                   {result.title}
                   {result.projectName && (
-                    <span style={{ opacity: 0.5, marginLeft: 8, fontSize: "0.85em" }}>
+                    <span className="cmd-item-meta">
                       {result.projectName}
                     </span>
                   )}
                   {result.snippet && (
-                    <span
-                      style={{
-                        display: "block",
-                        opacity: 0.4,
-                        fontSize: "0.8em",
-                        marginTop: 2,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
+                    <span className="cmd-item-snippet">
                       {result.snippet}
                     </span>
                   )}
                 </span>
-                <span className="cmd-item-shortcut" style={{ textTransform: "capitalize" }}>
+                <span className="cmd-item-shortcut cmd-item-type">
                   {result.type}
                 </span>
               </div>

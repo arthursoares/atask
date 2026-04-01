@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore } from '@nanostores/react';
 import { $showShortcuts } from '../store';
+import { Button } from '../ui';
 
 interface ShortcutItem {
   keys: string;
@@ -69,97 +70,30 @@ export default function ShortcutsHelp() {
   return (
     <>
       <div className="cmd-backdrop open" onClick={() => $showShortcuts.set(false)} />
-      <div
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1000,
-          width: 560,
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          background: 'var(--canvas-elevated)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-xl)',
-          padding: 'var(--sp-5)',
-        }}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 'var(--sp-4)',
-        }}>
-          <h2 style={{
-            fontSize: 'var(--text-base)',
-            fontWeight: 700,
-            color: 'var(--ink-primary)',
-            margin: 0,
-          }}>
-            Keyboard Shortcuts
-          </h2>
-          <button
+      <div className="shortcuts-help">
+        <div className="shortcuts-help-header">
+          <h2 className="shortcuts-help-title">Keyboard Shortcuts</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shortcuts-help-close"
             onClick={() => $showShortcuts.set(false)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--ink-tertiary)',
-              cursor: 'pointer',
-              fontSize: 'var(--text-sm)',
-              padding: 'var(--sp-1) var(--sp-2)',
-              borderRadius: 'var(--radius-sm)',
-            }}
           >
             ✕
-          </button>
+          </Button>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 'var(--sp-5)',
-        }}>
+        <div className="shortcuts-help-grid">
           {shortcuts.map(({ category, items }) => (
             <div key={category}>
-              <div style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--ink-tertiary)',
-                marginBottom: 'var(--sp-2)',
-              }}>
-                {category}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+              <div className="shortcuts-help-category">{category}</div>
+              <div className="shortcuts-help-list">
                 {items.map(({ keys, action }) => (
-                  <div
-                    key={keys}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 'var(--sp-3)',
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 'var(--text-sm)',
-                      color: 'var(--ink-secondary)',
-                    }}>
+                  <div key={keys} className="shortcuts-help-item">
+                    <span className="shortcuts-help-action">
                       {action}
                     </span>
-                    <span style={{
-                      fontFamily: "'SF Mono', 'Menlo', monospace",
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--ink-secondary)',
-                      background: 'var(--canvas-sunken)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '2px 6px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                    }}>
+                    <span className="shortcuts-help-keys">
                       {keys}
                     </span>
                   </div>
