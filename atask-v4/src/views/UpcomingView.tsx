@@ -1,9 +1,16 @@
-import { useStore } from "@nanostores/react";
-import { useUpcoming, $selectedTaskId, $expandedTaskId } from "../store/index";
-import TaskRow from "../components/TaskRow";
-import TaskInlineEditor from "../components/TaskInlineEditor";
-import DateGroupHeader from "../components/DateGroupHeader";
-import EmptyState from "../components/EmptyState";
+import { useStore } from '@nanostores/react';
+import {
+  useUpcoming,
+  $selectedTaskId,
+  $expandedTaskId,
+  selectTask,
+  openTaskEditor,
+  closeTaskEditor,
+} from '../store/index';
+import TaskRow from '../components/TaskRow';
+import TaskInlineEditor from '../components/TaskInlineEditor';
+import DateGroupHeader from '../components/DateGroupHeader';
+import EmptyState from '../components/EmptyState';
 
 const CalendarIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -61,15 +68,15 @@ export default function UpcomingView() {
                 <TaskInlineEditor
                   key={task.id}
                   task={task}
-                  onClose={() => $expandedTaskId.set(null)}
+                  onClose={closeTaskEditor}
                 />
               ) : (
                 <TaskRow
                   key={task.id}
                   task={task}
                   isSelected={selectedTaskId === task.id}
-                  onClick={() => $selectedTaskId.set(task.id)}
-                  onDoubleClick={() => $expandedTaskId.set(task.id)}
+                  onClick={() => selectTask(task.id)}
+                  onDoubleClick={() => openTaskEditor(task.id)}
                 />
               ),
             )}

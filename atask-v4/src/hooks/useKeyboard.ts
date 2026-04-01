@@ -4,6 +4,7 @@ import { todayLocal } from '../lib/dates';
 import {
   $activeView, $selectedTaskId, $selectedTaskIds, $expandedTaskId,
   $showPalette, $showQuickMove, $showSearch, $showSidebar, $showShortcuts, $tasks,
+  setActiveView, selectTask, clearSelectedTask, closeTaskEditor,
 } from '../store';
 import {
   createTask, completeTask, deleteTask, duplicateTask, updateTask,
@@ -36,11 +37,11 @@ export default function useKeyboard() {
       // --- Always-active shortcuts (work even in text fields) ---
 
       // ⌘1-5: Navigate views
-      if (meta && !shift && key === '1') { e.preventDefault(); $activeView.set('inbox'); return; }
-      if (meta && !shift && key === '2') { e.preventDefault(); $activeView.set('today'); return; }
-      if (meta && !shift && key === '3') { e.preventDefault(); $activeView.set('upcoming'); return; }
-      if (meta && !shift && key === '4') { e.preventDefault(); $activeView.set('someday'); return; }
-      if (meta && !shift && key === '5') { e.preventDefault(); $activeView.set('logbook'); return; }
+      if (meta && !shift && key === '1') { e.preventDefault(); setActiveView('inbox'); return; }
+      if (meta && !shift && key === '2') { e.preventDefault(); setActiveView('today'); return; }
+      if (meta && !shift && key === '3') { e.preventDefault(); setActiveView('upcoming'); return; }
+      if (meta && !shift && key === '4') { e.preventDefault(); setActiveView('someday'); return; }
+      if (meta && !shift && key === '5') { e.preventDefault(); setActiveView('logbook'); return; }
 
       // ⇧⌘O: Toggle command palette (Things-compatible — NOT ⌘K which is Complete)
       if (meta && shift && (key === 'o' || key === 'O')) {
@@ -87,8 +88,8 @@ export default function useKeyboard() {
 
       // Escape: Deselect task / close expanded
       if (key === 'Escape') {
-        if (expandedTaskId) { $expandedTaskId.set(null); return; }
-        if (selectedTaskId) { $selectedTaskId.set(null); return; }
+        if (expandedTaskId) { closeTaskEditor(); return; }
+        if (selectedTaskId) { clearSelectedTask(); return; }
         return;
       }
 
@@ -178,6 +179,7 @@ export default function useKeyboard() {
       if (meta && !shift && key === 'a') {
         e.preventDefault();
         const filteredTasks = getViewTasks();
+        clearSelectedTask();
         $selectedTaskIds.set(new Set(filteredTasks.map(t => t.id)));
         return;
       }
@@ -192,7 +194,7 @@ export default function useKeyboard() {
       // ⌘,: Navigate to Settings
       if (meta && !shift && key === ',') {
         e.preventDefault();
-        $activeView.set('settings');
+        setActiveView('settings');
         return;
       }
 
@@ -261,13 +263,13 @@ export default function useKeyboard() {
 
       const currentId = $selectedTaskId.get();
       if (!currentId) {
-        $selectedTaskId.set(tasks[0].id);
+        selectTask(tasks[0].id);
         return;
       }
 
       const currentIndex = tasks.findIndex(t => t.id === currentId);
       const nextIndex = Math.max(0, Math.min(tasks.length - 1, currentIndex + direction));
-      $selectedTaskId.set(tasks[nextIndex].id);
+      selectTask(tasks[nextIndex].id);
     }
 
     function extendSelection(direction: number) {
@@ -286,7 +288,7 @@ export default function useKeyboard() {
       next.add(currentId);
       next.add(nextId);
       $selectedTaskIds.set(next);
-      $selectedTaskId.set(nextId);
+      selectTask(nextId, { preserveMultiSelection: true });
     }
 
     function moveTask(direction: number) {

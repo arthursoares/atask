@@ -1,10 +1,20 @@
-import { useStore } from "@nanostores/react";
-import { useSomeday, $selectedTaskId, $expandedTaskId, $selectedTaskIds, createTask, reorderTasks } from "../store/index";
-import TaskRow from "../components/TaskRow";
-import TaskInlineEditor from "../components/TaskInlineEditor";
-import NewTaskRow from "../components/NewTaskRow";
-import EmptyState from "../components/EmptyState";
-import useDragReorder from "../hooks/useDragReorder";
+import { useStore } from '@nanostores/react';
+import {
+  useSomeday,
+  $selectedTaskId,
+  $expandedTaskId,
+  $selectedTaskIds,
+  selectTask,
+  openTaskEditor,
+  closeTaskEditor,
+  createTask,
+  reorderTasks,
+} from '../store/index';
+import TaskRow from '../components/TaskRow';
+import TaskInlineEditor from '../components/TaskInlineEditor';
+import NewTaskRow from '../components/NewTaskRow';
+import EmptyState from '../components/EmptyState';
+import useDragReorder from '../hooks/useDragReorder';
 
 const ClockIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -32,7 +42,7 @@ export default function SomedayView() {
             <TaskInlineEditor
               key={task.id}
               task={task}
-              onClose={() => $expandedTaskId.set(null)}
+              onClose={closeTaskEditor}
             />
           ) : (
             <TaskRow
@@ -41,8 +51,8 @@ export default function SomedayView() {
               isSelected={selectedTaskId === task.id}
               isMultiSelected={selectedTaskIds.has(task.id)}
               taskList={tasks}
-              onClick={() => $selectedTaskId.set(task.id)}
-              onDoubleClick={() => $expandedTaskId.set(task.id)}
+              onClick={() => selectTask(task.id)}
+              onDoubleClick={() => openTaskEditor(task.id)}
               dragHandlers={getDragHandlers(task.id)}
               dropHandlers={getDropHandlers(index)}
               isDragOver={dragState.dropIndex === index && dragState.dragId !== task.id}
@@ -50,7 +60,7 @@ export default function SomedayView() {
           ),
         )
       )}
-      <NewTaskRow onCreate={(title) => createTask(title)} />
+      <NewTaskRow onCreate={createTask} />
     </div>
   );
 }

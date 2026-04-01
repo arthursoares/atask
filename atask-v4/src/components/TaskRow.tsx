@@ -6,9 +6,11 @@ import {
   $tags,
   $tagsByTaskId,
   $selectedTaskIds,
-  $selectedTaskId,
   completeTask,
   reopenTask,
+  selectTask,
+  selectTaskRange,
+  toggleTaskSelection,
   updateTask,
 } from '../store/index';
 import CheckboxCircle from './CheckboxCircle';
@@ -78,40 +80,24 @@ export default function TaskRow({
 
   const handleClick = (e: React.MouseEvent) => {
     const currentSelectedIds = $selectedTaskIds.get();
-    const currentSelectedId = $selectedTaskId.get();
 
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
-      const next = new Set(currentSelectedIds);
-      if (next.has(task.id)) {
-        next.delete(task.id);
-      } else {
-        next.add(task.id);
-      }
-      $selectedTaskIds.set(next);
+      toggleTaskSelection(task.id);
       return;
     }
 
     if (e.shiftKey && taskList) {
       e.preventDefault();
-      const lastId = currentSelectedId || (currentSelectedIds.size > 0 ? [...currentSelectedIds].pop() : null);
-      if (lastId) {
-        const lastIdx = taskList.findIndex(t => t.id === lastId);
-        const currentIdx = taskList.findIndex(t => t.id === task.id);
-        if (lastIdx >= 0 && currentIdx >= 0) {
-          const start = Math.min(lastIdx, currentIdx);
-          const end = Math.max(lastIdx, currentIdx);
-          const range = taskList.slice(start, end + 1).map(t => t.id);
-          $selectedTaskIds.set(new Set([...currentSelectedIds, ...range]));
-          return;
-        }
-      }
+      selectTaskRange(task.id, taskList);
+      return;
     }
 
-    // Normal click: clear multi-select, single select
     if (currentSelectedIds.size > 0) {
-      $selectedTaskIds.set(new Set());
+      selectTask(task.id);
+      return;
     }
+
     onClick();
   };
 

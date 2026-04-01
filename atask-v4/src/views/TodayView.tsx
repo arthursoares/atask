@@ -1,12 +1,23 @@
-import { useCallback } from "react";
-import { useStore } from "@nanostores/react";
-import { useTodayMorning, useTodayEvening, $selectedTaskId, $expandedTaskId, $selectedTaskIds, createTask, setTodayIndex } from "../store/index";
-import TaskRow from "../components/TaskRow";
-import TaskInlineEditor from "../components/TaskInlineEditor";
-import NewTaskRow from "../components/NewTaskRow";
-import SectionHeader from "../components/SectionHeader";
-import EmptyState from "../components/EmptyState";
-import useDragReorder from "../hooks/useDragReorder";
+import { useCallback } from 'react';
+import { useStore } from '@nanostores/react';
+import {
+  useTodayMorning,
+  useTodayEvening,
+  $selectedTaskId,
+  $expandedTaskId,
+  $selectedTaskIds,
+  selectTask,
+  openTaskEditor,
+  closeTaskEditor,
+  createTask,
+  setTodayIndex,
+} from '../store/index';
+import TaskRow from '../components/TaskRow';
+import TaskInlineEditor from '../components/TaskInlineEditor';
+import NewTaskRow from '../components/NewTaskRow';
+import SectionHeader from '../components/SectionHeader';
+import EmptyState from '../components/EmptyState';
+import useDragReorder from '../hooks/useDragReorder';
 
 const StarIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -64,7 +75,7 @@ export default function TodayView() {
             key={task.id}
             task={task}
             isToday
-            onClose={() => $expandedTaskId.set(null)}
+            onClose={closeTaskEditor}
           />
         ) : (
           <TaskRow
@@ -74,8 +85,8 @@ export default function TodayView() {
             isMultiSelected={selectedTaskIds.has(task.id)}
             taskList={morning}
             isToday
-            onClick={() => $selectedTaskId.set(task.id)}
-            onDoubleClick={() => $expandedTaskId.set(task.id)}
+            onClick={() => selectTask(task.id)}
+            onDoubleClick={() => openTaskEditor(task.id)}
             dragHandlers={getMorningDragHandlers(task.id)}
             dropHandlers={getMorningDropHandlers(index)}
             isDragOver={morningDragState.dropIndex === index && morningDragState.dragId !== task.id}
@@ -92,7 +103,7 @@ export default function TodayView() {
                 key={task.id}
                 task={task}
                 isToday
-                onClose={() => $expandedTaskId.set(null)}
+                onClose={closeTaskEditor}
               />
             ) : (
               <TaskRow
@@ -102,8 +113,8 @@ export default function TodayView() {
                 isMultiSelected={selectedTaskIds.has(task.id)}
                 taskList={evening}
                 isToday
-                onClick={() => $selectedTaskId.set(task.id)}
-                onDoubleClick={() => $expandedTaskId.set(task.id)}
+                onClick={() => selectTask(task.id)}
+                onDoubleClick={() => openTaskEditor(task.id)}
                 dragHandlers={getEveningDragHandlers(task.id)}
                 dropHandlers={getEveningDropHandlers(index)}
                 isDragOver={eveningDragState.dropIndex === index && eveningDragState.dragId !== task.id}
@@ -117,7 +128,7 @@ export default function TodayView() {
         <EmptyState icon={StarIcon} text="What will you do today?" />
       )}
 
-      <NewTaskRow onCreate={(title) => createTask(title)} />
+      <NewTaskRow onCreate={createTask} />
     </div>
   );
 }

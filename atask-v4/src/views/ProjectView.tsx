@@ -8,6 +8,9 @@ import {
   $expandedTaskId,
   $selectedTaskIds,
   $tasks,
+  selectTask,
+  openTaskEditor,
+  closeTaskEditor,
   createTask,
   createSection,
   updateSection,
@@ -154,9 +157,9 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
         expandedTaskId={expandedTaskId}
         selectedTaskId={selectedTaskId}
         selectedTaskIds={selectedTaskIds}
-        onSelectTask={(id) => $selectedTaskId.set(id)}
-        onExpandTask={(id) => $expandedTaskId.set(id)}
-        onCloseExpandedTask={() => $expandedTaskId.set(null)}
+        onSelectTask={selectTask}
+        onExpandTask={openTaskEditor}
+        onCloseExpandedTask={closeTaskEditor}
         onCreateTask={(title) => createTask(title)}
         onReorderTasks={reorderTasks}
       />
@@ -188,9 +191,9 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
             onRenameCommit={handleRenameCommit}
             onRenameCancel={closeSectionRename}
             onToggleCollapsed={toggleSectionCollapsed}
-            onSelectTask={(id) => $selectedTaskId.set(id)}
-            onExpandTask={(id) => $expandedTaskId.set(id)}
-            onCloseExpandedTask={() => $expandedTaskId.set(null)}
+            onSelectTask={selectTask}
+            onExpandTask={openTaskEditor}
+            onCloseExpandedTask={closeTaskEditor}
             onCreateTask={handleSectionCreate}
             onCloseMenu={() => setSectionMenu(null)}
             buildMenuItems={buildSectionMenuItems}

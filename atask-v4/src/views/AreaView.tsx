@@ -1,17 +1,20 @@
-import { useStore } from "@nanostores/react";
+import { useStore } from '@nanostores/react';
 import {
   $areas,
   $tasks,
   $selectedTaskId,
   $expandedTaskId,
   $selectedTaskIds,
-  $activeView,
+  setActiveView,
+  selectTask,
+  openTaskEditor,
+  closeTaskEditor,
   useActiveProjects,
-} from "../store/index";
-import TaskRow from "../components/TaskRow";
-import TaskInlineEditor from "../components/TaskInlineEditor";
-import EmptyState from "../components/EmptyState";
-import ProgressBar from "../components/ProgressBar";
+} from '../store/index';
+import TaskRow from '../components/TaskRow';
+import TaskInlineEditor from '../components/TaskInlineEditor';
+import EmptyState from '../components/EmptyState';
+import ProgressBar from '../components/ProgressBar';
 
 const AreaIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -85,7 +88,7 @@ export default function AreaView({ areaId }: AreaViewProps) {
                 key={project.id}
                 className="sidebar-item"
                 style={{ padding: "var(--sp-2) var(--sp-3)", cursor: "pointer" }}
-                onClick={() => $activeView.set(`project-${project.id}`)}
+                onClick={() => setActiveView(`project-${project.id}`)}
               >
                 <span
                   style={{
@@ -124,7 +127,7 @@ export default function AreaView({ areaId }: AreaViewProps) {
               <TaskInlineEditor
                 key={task.id}
                 task={task}
-                onClose={() => $expandedTaskId.set(null)}
+                onClose={closeTaskEditor}
               />
             ) : (
               <TaskRow
@@ -132,8 +135,8 @@ export default function AreaView({ areaId }: AreaViewProps) {
                 task={task}
                 isSelected={selectedTaskId === task.id}
                 isMultiSelected={selectedTaskIds.has(task.id)}
-                onClick={() => $selectedTaskId.set(task.id)}
-                onDoubleClick={() => $expandedTaskId.set(task.id)}
+                onClick={() => selectTask(task.id)}
+                onDoubleClick={() => openTaskEditor(task.id)}
               />
             ),
           )}
