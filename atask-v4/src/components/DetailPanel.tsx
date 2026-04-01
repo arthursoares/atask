@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
 import { $tasks, $projects, closeTaskEditor, clearSelectedTask, useTagsForTask, updateTask } from '../store/index';
 import ChecklistSection from './ChecklistSection';
@@ -7,17 +7,12 @@ import WhenPicker from './WhenPicker';
 import TagPicker from './TagPicker';
 import ProjectPicker from './ProjectPicker';
 import { TagPill } from '../ui';
+import useTaskDraft from './task-edit/useTaskDraft';
+import useTaskPickers from './task-edit/useTaskPickers';
+import scheduleLabel from './task-edit/scheduleLabel';
 
 interface DetailPanelProps {
   taskId: string;
-}
-
-function scheduleLabel(schedule: number, timeSlot: string | null): string {
-  if (schedule === 0) return 'Inbox';
-  if (schedule === 1 && timeSlot === 'evening') return 'Today (Evening)';
-  if (schedule === 1) return 'Today (Anytime)';
-  if (schedule === 2) return 'Someday';
-  return 'Inbox';
 }
 
 export default function DetailPanel({ taskId }: DetailPanelProps) {
@@ -28,24 +23,6 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
   const tags = useTagsForTask(taskId);
 
   const project = task?.projectId ? projects.find((p) => p.id === task.projectId) : null;
-
-  // Local title state for debounced editing
-  const [titleValue, setTitleValue] = useState(task?.title ?? '');
-  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Local notes state for debounced editing
-  const [notesValue, setNotesValue] = useState(task?.notes ?? '');
-  const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync local state when task changes externally (different task selected)
-  const prevTaskIdRef = useRef(taskId);
-  useEffect(() => {
-    if (prevTaskIdRef.current !== taskId) {
-      prevTaskIdRef.current = taskId;
-      setTitleValue(task?.title ?? '');
-      setNotesValue(task?.notes ?? '');
-    }
-  }, [taskId, task?.title, task?.notes]);
 
   // Escape key to close
   const handleKeyDown = useCallback(
@@ -63,37 +40,26 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Cleanup debounce timers on unmount
-  useEffect(() => {
-    return () => {
-      if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current);
-      if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
-    };
-  }, []);
-
-  const [showWhenPicker, setShowWhenPicker] = useState(false);
-  const [showTagPicker, setShowTagPicker] = useState(false);
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
-
   if (!task) return null;
 
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setTitleValue(value);
-    if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current);
-    titleDebounceRef.current = setTimeout(() => {
-      updateTask({ id: taskId, title: value });
-    }, 300);
-  };
-
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    setNotesValue(value);
-    if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
-    notesDebounceRef.current = setTimeout(() => {
-      updateTask({ id: taskId, notes: value });
-    }, 300);
-  };
+  const {
+    titleValue,
+    notesValue,
+    setTitleValue,
+    setNotesValue,
+  } = useTaskDraft({
+    taskId,
+    title: task.title,
+    notes: task.notes ?? '',
+  });
+  const {
+    showWhenPicker,
+    setShowWhenPicker,
+    showTagPicker,
+    setShowTagPicker,
+    showProjectPicker,
+    setShowProjectPicker,
+  } = useTaskPickers();
 
   return (
     <div className="detail-panel">
@@ -101,7 +67,7 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
         <input
           className="detail-title"
           value={titleValue}
-          onChange={handleTitleChange}
+          onChange={(e) => setTitleValue(e.target.value)}
         />
         {tags.length > 0 && (
           <div className="detail-meta-row">
@@ -228,7 +194,7 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
             <textarea
               className="detail-notes-input"
               value={notesValue}
-              onChange={handleNotesChange}
+              onChange={(e) => setNotesValue(e.target.value)}
               placeholder="Add notes…"
               rows={3}
             />

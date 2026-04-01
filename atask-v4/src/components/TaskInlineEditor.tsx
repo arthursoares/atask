@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '@nanostores/react';
 import {
   $projects,
@@ -17,7 +17,9 @@ import ProjectPicker from './ProjectPicker';
 import RepeatPicker from './RepeatPicker';
 import EditorAttributeBar from './task-inline-editor/EditorAttributeBar';
 import EditorNotesField from './task-inline-editor/EditorNotesField';
-import type { Task, UpdateTaskParams } from '../types';
+import useTaskDraft from './task-edit/useTaskDraft';
+import useTaskPickers from './task-edit/useTaskPickers';
+import type { Task } from '../types';
 
 interface TaskInlineEditorProps {
   task: Task;
@@ -26,18 +28,32 @@ interface TaskInlineEditorProps {
 }
 
 export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineEditorProps) {
-  const [title, setTitle] = useState(task.title);
-  const [notes, setNotes] = useState(task.notes ?? '');
-
-  const [showWhenPicker, setShowWhenPicker] = useState(false);
-  const [showTagPicker, setShowTagPicker] = useState(false);
-  const [showRepeatPicker, setShowRepeatPicker] = useState(false);
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const {
+    titleValue,
+    notesValue,
+    setTitleValue,
+    setNotesValue,
+    flushDraft,
+    clearPendingDraft,
+  } = useTaskDraft({
+    taskId: task.id,
+    title: task.title,
+    notes: task.notes ?? '',
+  });
+  const {
+    showWhenPicker,
+    setShowWhenPicker,
+    showTagPicker,
+    setShowTagPicker,
+    showRepeatPicker,
+    setShowRepeatPicker,
+    showProjectPicker,
+    setShowProjectPicker,
+  } = useTaskPickers();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const projects = useStore($projects);
   const tags = useStore($tags);
@@ -52,12 +68,6 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
   const isCompleted = task.status === 1;
   const isCancelled = task.status === 2;
 
-  // Debounced update helper
-  const debouncedUpdate = (params: UpdateTaskParams) => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => updateTask(params), 300);
-  };
-
   // Auto-grow textarea
   const adjustHeight = () => {
     const el = textareaRef.current;
@@ -71,17 +81,15 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
   useEffect(() => {
     titleRef.current?.focus();
     adjustHeight();
-    return () => clearTimeout(timerRef.current);
   }, []);
 
   const handleClose = () => {
-    clearTimeout(timerRef.current);
-    const trimmed = title.trim();
+    clearPendingDraft();
+    const trimmed = titleValue.trim();
     if (!trimmed) {
       deleteTask(task.id);
     } else {
-      // Flush any pending debounced updates immediately
-      updateTask({ id: task.id, title: trimmed, notes });
+      flushDraft();
     }
     onClose();
   };
@@ -110,8 +118,7 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    setTitle(val);
-    debouncedUpdate({ id: task.id, title: val });
+    setTitleValue(val);
   };
 
   const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -126,9 +133,8 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
-    setNotes(val);
+    setNotesValue(val);
     adjustHeight();
-    debouncedUpdate({ id: task.id, notes: val });
   };
 
   const handleNotesKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -138,13 +144,11 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
     }
   };
 
-  // Schedule label
-  let scheduleLabel: string | null = null;
-  if (task.schedule === 1) {
-    scheduleLabel = task.timeSlot === 'evening' ? 'This Evening' : 'Today';
-  } else if (task.schedule === 2) {
-    scheduleLabel = 'Someday';
-  }
+  const schedulePillLabel = task.schedule === 1
+    ? task.timeSlot === 'evening' ? 'This Evening' : 'Today'
+    : task.schedule === 2
+      ? 'Someday'
+      : null;
 
   const handleRemoveSchedule = () => {
     updateTask({ id: task.id, schedule: 0 });
@@ -172,7 +176,7 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
           ref={titleRef}
           className="task-title-input"
           type="text"
-          value={title}
+          value={titleValue}
           onChange={handleTitleChange}
           onKeyDown={handleTitleKeyDown}
           placeholder="Task title"
@@ -181,7 +185,7 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
 
       <EditorNotesField
         textareaRef={textareaRef}
-        value={notes}
+        value={notesValue}
         onChange={handleNotesChange}
         onKeyDown={handleNotesKeyDown}
       />
@@ -190,7 +194,7 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
         task={task}
         project={project}
         taskTags={taskTags}
-        scheduleLabel={scheduleLabel}
+        scheduleLabel={schedulePillLabel}
         onRemoveSchedule={handleRemoveSchedule}
         onRemoveProject={handleRemoveProject}
         onRemoveTag={handleRemoveTag}
