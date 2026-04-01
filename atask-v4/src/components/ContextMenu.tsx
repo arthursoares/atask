@@ -1,15 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import MenuList, { type MenuListItem } from '../ui/MenuList';
 
 export type MenuItem =
-  | {
-      label: string;
-      icon?: ReactNode;
-      shortcut?: string;
-      danger?: boolean;
-      disabled?: boolean;
-      separator?: false;
-      onClick?: () => void;
-    }
+  | (MenuListItem & { separator?: false })
   | { separator: true };
 
 interface ContextMenuProps {
@@ -111,58 +104,15 @@ export default function ContextMenu({ items, position, onClose }: ContextMenuPro
         boxShadow: 'var(--shadow-popover)',
         overflow: 'hidden',
         minWidth: 200,
-        padding: 'var(--sp-1) 0',
       }}
     >
-      {items.map((item, i) => {
-        if ('separator' in item) {
-          return (
-            <div
-              key={i}
-              style={{
-                height: 1,
-                background: 'var(--separator)',
-                margin: 'var(--sp-1) 0',
-              }}
-            />
-          );
-        }
-
-        const isActive = activeIndex === i;
-
-        return (
-          <div
-            key={i}
-            onMouseEnter={() => setActiveIndex(i)}
-            onMouseLeave={() => setActiveIndex(-1)}
-            onClick={() => handleItemClick(item)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--sp-2)',
-              padding: 'var(--sp-1) var(--sp-3)',
-              cursor: item.disabled ? 'default' : 'pointer',
-              color: item.danger ? 'var(--deadline-red)' : 'var(--ink-primary)',
-              opacity: item.disabled ? 0.4 : 1,
-              pointerEvents: item.disabled ? 'none' : 'auto',
-              background: isActive ? 'var(--sidebar-hover)' : 'transparent',
-              fontSize: 'var(--text-sm)',
-            }}
-          >
-            {item.icon && (
-              <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                {item.icon}
-              </span>
-            )}
-            <span style={{ flex: 1 }}>{item.label}</span>
-            {item.shortcut && (
-              <span style={{ color: 'var(--ink-tertiary)', fontSize: 'var(--text-xs)' }}>
-                {item.shortcut}
-              </span>
-            )}
-          </div>
-        );
-      })}
+      <MenuList
+        items={items}
+        activeIndex={activeIndex}
+        onItemHover={setActiveIndex}
+        onItemLeave={() => setActiveIndex(-1)}
+        onItemClick={(item) => handleItemClick(item as MenuItem)}
+      />
     </div>
   );
 }

@@ -19,175 +19,9 @@ import {
 } from "../store/index";
 import type { ActiveView, Project, Area } from "../types";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
-
-// --- SVG Icons ---
-
-function InboxIcon() {
-  return (
-    <svg viewBox="0 0 16 16">
-      <rect x="2" y="3" width="12" height="10" rx="2" />
-      <polyline points="2 8 6 8 7 10 9 10 10 8 14 8" />
-    </svg>
-  );
-}
-
-function TodayIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="var(--today-star)" stroke="none">
-      <polygon points="8 2 9.8 5.6 14 6.2 11 9 11.8 13 8 11.2 4.2 13 5 9 2 6.2 6.2 5.6" />
-    </svg>
-  );
-}
-
-function UpcomingIcon() {
-  return (
-    <svg viewBox="0 0 16 16">
-      <rect x="2" y="3" width="12" height="11" rx="2" />
-      <line x1="2" y1="7" x2="14" y2="7" />
-      <line x1="5" y1="1" x2="5" y2="4" />
-      <line x1="11" y1="1" x2="11" y2="4" />
-    </svg>
-  );
-}
-
-function SomedayIcon() {
-  return (
-    <svg viewBox="0 0 16 16" stroke="var(--someday-tint)">
-      <circle cx="8" cy="8" r="5.5" />
-      <line x1="8" y1="5" x2="8" y2="8" />
-      <line x1="8" y1="8" x2="10.5" y2="10" />
-    </svg>
-  );
-}
-
-function LogbookIcon() {
-  return (
-    <svg viewBox="0 0 16 16">
-      <path d="M4 2h8l1 4-5 3-5-3z" />
-      <path d="M3 6v6c0 1 2 2 5 2s5-1 5-2V6" />
-    </svg>
-  );
-}
-
-// --- Nav Item ---
-
-interface NavItemProps {
-  view: ActiveView;
-  label: string;
-  icon: React.ReactNode;
-  badge?: number;
-  activeView: ActiveView;
-  onClick: (view: ActiveView) => void;
-  onTaskDrop?: (taskId: string) => void;
-}
-
-function NavItem({ view, label, icon, badge, activeView, onClick, onTaskDrop }: NavItemProps) {
-  const [isDragTarget, setIsDragTarget] = useState(false);
-
-  return (
-    <div
-      className={`sidebar-item${activeView === view ? " active" : ""}`}
-      style={{ background: isDragTarget ? "var(--accent-subtle)" : undefined }}
-      onClick={() => onClick(view)}
-      onDragOver={onTaskDrop ? (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        setIsDragTarget(true);
-      } : undefined}
-      onDragLeave={onTaskDrop ? () => setIsDragTarget(false) : undefined}
-      onDrop={onTaskDrop ? (e) => {
-        e.preventDefault();
-        setIsDragTarget(false);
-        const taskId = e.dataTransfer.getData("text/plain");
-        if (taskId) onTaskDrop(taskId);
-      } : undefined}
-    >
-      <span className="sidebar-icon">{icon}</span>
-      <span>{label}</span>
-      {badge != null && badge > 0 && <span className="sidebar-badge">{badge}</span>}
-    </div>
-  );
-}
-
-// --- Project Item ---
-
-interface ProjectItemProps {
-  project: Project;
-  badge: number;
-  activeView: ActiveView;
-  onClick: (view: ActiveView) => void;
-  onContextMenu: (e: React.MouseEvent, project: Project) => void;
-  isRenaming: boolean;
-  renamingValue: string;
-  onRenamingValueChange: (value: string) => void;
-  onRenameCommit: () => void;
-  onRenameCancel: () => void;
-}
-
-function ProjectItem({ project, badge, activeView, onClick, onContextMenu, isRenaming, renamingValue, onRenamingValueChange, onRenameCommit, onRenameCancel }: ProjectItemProps) {
-  const view: ActiveView = `project-${project.id}`;
-  const [isDragTarget, setIsDragTarget] = useState(false);
-
-  return (
-    <div
-      className={`sidebar-item${activeView === view ? " active" : ""}`}
-      style={{
-        paddingLeft: "var(--sp-6)",
-        background: isDragTarget ? "var(--accent-subtle)" : undefined,
-      }}
-      onClick={() => onClick(view)}
-      onContextMenu={(e) => onContextMenu(e, project)}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        setIsDragTarget(true);
-      }}
-      onDragLeave={() => setIsDragTarget(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDragTarget(false);
-        const taskId = e.dataTransfer.getData("text/plain");
-        if (taskId) {
-          updateTask({ id: taskId, projectId: project.id });
-        }
-      }}
-    >
-      <span
-        className="sidebar-dot"
-        style={{ background: project.color || "var(--accent)" }}
-      />
-      {isRenaming ? (
-        <input
-          autoFocus
-          value={renamingValue}
-          onChange={(e) => onRenamingValueChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onRenameCommit();
-            } else if (e.key === "Escape") {
-              onRenameCancel();
-            }
-          }}
-          onBlur={onRenameCommit}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            borderBottom: "1px solid var(--accent)",
-            outline: "none",
-            fontSize: "inherit",
-            color: "inherit",
-            padding: "0",
-          }}
-        />
-      ) : (
-        <span>{project.title}</span>
-      )}
-      {badge > 0 && !isRenaming && <span className="sidebar-badge">{badge}</span>}
-    </div>
-  );
-}
+import { Button } from "../ui";
+import { LogbookIcon, InboxIcon, SomedayIcon, TodayIcon, UpcomingIcon } from "./sidebar/SidebarIcons";
+import { NavItem, ProjectItem, SidebarRenameField, SidebarRow } from "./sidebar/SidebarParts";
 
 // --- Context menu state ---
 
@@ -352,8 +186,7 @@ export default function Sidebar() {
 
   return (
     <div className="sidebar">
-      <div className="sidebar-toolbar" data-tauri-drag-region>
-      </div>
+      <div className="sidebar-toolbar" data-tauri-drag-region />
 
       {/* Nav group */}
       <div className="sidebar-group">
@@ -410,73 +243,41 @@ export default function Sidebar() {
         return (
           <div className="sidebar-group" key={area.id}>
             {renamingAreaId === area.id ? (
-              <div style={{ padding: "var(--sp-1) var(--sp-3)" }}>
-                <input
-                  autoFocus
-                  value={renamingAreaValue}
-                  onChange={(e) => setRenamingAreaValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const title = renamingAreaValue.trim();
-                      if (title) updateArea({ id: area.id, title });
-                      setRenamingAreaId(null);
-                    } else if (e.key === "Escape") {
-                      setRenamingAreaId(null);
+              <SidebarRenameField
+                value={renamingAreaValue}
+                className="sidebar-rename-area"
+                onChange={setRenamingAreaValue}
+                onCommit={() => {
+                  const title = renamingAreaValue.trim();
+                  if (title) updateArea({ id: area.id, title });
+                  setRenamingAreaId(null);
+                }}
+                onCancel={() => setRenamingAreaId(null)}
+              />
+            ) : (
+              <div
+                className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}`}
+                onClick={() => setActiveView(`area-${area.id}`)}
+                onContextMenu={(e) => handleAreaContextMenu(e, area)}
+              >
+                <span className="sidebar-group-label-text">{area.title}</span>
+                <Button
+                  className="sidebar-add-btn"
+                  variant="ghost"
+                  size="sm"
+                  title={`Add project to ${area.title}`}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const project = await createProject({ title: "New Project", areaId: area.id });
+                    if (project) {
+                      setRenamingProjectId(project.id);
+                      setRenamingProjectValue("New Project");
                     }
                   }}
-                  onBlur={() => {
-                    const title = renamingAreaValue.trim();
-                    if (title) updateArea({ id: area.id, title });
-                    setRenamingAreaId(null);
-                  }}
-                  style={{
-                    width: "100%",
-                    background: "transparent",
-                    border: "none",
-                    borderBottom: "1px solid var(--accent)",
-                    outline: "none",
-                    fontSize: "var(--text-xs)",
-                    fontWeight: 700,
-                    color: "var(--ink-tertiary)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    padding: "var(--sp-1) 0",
-                  }}
-                />
+                >
+                  +
+                </Button>
               </div>
-            ) : (
-            <div
-              className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}`}
-              onClick={() => setActiveView(`area-${area.id}`)}
-              onContextMenu={(e) => handleAreaContextMenu(e, area)}
-              style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-            >
-              <span style={{ flex: 1 }}>{area.title}</span>
-              <button
-                className="sidebar-add-btn"
-                title={`Add project to ${area.title}`}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const project = await createProject({ title: "New Project", areaId: area.id });
-                  if (project) {
-                    setRenamingProjectId(project.id);
-                    setRenamingProjectValue("New Project");
-                  }
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--ink-tertiary)",
-                  cursor: "pointer",
-                  fontSize: "var(--text-base)",
-                  lineHeight: 1,
-                  padding: "0 var(--sp-1)",
-                  borderRadius: "var(--radius-sm)",
-                }}
-              >
-                +
-              </button>
-            </div>
             )}
             {areaProjects.map((p) => (
               <ProjectItem
@@ -491,6 +292,7 @@ export default function Sidebar() {
                 onRenamingValueChange={setRenamingProjectValue}
                 onRenameCommit={commitProjectRename}
                 onRenameCancel={cancelProjectRename}
+                onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
               />
             ))}
           </div>
@@ -516,6 +318,7 @@ export default function Sidebar() {
                 onRenamingValueChange={setRenamingProjectValue}
                 onRenameCommit={commitProjectRename}
                 onRenameCancel={cancelProjectRename}
+                onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
               />
             ))}
           </div>
@@ -523,9 +326,9 @@ export default function Sidebar() {
       })()}
 
       {/* + New Area — creates area then enters rename mode */}
-      <div style={{ padding: "var(--sp-1) var(--sp-3)" }}>
-        <div
-          className="sidebar-item"
+      <div className="sidebar-footer-block">
+        <SidebarRow
+          className="sidebar-item-muted"
           onClick={async () => {
             const area = await createArea({ title: "New Area" });
             if (area) {
@@ -533,17 +336,16 @@ export default function Sidebar() {
               setRenamingAreaValue("New Area");
             }
           }}
-          style={{ color: "var(--ink-tertiary)" }}
         >
           <span className="sidebar-icon" style={{ fontSize: "var(--text-base)" }}>+</span>
           <span>New Area</span>
-        </div>
+        </SidebarRow>
       </div>
 
       {/* Settings — pinned to bottom */}
-      <div style={{ marginTop: 'auto', padding: 'var(--sp-2) var(--sp-3)', borderTop: '1px solid var(--separator)' }}>
-        <div
-          className={`sidebar-item${activeView === 'settings' ? ' active' : ''}`}
+      <div className="sidebar-settings">
+        <SidebarRow
+          active={activeView === 'settings'}
           onClick={() => setActiveView('settings')}
         >
           <span className="sidebar-icon">
@@ -553,7 +355,7 @@ export default function Sidebar() {
             </svg>
           </span>
           <span>Settings</span>
-        </div>
+        </SidebarRow>
       </div>
 
       {/* Context menu */}

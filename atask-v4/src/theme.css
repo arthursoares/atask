@@ -308,12 +308,20 @@ html, body {
 }
 
 .sidebar-group-label {
+    display: flex;
+    align-items: center;
     font-size: var(--text-xs);
     font-weight: 700;
     color: var(--ink-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.8px;
     padding: var(--sp-2) var(--sp-3) var(--sp-1);
+    cursor: pointer;
+    gap: var(--sp-2);
+}
+
+.sidebar-group-label-text {
+    flex: 1;
 }
 
 .sidebar-item {
@@ -338,6 +346,18 @@ html, body {
     background: var(--sidebar-active);
     color: var(--ink-primary);
     font-weight: 700;
+}
+
+.sidebar-item.drag-target {
+    background: var(--accent-subtle);
+}
+
+.sidebar-item-project {
+    padding-left: var(--sp-6);
+}
+
+.sidebar-item-muted {
+    color: var(--ink-tertiary);
 }
 
 .sidebar-icon {
@@ -385,6 +405,60 @@ html, body {
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
+}
+
+.sidebar-rename-wrap {
+    padding: var(--sp-1) var(--sp-3);
+}
+
+.sidebar-rename-area .sidebar-rename-input {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--ink-tertiary);
+}
+
+.sidebar-rename-input {
+    min-height: 32px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--accent);
+    border-radius: 0;
+    padding: 0;
+}
+
+.sidebar-rename-input:hover,
+.sidebar-rename-input:focus-visible {
+    background: transparent;
+    border-color: var(--accent);
+    box-shadow: none;
+}
+
+.sidebar-rename-input-project {
+    flex: 1;
+    min-width: 0;
+    font-size: inherit;
+    color: inherit;
+}
+
+.sidebar-add-btn {
+    min-height: 24px;
+    width: 24px;
+    padding: 0;
+    color: var(--ink-tertiary);
+    font-size: var(--text-base);
+    line-height: 1;
+}
+
+.sidebar-footer-block {
+    padding: var(--sp-1) var(--sp-3);
+}
+
+.sidebar-settings {
+    margin-top: auto;
+    padding: var(--sp-2) var(--sp-3);
+    border-top: 1px solid var(--separator);
 }
 
 
@@ -514,6 +588,35 @@ html, body {
     border-radius: var(--radius-full);
 }
 
+.project-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-4);
+}
+
+.project-section-rename {
+    padding: var(--sp-1) 0;
+}
+
+.project-section-rename-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--accent);
+    border-radius: 0;
+    padding: var(--sp-1) 0;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-primary);
+}
+
+.project-section-rename-input:hover,
+.project-section-rename-input:focus-visible {
+    background: transparent;
+    border-color: var(--accent);
+    box-shadow: none;
+}
+
 
 /* ═══════════════════════════════════════════
    Checkbox
@@ -594,6 +697,10 @@ html, body {
     cursor: default;
     position: relative;
     height: 32px;
+}
+
+.task-item[data-drag-over="true"] {
+    background: var(--accent-subtle);
 }
 
 .task-item:hover {
@@ -687,6 +794,34 @@ html, body {
     height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
+}
+
+.task-project-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.task-drop-indicator {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    z-index: 10;
+}
+
+.task-drop-indicator-dot {
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
 }
 
 /* Hover actions (inbox triage) */

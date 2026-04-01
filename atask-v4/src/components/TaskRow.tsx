@@ -9,15 +9,12 @@ import {
   $selectedTaskId,
   completeTask,
   reopenTask,
-  cancelTask,
-  deleteTask,
-  duplicateTask,
   updateTask,
 } from '../store/index';
 import CheckboxCircle from './CheckboxCircle';
-import TagPill from './TagPill';
-import ContextMenu, { type MenuItem } from './ContextMenu';
+import ContextMenu from './ContextMenu';
 import type { Task } from '../types';
+import { DragIndicator, buildTaskContextMenuItems, TaskMeta } from './task-row/taskRowHelpers';
 
 interface TaskRowProps {
   task: Task;
@@ -42,22 +39,6 @@ interface TaskRowProps {
   isDragOver?: boolean;
 }
 
-function formatDeadline(deadline: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const d = new Date(deadline);
-  d.setHours(0, 0, 0, 0);
-
-  const diffDays = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) return 'Overdue';
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 export default function TaskRow({
   task,
   isSelected,
@@ -78,7 +59,7 @@ export default function TaskRow({
   const tags = useStore($tags);
   const tagsByTaskId = useStore($tagsByTaskId);
 
-  const project = task.projectId ? projects.find((p) => p.id === task.projectId) : null;
+  const project = task.projectId ? (projects.find((p) => p.id === task.projectId) ?? null) : null;
   const taskTagIds = tagsByTaskId.get(task.id);
   const taskTags = taskTagIds && taskTagIds.size > 0
     ? tags.filter((t) => taskTagIds.has(t.id))
@@ -138,138 +119,21 @@ export default function TaskRow({
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
-
-  const metaItems: React.ReactNode[] = [];
-
-  if (project && !hideProjectPill) {
-    metaItems.push(
-      <span key="project" className="task-project-pill">
-        <span
-          className="dot"
-          style={{
-            background: project.color || 'var(--accent)',
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            flexShrink: 0,
-          }}
-        />
-        {project.title}
-      </span>,
-    );
-  }
-
-  if (task.deadline) {
-    if (metaItems.length > 0) {
-      metaItems.push(<span key="sep-deadline" className="task-meta-sep">·</span>);
-    }
-    metaItems.push(
-      <span key="deadline" className="task-deadline">
-        {formatDeadline(task.deadline)}
-      </span>,
-    );
-  }
-
-  if (taskTags.length > 0) {
-    for (const tag of taskTags) {
-      if (metaItems.length > 0) {
-        metaItems.push(<span key={`sep-${tag.id}`} className="task-meta-sep">·</span>);
-      }
-      metaItems.push(<TagPill key={tag.id} label={tag.title} variant="default" />);
-    }
-  }
-
-  const contextMenuItems: MenuItem[] = [
-    {
-      label: isCompleted || isCancelled ? 'Reopen' : 'Complete',
-      onClick: () => {
-        if (isCompleted || isCancelled) {
-          reopenTask(task.id);
-        } else {
-          completeTask(task.id);
-        }
-      },
-    },
-    {
-      label: 'Cancel',
-      onClick: () => cancelTask(task.id),
-    },
-    { separator: true },
-    {
-      label: 'Today',
-      shortcut: '⌘T',
-      onClick: () => {
-        const today = todayLocal();
-        updateTask({ id: task.id, schedule: 1, startDate: today });
-      },
-    },
-    {
-      label: 'Evening',
-      shortcut: '⌘E',
-      onClick: () => {
-        const today = todayLocal();
-        updateTask({ id: task.id, schedule: 1, timeSlot: 'evening', startDate: today });
-      },
-    },
-    {
-      label: 'Someday',
-      shortcut: '⌘O',
-      onClick: () => updateTask({ id: task.id, schedule: 2 }),
-    },
-    {
-      label: 'Inbox',
-      onClick: () => updateTask({ id: task.id, schedule: 0 }),
-    },
-    { separator: true },
-    {
-      label: 'Duplicate',
-      shortcut: '⌘D',
-      onClick: () => duplicateTask(task.id),
-    },
-    {
-      label: 'Delete',
-      shortcut: '⌫',
-      danger: true,
-      onClick: () => deleteTask(task.id),
-    },
-  ];
+  const contextMenuItems = buildTaskContextMenuItems(task, isCompleted, isCancelled);
 
   return (
     <>
       <div
         className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}`}
-        style={{
-          position: 'relative',
-          background: isDragOver ? 'var(--accent-subtle)' : undefined,
-        }}
+        style={{ position: 'relative' }}
+        data-drag-over={isDragOver ? 'true' : 'false'}
         onClick={handleClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={handleContextMenu}
         {...dragHandlers}
         {...dropHandlers}
       >
-        {isDragOver && (
-          <div style={{
-            position: 'absolute',
-            top: -1,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: 'var(--accent)',
-            borderRadius: 2,
-            zIndex: 10,
-          }}>
-            <div style={{
-              position: 'absolute',
-              left: -3,
-              top: -3,
-              width: 9,
-              height: 9,
-              borderRadius: '50%',
-              background: 'var(--accent)',
-            }} />
-          </div>
-        )}
+        {isDragOver && <DragIndicator />}
         <CheckboxCircle
           checked={isCompleted}
           cancelled={isCancelled}
@@ -282,11 +146,12 @@ export default function TaskRow({
             {task.title}
           </span>
 
-          {metaItems.length > 0 && (
-            <div className="task-meta">
-              {metaItems}
-            </div>
-          )}
+          <TaskMeta
+            task={task}
+            project={project}
+            taskTags={taskTags}
+            hideProjectPill={hideProjectPill}
+          />
         </div>
 
         {showTriageActions && (

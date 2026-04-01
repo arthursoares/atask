@@ -22,11 +22,11 @@ import TaskInlineEditor from "../components/TaskInlineEditor";
 import NewTaskRow from "../components/NewTaskRow";
 import SectionHeader from "../components/SectionHeader";
 import ProgressBar from "../components/ProgressBar";
-import Button from "../components/Button";
 import EmptyState from "../components/EmptyState";
 import ContextMenu, { type MenuItem } from "../components/ContextMenu";
 import useDragReorder from "../hooks/useDragReorder";
 import type { Task } from "../types";
+import { Button, Field } from "../ui";
 
 const ProjectIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -195,14 +195,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
   return (
     <div>
       {/* Toolbar extras */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "var(--sp-4)",
-        }}
-      >
+      <div className="project-toolbar-row">
         <ProgressBar completed={completedCount} total={totalCount} />
         <Button
           variant="ghost"
@@ -248,10 +241,11 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
         return (
           <div key={section.id}>
             {renamingSection === section.id ? (
-              <div style={{ padding: "var(--sp-1) 0" }}>
-                <input
+              <div className="project-section-rename">
+                <Field
                   ref={renameInputRef}
                   value={renamingValue}
+                  className="project-section-rename-input"
                   onChange={(e) => setRenamingValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -263,17 +257,6 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
                     }
                   }}
                   onBlur={() => handleRenameCommit(section.id)}
-                  style={{
-                    width: "100%",
-                    background: "transparent",
-                    border: "none",
-                    borderBottom: "1px solid var(--accent)",
-                    outline: "none",
-                    fontSize: "var(--text-sm)",
-                    fontWeight: 600,
-                    color: "var(--ink-primary)",
-                    padding: "var(--sp-1) 0",
-                  }}
                 />
               </div>
             ) : (
