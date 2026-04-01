@@ -50,6 +50,63 @@ function removeItem<T extends { id: string }>(arr: T[], id: string): T[] {
   return arr.filter((x) => x.id !== id);
 }
 
+function appendItem<T>(arr: T[], item: T): T[] {
+  return [...arr, item];
+}
+
+function applyReorder<T extends { id: string; index: number }>(
+  items: T[],
+  moves: ReorderMove[],
+): T[] {
+  const indexed = new Map(moves.map((move) => [move.id, move.index]));
+  return items.map((item) => {
+    const index = indexed.get(item.id);
+    return index !== undefined ? { ...item, index } : item;
+  });
+}
+
+function clearTaskUiState(taskIds: Set<string>): void {
+  if (taskIds.size === 0) return;
+  if (taskIds.has($selectedTaskId.get() ?? '')) $selectedTaskId.set(null);
+  if (taskIds.has($expandedTaskId.get() ?? '')) $expandedTaskId.set(null);
+}
+
+function removeTaskArtifacts(taskIds: Set<string>): void {
+  if (taskIds.size === 0) return;
+  $checklistItems.set($checklistItems.get().filter((item) => !taskIds.has(item.taskId)));
+  $taskTags.set($taskTags.get().filter((taskTag) => !taskIds.has(taskTag.taskId)));
+  clearTaskUiState(taskIds);
+}
+
+function deleteTaskFromStores(taskId: string): void {
+  $tasks.set(removeItem($tasks.get(), taskId));
+  removeTaskArtifacts(new Set([taskId]));
+}
+
+function deleteProjectFromStores(projectId: string): void {
+  const taskIds = new Set(
+    $tasks.get().filter((task) => task.projectId === projectId).map((task) => task.id),
+  );
+
+  $projects.set(removeItem($projects.get(), projectId));
+  $tasks.set($tasks.get().filter((task) => task.projectId !== projectId));
+  $sections.set($sections.get().filter((section) => section.projectId !== projectId));
+  removeTaskArtifacts(taskIds);
+
+  if ($activeView.get() === `project-${projectId}`) {
+    $activeView.set('inbox');
+  }
+}
+
+function removeTagFromStores(tagId: string): void {
+  $tags.set(removeItem($tags.get(), tagId));
+  $taskTags.set($taskTags.get().filter((taskTag) => taskTag.tagId !== tagId));
+
+  const next = new Set($activeTagFilters.get());
+  next.delete(tagId);
+  $activeTagFilters.set(next);
+}
+
 // --- Data loading ---
 
 export async function loadAll(): Promise<void> {
@@ -80,7 +137,7 @@ export async function createTask(title: string): Promise<Task> {
   }
 
   const task = await tauri.createTask(params);
-  $tasks.set([...$tasks.get(), task]);
+  $tasks.set(appendItem($tasks.get(), task));
   notifySync();
   return task;
 }
@@ -111,29 +168,19 @@ export async function updateTask(params: UpdateTaskParams): Promise<void> {
 
 export async function duplicateTask(id: string): Promise<void> {
   const task = await tauri.duplicateTask(id);
-  $tasks.set([...$tasks.get(), task]);
+  $tasks.set(appendItem($tasks.get(), task));
   notifySync();
 }
 
 export async function deleteTask(id: string): Promise<void> {
   await tauri.deleteTask(id);
-  $tasks.set(removeItem($tasks.get(), id));
-  $checklistItems.set($checklistItems.get().filter((ci) => ci.taskId !== id));
-  $taskTags.set($taskTags.get().filter((tt) => tt.taskId !== id));
-  if ($selectedTaskId.get() === id) $selectedTaskId.set(null);
-  if ($expandedTaskId.get() === id) $expandedTaskId.set(null);
+  deleteTaskFromStores(id);
   notifySync();
 }
 
 export async function reorderTasks(moves: ReorderMove[]): Promise<void> {
   await tauri.reorderTasks(moves);
-  const indexed = new Map(moves.map((m) => [m.id, m.index]));
-  $tasks.set(
-    $tasks.get().map((t) => {
-      const idx = indexed.get(t.id);
-      return idx !== undefined ? { ...t, index: idx } : t;
-    }),
-  );
+  $tasks.set(applyReorder($tasks.get(), moves));
 }
 
 export async function setTodayIndex(id: string, index: number): Promise<void> {
@@ -150,7 +197,7 @@ export async function moveTaskToSection(id: string, sectionId: string | null): P
 
 export async function createProject(params: CreateProjectParams): Promise<Project> {
   const project = await tauri.createProject(params);
-  $projects.set([...$projects.get(), project]);
+  $projects.set(appendItem($projects.get(), project));
   notifySync();
   return project;
 }
@@ -172,17 +219,7 @@ export async function reopenProject(id: string): Promise<void> {
 
 export async function deleteProject(id: string): Promise<void> {
   await tauri.deleteProject(id);
-  const taskIds = new Set(
-    $tasks.get().filter((t) => t.projectId === id).map((t) => t.id),
-  );
-  $projects.set(removeItem($projects.get(), id));
-  $tasks.set($tasks.get().filter((t) => t.projectId !== id));
-  $sections.set($sections.get().filter((s) => s.projectId !== id));
-  $checklistItems.set($checklistItems.get().filter((ci) => !taskIds.has(ci.taskId)));
-  $taskTags.set($taskTags.get().filter((tt) => !taskIds.has(tt.taskId)));
-  if ($activeView.get() === `project-${id}`) $activeView.set('inbox');
-  if (taskIds.has($selectedTaskId.get() ?? '')) $selectedTaskId.set(null);
-  if (taskIds.has($expandedTaskId.get() ?? '')) $expandedTaskId.set(null);
+  deleteProjectFromStores(id);
   notifySync();
 }
 
@@ -193,20 +230,14 @@ export async function moveProjectToArea(id: string, areaId: string | null): Prom
 
 export async function reorderProjects(moves: ReorderMove[]): Promise<void> {
   await tauri.reorderProjects(moves);
-  const indexed = new Map(moves.map((m) => [m.id, m.index]));
-  $projects.set(
-    $projects.get().map((p) => {
-      const idx = indexed.get(p.id);
-      return idx !== undefined ? { ...p, index: idx } : p;
-    }),
-  );
+  $projects.set(applyReorder($projects.get(), moves));
 }
 
 // --- Area actions ---
 
 export async function createArea(params: CreateAreaParams): Promise<Area> {
   const area = await tauri.createArea(params);
-  $areas.set([...$areas.get(), area]);
+  $areas.set(appendItem($areas.get(), area));
   return area;
 }
 
@@ -227,20 +258,14 @@ export async function toggleAreaArchived(id: string): Promise<void> {
 
 export async function reorderAreas(moves: ReorderMove[]): Promise<void> {
   await tauri.reorderAreas(moves);
-  const indexed = new Map(moves.map((m) => [m.id, m.index]));
-  $areas.set(
-    $areas.get().map((a) => {
-      const idx = indexed.get(a.id);
-      return idx !== undefined ? { ...a, index: idx } : a;
-    }),
-  );
+  $areas.set(applyReorder($areas.get(), moves));
 }
 
 // --- Section actions ---
 
 export async function createSection(params: CreateSectionParams): Promise<Section> {
   const section = await tauri.createSection(params);
-  $sections.set([...$sections.get(), section]);
+  $sections.set(appendItem($sections.get(), section));
   return section;
 }
 
@@ -266,20 +291,14 @@ export async function toggleSectionArchived(id: string): Promise<void> {
 
 export async function reorderSections(projectId: string, moves: ReorderMove[]): Promise<void> {
   await tauri.reorderSections(projectId, moves);
-  const indexed = new Map(moves.map((m) => [m.id, m.index]));
-  $sections.set(
-    $sections.get().map((sec) => {
-      const idx = indexed.get(sec.id);
-      return idx !== undefined ? { ...sec, index: idx } : sec;
-    }),
-  );
+  $sections.set(applyReorder($sections.get(), moves));
 }
 
 // --- Tag actions ---
 
 export async function createTag(params: CreateTagParams): Promise<Tag | null> {
   const tag = await tauri.createTag(params);
-  if (tag) $tags.set([...$tags.get(), tag]);
+  if (tag) $tags.set(appendItem($tags.get(), tag));
   return tag;
 }
 
@@ -290,16 +309,12 @@ export async function updateTag(params: UpdateTagParams): Promise<void> {
 
 export async function deleteTag(id: string): Promise<void> {
   await tauri.deleteTag(id);
-  $tags.set(removeItem($tags.get(), id));
-  $taskTags.set($taskTags.get().filter((tt) => tt.tagId !== id));
-  const next = new Set($activeTagFilters.get());
-  next.delete(id);
-  $activeTagFilters.set(next);
+  removeTagFromStores(id);
 }
 
 export async function addTagToTask(taskId: string, tagId: string): Promise<void> {
   await tauri.addTagToTask(taskId, tagId);
-  $taskTags.set([...$taskTags.get(), { taskId, tagId }]);
+  $taskTags.set(appendItem($taskTags.get(), { taskId, tagId }));
 }
 
 export async function removeTagFromTask(taskId: string, tagId: string): Promise<void> {
@@ -313,7 +328,7 @@ export async function removeTagFromTask(taskId: string, tagId: string): Promise<
 
 export async function createChecklistItem(params: CreateChecklistItemParams): Promise<ChecklistItem> {
   const item = await tauri.createChecklistItem(params);
-  $checklistItems.set([...$checklistItems.get(), item]);
+  $checklistItems.set(appendItem($checklistItems.get(), item));
   return item;
 }
 
@@ -334,13 +349,7 @@ export async function deleteChecklistItem(id: string): Promise<void> {
 
 export async function reorderChecklistItems(taskId: string, moves: ReorderMove[]): Promise<void> {
   await tauri.reorderChecklistItems(taskId, moves);
-  const indexed = new Map(moves.map((m) => [m.id, m.index]));
-  $checklistItems.set(
-    $checklistItems.get().map((ci) => {
-      const idx = indexed.get(ci.id);
-      return idx !== undefined ? { ...ci, index: idx } : ci;
-    }),
-  );
+  $checklistItems.set(applyReorder($checklistItems.get(), moves));
 }
 
 // --- Sync mutations ---
