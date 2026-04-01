@@ -958,6 +958,20 @@ html, body {
     color: var(--ink-quaternary);
 }
 
+.task-notes-input {
+    margin-left: 27px;
+    width: calc(100% - 27px);
+    padding: 0;
+    border: none;
+    background: none;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+    font-size: var(--text-sm);
+    color: var(--ink-secondary);
+}
+
 .attr-bar {
     display: flex;
     align-items: center;
@@ -1006,6 +1020,16 @@ html, body {
     background: var(--canvas-sunken);
     color: var(--ink-secondary);
     border-color: transparent;
+}
+
+.attr-project-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 4px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    vertical-align: middle;
 }
 
 .attr-pill.attr-tag {

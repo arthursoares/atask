@@ -15,6 +15,8 @@ import WhenPicker from './WhenPicker';
 import TagPicker from './TagPicker';
 import ProjectPicker from './ProjectPicker';
 import RepeatPicker from './RepeatPicker';
+import EditorAttributeBar from './task-inline-editor/EditorAttributeBar';
+import EditorNotesField from './task-inline-editor/EditorNotesField';
 import type { Task, UpdateTaskParams } from '../types';
 
 interface TaskInlineEditorProps {
@@ -177,87 +179,26 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
         />
       </div>
 
-      {/* Notes textarea */}
-      <textarea
-        ref={textareaRef}
+      <EditorNotesField
+        textareaRef={textareaRef}
         value={notes}
         onChange={handleNotesChange}
         onKeyDown={handleNotesKeyDown}
-        placeholder="Notes"
-        rows={1}
-        style={{
-          marginLeft: 27,
-          border: 'none',
-          background: 'none',
-          outline: 'none',
-          resize: 'none',
-          fontFamily: 'inherit',
-          fontSize: 'var(--text-sm)',
-          color: 'var(--ink-secondary)',
-          width: 'calc(100% - 27px)',
-          padding: 0,
-          overflow: 'hidden',
-        }}
       />
 
-      {/* Attribute bar */}
-      <div className="attr-bar" style={{ paddingLeft: 27 }}>
-        {/* Schedule pill */}
-        {scheduleLabel && (
-          <span className="attr-pill attr-today">
-            {scheduleLabel}
-            <span className="remove" onClick={handleRemoveSchedule}>×</span>
-          </span>
-        )}
-
-        {/* Project pill */}
-        {project && (
-          <span className="attr-pill attr-project">
-            <span
-              style={{
-                display: 'inline-block',
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: project.color || 'var(--accent)',
-                marginRight: 4,
-                flexShrink: 0,
-                verticalAlign: 'middle',
-              }}
-            />
-            {project.title}
-            <span className="remove" onClick={handleRemoveProject}>×</span>
-          </span>
-        )}
-
-        {/* Tag pills */}
-        {taskTags.map((tag) => (
-          <span key={tag.id} className="attr-pill attr-tag">
-            {tag.title}
-            <span className="remove" onClick={() => handleRemoveTag(tag.id)}>×</span>
-          </span>
-        ))}
-
-        {/* Add buttons */}
-        {!scheduleLabel && (
-          <span className="attr-pill attr-add" onClick={() => setShowWhenPicker(true)}>
-            When
-          </span>
-        )}
-        <span className="attr-pill attr-add" onClick={() => setShowTagPicker(true)}>
-          +Tag
-        </span>
-        {!task.repeatRule && (
-          <span className="attr-pill attr-add" onClick={() => setShowRepeatPicker(true)}>
-            Repeat
-          </span>
-        )}
-        {!task.projectId && (
-          <span className="attr-pill attr-add" onClick={() => setShowProjectPicker(true)}>
-            Project
-          </span>
-        )}
-      </div>
+      <EditorAttributeBar
+        task={task}
+        project={project}
+        taskTags={taskTags}
+        scheduleLabel={scheduleLabel}
+        onRemoveSchedule={handleRemoveSchedule}
+        onRemoveProject={handleRemoveProject}
+        onRemoveTag={handleRemoveTag}
+        onShowWhenPicker={() => setShowWhenPicker(true)}
+        onShowTagPicker={() => setShowTagPicker(true)}
+        onShowRepeatPicker={() => setShowRepeatPicker(true)}
+        onShowProjectPicker={() => setShowProjectPicker(true)}
+      />
 
       {/* Pickers */}
       {showWhenPicker && (
