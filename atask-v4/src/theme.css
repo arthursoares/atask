@@ -848,7 +848,7 @@ html, body {
     flex-shrink: 0;
 }
 
-.task-drop-indicator {
+.task-drop-slot {
     position: absolute;
     top: -1px;
     left: 0;
@@ -857,9 +857,10 @@ html, body {
     background: var(--accent);
     border-radius: 2px;
     z-index: 10;
+    pointer-events: none;
 }
 
-.task-drop-indicator-dot {
+.task-drop-slot-dot {
     position: absolute;
     left: -3px;
     top: -3px;

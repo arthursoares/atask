@@ -10,6 +10,8 @@ import {
   reopenTask,
   updateTask,
 } from "../../store";
+export { default as DropSlot } from "./DropSlot";
+export { default as DragIndicator } from "./DropSlot";
 
 export function formatDeadline(deadline: string): string {
   const today = new Date();
@@ -132,12 +134,4 @@ export function TaskMeta({
   if (metaItems.length === 0) return null;
 
   return <div className="task-meta">{metaItems}</div>;
-}
-
-export function DragIndicator() {
-  return (
-    <div className="task-drop-indicator">
-      <div className="task-drop-indicator-dot" />
-    </div>
-  );
 }
