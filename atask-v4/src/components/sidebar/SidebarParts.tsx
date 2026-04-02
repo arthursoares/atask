@@ -2,14 +2,20 @@ import { useState } from "react";
 import type { ActiveView, Project } from "../../types";
 import { Field } from "../../ui";
 
-export const SIDEBAR_REORDER_MIME = "application/x-atask-sidebar-item";
-
 function hasDragType(e: React.DragEvent, type: string) {
   return Array.from(e.dataTransfer.types).includes(type);
 }
 
 function isTaskTransfer(e: React.DragEvent) {
-  return hasDragType(e, "text/plain") && !hasDragType(e, SIDEBAR_REORDER_MIME);
+  return hasDragType(e, "text/plain");
+}
+
+export function shouldHandleSidebarRowPointerDown(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return true;
+  }
+
+  return target.closest("[data-reorder-ignore]") === null;
 }
 
 export function SidebarRow({
@@ -17,11 +23,13 @@ export function SidebarRow({
   children,
   className = "",
   isDragTarget = false,
-  draggable,
+  dataSidebarItemId,
+  dataSidebarItemKind,
+  reorderRef,
+  reorderHandlers,
+  isReordering = false,
   onClick,
   onContextMenu,
-  onDragStart,
-  onDragEnd,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -30,23 +38,30 @@ export function SidebarRow({
   children: React.ReactNode;
   className?: string;
   isDragTarget?: boolean;
-  draggable?: boolean;
+  dataSidebarItemId?: string;
+  dataSidebarItemKind?: string;
+  reorderRef?: (node: HTMLDivElement | null) => void;
+  reorderHandlers?: {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+    onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  };
+  isReordering?: boolean;
   onClick?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
-  onDragStart?: (e: React.DragEvent) => void;
-  onDragEnd?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
 }) {
   return (
     <div
-      className={`sidebar-item${active ? " active" : ""}${isDragTarget ? " drag-target" : ""}${className ? ` ${className}` : ""}`}
-      draggable={draggable}
+      ref={reorderRef}
+      className={`sidebar-item${active ? " active" : ""}${isDragTarget ? " drag-target" : ""}${isReordering ? " sidebar-item-dragging" : ""}${className ? ` ${className}` : ""}`}
+      data-sidebar-item-id={dataSidebarItemId}
+      data-sidebar-item-kind={dataSidebarItemKind}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onPointerDown={reorderHandlers?.onPointerDown}
+      onMouseDown={reorderHandlers?.onMouseDown}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -159,9 +174,9 @@ export function ProjectItem({
   onRenameCommit,
   onRenameCancel,
   onTaskDrop,
-  draggable,
-  onDragStart,
-  onDragEnd,
+  reorderRef,
+  reorderHandlers,
+  isReordering = false,
 }: {
   project: Project;
   badge: number;
@@ -174,9 +189,12 @@ export function ProjectItem({
   onRenameCommit: () => void;
   onRenameCancel: () => void;
   onTaskDrop: (taskId: string, projectId: string) => void;
-  draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
-  onDragEnd?: () => void;
+  reorderRef?: (node: HTMLDivElement | null) => void;
+  reorderHandlers?: {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+    onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  };
+  isReordering?: boolean;
 }) {
   const view: ActiveView = `project-${project.id}`;
   const [isDragTarget, setIsDragTarget] = useState(false);
@@ -185,12 +203,14 @@ export function ProjectItem({
     <SidebarRow
       active={activeView === view}
       className="sidebar-item-project"
+      dataSidebarItemId={project.id}
+      dataSidebarItemKind="project"
       isDragTarget={isDragTarget}
-      draggable={draggable}
+      reorderRef={reorderRef}
+      reorderHandlers={reorderHandlers}
+      isReordering={isReordering}
       onClick={() => onClick(view)}
       onContextMenu={(e) => onContextMenu(e, project)}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
       onDragOver={(e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
@@ -215,6 +235,7 @@ export function ProjectItem({
           autoFocus
           value={renamingValue}
           className="sidebar-rename-input sidebar-rename-input-project"
+          data-reorder-ignore
           onChange={(e) => onRenamingValueChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

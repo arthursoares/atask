@@ -221,6 +221,128 @@ export async function dragTaskByTitleToTaskByTitle(sourceTitle: string, targetTi
   }
 }
 
+export async function getSidebarAreaIds(): Promise<string[]> {
+  return browser.execute(() => {
+    return Array.from(document.querySelectorAll(".sidebar-group-label"))
+      .map((item) => item.textContent?.trim() ?? "")
+      .filter(Boolean);
+  });
+}
+
+export async function startSidebarAreaDrag(sourceIndex: number, targetIndex: number) {
+  const dragState = await browser.executeAsync((from: number, to: number, done: (result: Record<string, unknown>) => void) => {
+    const areaItems = Array.from(
+      document.querySelectorAll(".sidebar-group-label"),
+    ) as HTMLElement[];
+    const source = areaItems[from];
+    const target = areaItems[to];
+    if (!source || !target) {
+      done({ ok: false, reason: "missing-area-item" });
+      return;
+    }
+
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 24);
+    const sourceY = Math.round(sourceRect.top + sourceRect.height / 2);
+    const targetY = from > to
+      ? Math.round(targetRect.top + 6)
+      : Math.round(targetRect.bottom - 6);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: sourceY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.setTimeout(() => {
+      const draggingItem = document.querySelector(".sidebar-group-label.sidebar-item-dragging");
+      done({
+        ok: true,
+        activeId: draggingItem?.textContent?.trim() ?? null,
+        hasDraggedClass: Boolean(draggingItem),
+        visibleSlotCount: document.querySelectorAll(".sidebar-drop-slot").length,
+      });
+    }, 60);
+  }, sourceIndex, targetIndex);
+
+  if (!dragState?.ok) {
+    throw new Error(`Unable to start sidebar area drag: ${JSON.stringify(dragState)}`);
+  }
+
+  return dragState as {
+    activeId: string | null;
+    hasDraggedClass: boolean;
+    visibleSlotCount: number;
+  };
+}
+
+export async function finishSidebarAreaDrag(sourceIndex: number, targetIndex: number) {
+  const finished = await browser.executeAsync((from: number, to: number, done: (result: boolean) => void) => {
+    const areaItems = Array.from(
+      document.querySelectorAll(".sidebar-group-label"),
+    ) as HTMLElement[];
+    const source = areaItems[from];
+    const target = areaItems[to];
+    if (!source || !target) {
+      done(false);
+      return;
+    }
+
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 24);
+    const targetY = from > to
+      ? Math.round(targetRect.top + 6)
+      : Math.round(targetRect.bottom - 6);
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 0,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.setTimeout(() => done(true), 60);
+  }, sourceIndex, targetIndex);
+
+  if (!finished) {
+    throw new Error(`Unable to finish sidebar area drag from ${sourceIndex} to ${targetIndex}`);
+  }
+}
+
+export async function dragSidebarArea(sourceIndex: number, targetIndex: number) {
+  await startSidebarAreaDrag(sourceIndex, targetIndex);
+  await finishSidebarAreaDrag(sourceIndex, targetIndex);
+}
+
 /** Click on a task row by its title */
 export async function clickTask(title: string) {
   await browser.execute((t: string) => {

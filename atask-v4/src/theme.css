@@ -352,6 +352,12 @@ html, body {
     background: var(--accent-subtle);
 }
 
+.sidebar-item-dragging,
+.sidebar-group-label.sidebar-item-dragging {
+    opacity: 0.55;
+    background: var(--sidebar-hover);
+}
+
 .sidebar-drop-zone {
     display: flex;
     align-items: center;
