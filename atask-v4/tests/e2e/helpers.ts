@@ -158,6 +158,56 @@ export async function startPointerDragTaskByTitle(title: string) {
   }
 }
 
+export async function getNativeTaskDragPayload(title: string): Promise<{
+  draggable: boolean;
+  payload: string | null;
+  typeCalls: string[];
+  visibleDropZoneCount: number;
+}> {
+  const result = await browser.execute((taskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === taskTitle;
+    }) as HTMLElement | undefined;
+    if (!source) {
+      return null;
+    }
+
+    const payloadByType = new Map<string, string>();
+    const typeCalls: string[] = [];
+    const dataTransfer = {
+      setData(type: string, value: string) {
+        typeCalls.push(type);
+        payloadByType.set(type, value);
+      },
+      getData(type: string) {
+        return payloadByType.get(type) ?? "";
+      },
+      effectAllowed: "uninitialized",
+    };
+
+    source.dispatchEvent(new DragEvent("dragstart", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: dataTransfer as unknown as DataTransfer,
+    }));
+
+    return {
+      draggable: source.draggable,
+      payload: payloadByType.get("text/plain") ?? null,
+      typeCalls,
+      visibleDropZoneCount: document.querySelectorAll(".task-drop-zone").length,
+    };
+  }, title);
+
+  if (!result) {
+    throw new Error(`Task "${title}" not found`);
+  }
+
+  return result;
+}
+
 export async function finishPointerDrag() {
   await browser.execute(() => {
     window.dispatchEvent(new MouseEvent("mouseup", {
@@ -219,6 +269,12 @@ export async function dragTaskByTitleToTaskByTitle(sourceTitle: string, targetTi
   if (!reordered) {
     throw new Error(`Unable to reorder "${sourceTitle}" to "${targetTitle}"`);
   }
+}
+
+export async function blurWindow() {
+  await browser.execute(() => {
+    window.dispatchEvent(new Event("blur"));
+  });
 }
 
 export async function getSidebarAreaIds(): Promise<string[]> {

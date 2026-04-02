@@ -180,6 +180,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
   }, [cancelReorder, items, onReorder]);
 
   useEffect(() => {
+    const cancelMouseSession = () => {
+      const session = sessionRef.current;
+      if (!session || session.inputType !== 'mouse') return;
+      cancelReorder();
+    };
+
     const handlePointerMove = (event: PointerEvent) => {
       updateReorder(event, 'pointer');
     };
@@ -202,6 +208,14 @@ export default function usePointerReorder<T extends ReorderableItem>({
         cancelReorder();
       }
     };
+    const handleWindowBlur = () => {
+      cancelMouseSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        cancelMouseSession();
+      }
+    };
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
@@ -209,6 +223,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
@@ -217,6 +233,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [cancelReorder, commitReorder, updateReorder]);
 

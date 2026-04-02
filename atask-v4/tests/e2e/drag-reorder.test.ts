@@ -5,7 +5,9 @@ import {
   getTaskTitles,
   dragTaskByTitleToTaskByTitle,
   finishPointerDrag,
+  getNativeTaskDragPayload,
   startPointerDragTaskByTitle,
+  blurWindow,
 } from "./helpers";
 
 describe("Drag and Drop Reorder", () => {
@@ -64,6 +66,15 @@ describe("Drag and Drop Reorder", () => {
     );
   });
 
+  it("should expose native task drag payloads for sidebar drops without starting pointer reorder", async () => {
+    const dragPayload = await getNativeTaskDragPayload("Drag B");
+
+    expect(dragPayload.draggable).toBe(true);
+    expect(dragPayload.typeCalls).toContain("text/plain");
+    expect(dragPayload.payload).toBeTruthy();
+    expect(dragPayload.visibleDropZoneCount).toBe(0);
+  });
+
   it("should reorder tasks with pointer dragging", async () => {
     await dragTaskByTitleToTaskByTitle("Drag C", "Drag A");
 
@@ -74,6 +85,34 @@ describe("Drag and Drop Reorder", () => {
     expect(dragAIndex).toBeGreaterThanOrEqual(0);
     expect(dragCIndex).toBeGreaterThanOrEqual(0);
     expect(dragCIndex).toBeLessThan(dragAIndex);
+  });
+
+  it("should cancel pointer reorder when the window blurs during mouse dragging", async () => {
+    await startPointerDragTaskByTitle("Drag B");
+
+    await browser.waitUntil(
+      async () => {
+        const zoneCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return zoneCount > 0;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not appear during drag" },
+    );
+
+    await blurWindow();
+
+    await browser.waitUntil(
+      async () => {
+        const zoneCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return zoneCount === 0;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not clear after window blur" },
+    );
+
+    await finishPointerDrag();
   });
 
   after(async () => {
