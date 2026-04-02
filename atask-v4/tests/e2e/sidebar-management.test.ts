@@ -136,41 +136,88 @@ describe("Sidebar Management", () => {
   });
 
   describe("Sidebar drag slots", () => {
+    before(async () => {
+      await navigateTo("Inbox");
+      const labels = await getSidebarLabels();
+      const projectCount = labels.filter((label) => label.includes("New Project")).length;
+
+      for (let index = projectCount; index < 2; index += 1) {
+        await pressKeys("O", true, true);
+        await browser.pause(300);
+        await clickCommandPaletteItem("New Project");
+        await browser.pause(500);
+      }
+    });
+
     it("should show sidebar drop zones and a visible slot while dragging a project", async () => {
-      const dragState = await browser.execute(() => {
-        const items = Array.from(document.querySelectorAll(".sidebar-item"));
-        const projectItem = items.find((item) => item.textContent?.includes("New Project")) as HTMLElement | undefined;
-        if (!projectItem) return null;
+      const dragState = await browser.executeAsync((done) => {
+        const finish = (result: Record<string, unknown>) => {
+          done(result);
+        };
 
-        const dataTransfer = new DataTransfer();
-        projectItem.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
-
-        const dropZones = Array.from(document.querySelectorAll(".sidebar-drop-zone"));
-        const projectDropZone = dropZones.find((zone) =>
-          zone.classList.contains("sidebar-drop-zone-project"),
+        const groups = Array.from(document.querySelectorAll(".sidebar-group"));
+        const projectGroup = groups.find((group) =>
+          group.querySelectorAll(".sidebar-item-project").length >= 2,
         ) as HTMLElement | undefined;
 
-        if (!projectDropZone) {
-          projectItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
-          return null;
+        if (!projectGroup) {
+          finish({ ok: false, reason: "no-project-group" });
+          return;
         }
 
-        projectDropZone.dispatchEvent(new DragEvent("dragover", { bubbles: true, dataTransfer }));
+        const projectItems = Array.from(projectGroup.querySelectorAll(".sidebar-item-project")) as HTMLElement[];
+        const dragItem = projectItems[0];
+        const dataTransfer = new DataTransfer();
+        dragItem.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
 
-        const visibleSlotCount = document.querySelectorAll(".sidebar-drop-slot").length;
-        projectDropZone.dispatchEvent(new DragEvent("dragleave", { bubbles: true, dataTransfer }));
-        const slotCountAfterLeave = document.querySelectorAll(".sidebar-drop-slot").length;
-        projectItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+        setTimeout(() => {
+          const projectDropZones = Array.from(
+            projectGroup.querySelectorAll(".sidebar-drop-zone-project"),
+          ) as HTMLElement[];
+          const dropZone = projectDropZones.at(-1);
 
-        return {
-          dropZoneCount: dropZones.length,
-          visibleSlotCount,
-          slotCountAfterLeave,
-        };
+          if (!dropZone) {
+            dragItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+            finish({
+              ok: false,
+              reason: "no-project-drop-zone",
+              dropZoneCount: projectDropZones.length,
+            });
+            return;
+          }
+
+          const beforeSlotCount = document.querySelectorAll(".sidebar-drop-slot").length;
+          dropZone.dispatchEvent(
+            new DragEvent("dragover", { bubbles: true, dataTransfer }),
+          );
+
+          setTimeout(() => {
+            const visibleSlotCount = document.querySelectorAll(".sidebar-drop-slot").length;
+            dropZone.dispatchEvent(
+              new DragEvent("dragleave", { bubbles: true, dataTransfer }),
+            );
+
+            setTimeout(() => {
+              const slotCountAfterLeave = document.querySelectorAll(".sidebar-drop-slot").length;
+              dragItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+
+              finish({
+                ok: visibleSlotCount > 0,
+                beforeSlotCount,
+                visibleSlotCount,
+                slotCountAfterLeave,
+                projectCount: projectItems.length,
+                dropZoneCount: projectDropZones.length,
+              });
+            }, 50);
+          }, 50);
+        }, 50);
       });
 
-      expect(dragState).not.toBeNull();
-      expect(dragState?.dropZoneCount).toBeGreaterThan(0);
+      if (!dragState?.ok) {
+        throw new Error(`Sidebar drag debug: ${JSON.stringify(dragState)}`);
+      }
+      expect(dragState?.beforeSlotCount).toBe(0);
       expect(dragState?.visibleSlotCount).toBeGreaterThan(0);
       expect(dragState?.slotCountAfterLeave).toBe(0);
     });
