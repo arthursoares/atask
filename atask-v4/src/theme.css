@@ -1575,7 +1575,6 @@ html, body {
     outline: none;
     resize: vertical;
     width: 100%;
-    box-sizing: border-box;
     font-family: inherit;
     font-size: var(--text-sm);
     color: var(--ink-secondary);
