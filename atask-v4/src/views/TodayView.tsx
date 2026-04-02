@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { Fragment, useCallback } from 'react';
 import { useStore } from '@nanostores/react';
 import {
   useTodayMorning,
@@ -17,6 +17,7 @@ import TaskInlineEditor from '../components/TaskInlineEditor';
 import NewTaskRow from '../components/NewTaskRow';
 import SectionHeader from '../components/SectionHeader';
 import EmptyState from '../components/EmptyState';
+import DropSlot from '../components/task-row/DropSlot';
 import useDragReorder from '../hooks/useDragReorder';
 
 const StarIcon = (
@@ -67,59 +68,87 @@ export default function TodayView() {
     getDropHandlers: getEveningDropHandlers,
   } = useDragReorder(evening, handleReorderEvening);
 
-  return (
-    <div>
-      {morning.map((task, index) =>
-        expandedTaskId === task.id ? (
-          <TaskInlineEditor
-            key={task.id}
-            task={task}
-            isToday
-            onClose={closeTaskEditor}
-          />
-        ) : (
-          <TaskRow
-            key={task.id}
-            task={task}
-            isSelected={selectedTaskId === task.id}
-            isMultiSelected={selectedTaskIds.has(task.id)}
-            taskList={morning}
-            isToday
-            onClick={() => selectTask(task.id)}
-            onDoubleClick={() => openTaskEditor(task.id)}
-            dragHandlers={getMorningDragHandlers(task.id)}
-            dropHandlers={getMorningDropHandlers(index)}
-            isDragOver={morningDragState.dropIndex === index && morningDragState.dragId !== task.id}
-          />
-        ),
-      )}
+  const renderTaskList = (
+    tasks: typeof morning,
+    dragState: typeof morningDragState,
+    getDragHandlers: typeof getMorningDragHandlers,
+    getDropHandlers: typeof getMorningDropHandlers,
+  ) => {
+    const draggedTaskIndex = dragState.dragId
+      ? tasks.findIndex((task) => task.id === dragState.dragId)
+      : -1;
+    const isDragging = dragState.dragId !== null;
 
-      {evening.length > 0 && (
-        <>
-          <SectionHeader title="This Evening" muted />
-          {evening.map((task, index) =>
-            expandedTaskId === task.id ? (
+    const renderDropZone = (index: number) => {
+      if (!isDragging) return null;
+
+      const isVisible = dragState.dropIndex === index
+        && index !== draggedTaskIndex
+        && index !== draggedTaskIndex + 1;
+      const edgeClass = index === 0
+        ? ' task-drop-zone-edge-top'
+        : index === tasks.length
+          ? ' task-drop-zone-edge-bottom'
+          : '';
+
+      return (
+        <div
+          key={`drop-zone-${index}`}
+          className={`task-drop-zone${edgeClass}`}
+          {...getDropHandlers(index)}
+        >
+          {isVisible ? <DropSlot /> : null}
+        </div>
+      );
+    };
+
+    return (
+      <>
+        {tasks.map((task, index) => (
+          <Fragment key={task.id}>
+            {renderDropZone(index)}
+            {expandedTaskId === task.id ? (
               <TaskInlineEditor
-                key={task.id}
                 task={task}
                 isToday
                 onClose={closeTaskEditor}
               />
             ) : (
               <TaskRow
-                key={task.id}
                 task={task}
                 isSelected={selectedTaskId === task.id}
                 isMultiSelected={selectedTaskIds.has(task.id)}
-                taskList={evening}
+                taskList={tasks}
                 isToday
                 onClick={() => selectTask(task.id)}
                 onDoubleClick={() => openTaskEditor(task.id)}
-                dragHandlers={getEveningDragHandlers(task.id)}
-                dropHandlers={getEveningDropHandlers(index)}
-                isDragOver={eveningDragState.dropIndex === index && eveningDragState.dragId !== task.id}
+                dragHandlers={getDragHandlers(task.id)}
               />
-            ),
+            )}
+          </Fragment>
+        ))}
+        {renderDropZone(tasks.length)}
+      </>
+    );
+  };
+
+  return (
+    <div>
+      {renderTaskList(
+        morning,
+        morningDragState,
+        getMorningDragHandlers,
+        getMorningDropHandlers,
+      )}
+
+      {evening.length > 0 && (
+        <>
+          <SectionHeader title="This Evening" muted />
+          {renderTaskList(
+            evening,
+            eveningDragState,
+            getEveningDragHandlers,
+            getEveningDropHandlers,
           )}
         </>
       )}

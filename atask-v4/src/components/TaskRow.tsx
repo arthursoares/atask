@@ -16,7 +16,6 @@ import {
 import CheckboxCircle from './CheckboxCircle';
 import ContextMenu from './ContextMenu';
 import type { Task } from '../types';
-import DropSlot from './task-row/DropSlot';
 import { buildTaskContextMenuItems, TaskMeta } from './task-row/taskRowHelpers';
 
 interface TaskRowProps {
@@ -34,12 +33,6 @@ interface TaskRowProps {
     onDragStart: (e: React.DragEvent) => void;
     onDragEnd: () => void;
   };
-  dropHandlers?: {
-    onDragOver: (e: React.DragEvent) => void;
-    onDragLeave: () => void;
-    onDrop: (e: React.DragEvent) => void;
-  };
-  isDragOver?: boolean;
 }
 
 export default function TaskRow({
@@ -53,8 +46,6 @@ export default function TaskRow({
   showTriageActions,
   hideProjectPill,
   dragHandlers,
-  dropHandlers,
-  isDragOver,
 }: TaskRowProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -113,14 +104,11 @@ export default function TaskRow({
       <div
         className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}`}
         style={{ position: 'relative' }}
-        data-drag-over={isDragOver ? 'true' : 'false'}
         onClick={handleClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={handleContextMenu}
         {...dragHandlers}
-        {...dropHandlers}
       >
-        {isDragOver && <DropSlot />}
         <CheckboxCircle
           checked={isCompleted}
           cancelled={isCancelled}

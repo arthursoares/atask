@@ -30,6 +30,10 @@ export default function useDragReorder(
 ): UseDragReorderReturn {
   const [dragState, setDragState] = useState<DragState>({ dragId: null, dropIndex: null });
   const dragIdRef = useRef<string | null>(null);
+  const resetDragState = useCallback(() => {
+    setDragState({ dragId: null, dropIndex: null });
+    dragIdRef.current = null;
+  }, []);
 
   const getDragHandlers = useCallback((taskId: string) => ({
     draggable: true as const,
@@ -45,10 +49,9 @@ export default function useDragReorder(
     onDragEnd: () => {
       const el = document.querySelector('.task-item[style*="opacity"]') as HTMLElement | null;
       if (el) el.style.opacity = '';
-      dragIdRef.current = null;
-      setDragState({ dragId: null, dropIndex: null });
+      resetDragState();
     },
-  }), []);
+  }), [resetDragState]);
 
   const getDropHandlers = useCallback((index: number) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -71,16 +74,19 @@ export default function useDragReorder(
       const reordered = [...tasks];
       const [moved] = reordered.splice(sourceIndex, 1);
       const targetIndex = index > sourceIndex ? index - 1 : index;
+      if (targetIndex === sourceIndex) {
+        resetDragState();
+        return;
+      }
       reordered.splice(targetIndex, 0, moved);
 
       // Generate moves array with new indices
       const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
       onReorder(moves);
 
-      setDragState({ dragId: null, dropIndex: null });
-      dragIdRef.current = null;
+      resetDragState();
     },
-  }), [tasks, onReorder]);
+  }), [onReorder, resetDragState, tasks]);
 
   const getContainerHandlers = useCallback(() => ({
     onDragOver: (e: React.DragEvent) => {
@@ -103,10 +109,9 @@ export default function useDragReorder(
       const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
       onReorder(moves);
 
-      setDragState({ dragId: null, dropIndex: null });
-      dragIdRef.current = null;
+      resetDragState();
     },
-  }), [tasks, onReorder]);
+  }), [onReorder, resetDragState, tasks]);
 
   return { dragState, getDragHandlers, getDropHandlers, getContainerHandlers };
 }
