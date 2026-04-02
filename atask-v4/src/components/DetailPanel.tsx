@@ -7,6 +7,12 @@ import WhenPicker from './WhenPicker';
 import TagPicker from './TagPicker';
 import ProjectPicker from './ProjectPicker';
 import { TagPill } from '../ui';
+import TaskDateFields from './task-edit/TaskDateFields';
+import TaskEditField from './task-edit/TaskEditField';
+import TaskEditNotesField from './task-edit/TaskEditNotesField';
+import TaskEditProjectField from './task-edit/TaskEditProjectField';
+import TaskEditScheduleField from './task-edit/TaskEditScheduleField';
+import TaskEditTagSection from './task-edit/TaskEditTagSection';
 import useTaskDraft from './task-edit/useTaskDraft';
 import useTaskPickers from './task-edit/useTaskPickers';
 import scheduleLabel from './task-edit/scheduleLabel';
@@ -22,7 +28,9 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
 
   const tags = useTagsForTask(taskId);
 
-  const project = task?.projectId ? projects.find((p) => p.id === task.projectId) : null;
+  const project = task?.projectId
+    ? projects.find((p) => p.id === task.projectId) ?? null
+    : null;
 
   // Escape key to close
   const handleKeyDown = useCallback(
@@ -79,132 +87,65 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
       </div>
 
       <div className="detail-body">
-        <div className="detail-field detail-field-popover">
-          <div className="detail-field-label">Project</div>
-          <div className="detail-field-value">
-            <span
-              className="detail-field-trigger"
-              onClick={() => setShowProjectPicker((v) => !v)}
-            >
-              {project ? (
-                <span className="detail-project-value">
-                  <span
-                    className="detail-project-dot"
-                    style={{ background: project.color || 'var(--accent)' }}
-                  />
-                  {project.title}
-                </span>
-              ) : (
-                <span className="detail-empty-value">None</span>
-              )}
-            </span>
-            {showProjectPicker && (
-              <ProjectPicker
-                taskId={taskId}
-                onClose={() => setShowProjectPicker(false)}
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="detail-field detail-field-popover">
-          <div className="detail-field-label">Schedule</div>
-          <div className="detail-field-value">
-            <span
-              className="detail-field-trigger"
-              onClick={() => setShowWhenPicker((v) => !v)}
-            >
-              {scheduleLabel(task.schedule, task.timeSlot)}
-            </span>
-            {showWhenPicker && (
-              <WhenPicker
-                taskId={taskId}
-                currentSchedule={task.schedule}
-                currentTimeSlot={task.timeSlot}
-                currentStartDate={task.startDate}
-                anchorRef={{ current: null }}
-                onClose={() => setShowWhenPicker(false)}
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="detail-field">
-          <div className="detail-field-label">Start Date</div>
-          <div className="detail-field-value detail-inline-field">
-            <input
-              className="detail-date-input"
-              type="date"
-              value={task.startDate?.slice(0, 10) ?? ''}
-              onChange={(e) => updateTask({ id: taskId, startDate: e.target.value || null })}
+        <TaskEditProjectField
+          project={project}
+          onTogglePicker={() => setShowProjectPicker((value) => !value)}
+          showPicker={showProjectPicker}
+          picker={(
+            <ProjectPicker
+              taskId={taskId}
+              onClose={() => setShowProjectPicker(false)}
             />
-            {task.startDate && (
-              <span
-                className="detail-clear-btn"
-                onClick={() => updateTask({ id: taskId, startDate: null })}
-              >×</span>
-            )}
-          </div>
-        </div>
+          )}
+        />
 
-        <div className="detail-field">
-          <div className="detail-field-label">Deadline</div>
-          <div className="detail-field-value detail-inline-field">
-            <input
-              className="detail-date-input"
-              type="date"
-              value={task.deadline?.slice(0, 10) ?? ''}
-              onChange={(e) => updateTask({ id: taskId, deadline: e.target.value || null })}
+        <TaskEditScheduleField
+          value={scheduleLabel(task.schedule, task.timeSlot)}
+          onTogglePicker={() => setShowWhenPicker((value) => !value)}
+          showPicker={showWhenPicker}
+          picker={(
+            <WhenPicker
+              taskId={taskId}
+              currentSchedule={task.schedule}
+              currentTimeSlot={task.timeSlot}
+              currentStartDate={task.startDate}
+              anchorRef={{ current: null }}
+              onClose={() => setShowWhenPicker(false)}
             />
-            {task.deadline && (
-              <span
-                className="detail-clear-btn"
-                onClick={() => updateTask({ id: taskId, deadline: null })}
-              >×</span>
-            )}
-          </div>
-        </div>
+          )}
+        />
 
-        <div className="detail-field detail-field-popover">
-          <div className="detail-field-label">Tags</div>
-          <div className="detail-field-value">
-            <div className="detail-tag-row">
-              {tags.map((tag) => (
-                <TagPill key={tag.id} label={tag.title} variant="default" />
-              ))}
-              <span
-                className="detail-add-link"
-                onClick={() => setShowTagPicker((v) => !v)}
-              >
-                + Add
-              </span>
-            </div>
-            {showTagPicker && (
-              <TagPicker
-                taskId={taskId}
-                onClose={() => setShowTagPicker(false)}
-              />
-            )}
-          </div>
-        </div>
+        <TaskDateFields
+          startDate={task.startDate}
+          deadline={task.deadline}
+          onStartDateChange={(startDate) => updateTask({ id: taskId, startDate })}
+          onDeadlineChange={(deadline) => updateTask({ id: taskId, deadline })}
+        />
 
-        <div className="detail-field">
-          <div className="detail-field-label">Notes</div>
-          <div className="detail-field-value">
-            <textarea
-              className="detail-notes-input"
-              value={notesValue}
-              onChange={(e) => setNotesValue(e.target.value)}
-              placeholder="Add notes…"
-              rows={3}
+        <TaskEditTagSection
+          tags={tags}
+          onTogglePicker={() => setShowTagPicker((value) => !value)}
+          showPicker={showTagPicker}
+          picker={(
+            <TagPicker
+              taskId={taskId}
+              onClose={() => setShowTagPicker(false)}
             />
-          </div>
-        </div>
+          )}
+        />
 
-        <div className="detail-field">
-          <div className="detail-field-label">Checklist</div>
+        <TaskEditField label="Notes">
+          <TaskEditNotesField
+            value={notesValue}
+            onChange={setNotesValue}
+            placeholder="Add notes…"
+            rows={3}
+          />
+        </TaskEditField>
+
+        <TaskEditField label="Checklist">
           <ChecklistSection taskId={taskId} />
-        </div>
+        </TaskEditField>
 
         <div className="detail-activity">
           <div className="detail-field-label detail-activity-label">Activity</div>

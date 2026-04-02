@@ -1484,13 +1484,11 @@ html, body {
     padding: var(--sp-4) var(--sp-5);
 }
 
-.task-edit-field,
-.detail-field {
+.task-edit-field {
     margin-bottom: var(--sp-4);
 }
 
-.task-edit-field-popover,
-.detail-field-popover {
+.task-edit-field-popover {
     position: relative;
 }
 
@@ -1504,24 +1502,23 @@ html, body {
     margin-bottom: var(--sp-1);
 }
 
-.task-edit-field-value,
-.detail-field-value {
+.task-edit-field-value {
     font-size: var(--text-sm);
     color: var(--ink-secondary);
     line-height: var(--leading-relaxed);
 }
 
-.detail-field-trigger {
+.task-edit-field-trigger {
     cursor: pointer;
 }
 
-.detail-project-value {
+.task-edit-project-value {
     display: inline-flex;
     align-items: center;
     gap: 6px;
 }
 
-.detail-project-dot {
+.task-edit-project-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
@@ -1529,17 +1526,17 @@ html, body {
     display: inline-block;
 }
 
-.detail-empty-value {
+.task-edit-empty-value {
     color: var(--ink-quaternary);
 }
 
-.detail-inline-field {
+.task-edit-inline-field {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
 }
 
-.detail-date-input {
+.task-edit-date-input {
     background: transparent;
     border: none;
     outline: none;
@@ -1549,27 +1546,26 @@ html, body {
     cursor: pointer;
 }
 
-.detail-clear-btn {
+.task-edit-clear-btn {
     cursor: pointer;
     color: var(--ink-quaternary);
     font-size: var(--text-xs);
 }
 
-.detail-tag-row {
+.task-edit-tag-row {
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-1);
     align-items: center;
 }
 
-.detail-add-link {
+.task-edit-add-link {
     font-size: var(--text-xs);
     color: var(--accent);
     cursor: pointer;
 }
 
-.task-edit-notes-input,
-.detail-notes-input {
+.task-edit-notes-input {
     background: transparent;
     border: none;
     outline: none;
