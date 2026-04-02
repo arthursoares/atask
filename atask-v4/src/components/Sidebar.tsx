@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { Fragment, useState, useCallback } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $activeView,
@@ -16,12 +16,21 @@ import {
   updateArea,
   updateProject,
   updateTask,
+  reorderProjects,
+  reorderAreas,
 } from "../store/index";
 import type { ActiveView, Project, Area } from "../types";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import { Button } from "../ui";
 import { LogbookIcon, InboxIcon, SomedayIcon, TodayIcon, UpcomingIcon } from "./sidebar/SidebarIcons";
-import { NavItem, ProjectItem, SidebarRenameField, SidebarRow } from "./sidebar/SidebarParts";
+import {
+  NavItem,
+  ProjectItem,
+  SidebarDropSlot,
+  SidebarRenameField,
+  SidebarRow,
+  SIDEBAR_REORDER_MIME,
+} from "./sidebar/SidebarParts";
 
 // --- Context menu state ---
 
@@ -29,6 +38,14 @@ type ContextMenuState =
   | { kind: "project"; project: Project; position: { x: number; y: number } }
   | { kind: "area"; area: Area; position: { x: number; y: number } }
   | null;
+
+type SidebarReorderDrag =
+  | { kind: "area"; id: string }
+  | { kind: "project"; id: string; areaId: string | null };
+
+type SidebarInsertionTarget =
+  | { kind: "area"; index: number }
+  | { kind: "project"; areaId: string | null; index: number };
 
 // --- Sidebar ---
 
@@ -45,8 +62,21 @@ export default function Sidebar() {
   const [renamingAreaValue, setRenamingAreaValue] = useState("");
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renamingProjectValue, setRenamingProjectValue] = useState("");
+  const [sidebarDrag, setSidebarDrag] = useState<SidebarReorderDrag | null>(null);
+  const [sidebarInsertionTarget, setSidebarInsertionTarget] = useState<SidebarInsertionTarget | null>(null);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const clearSidebarDrag = useCallback(() => {
+    setSidebarDrag(null);
+    setSidebarInsertionTarget(null);
+  }, []);
+
+  const beginSidebarDrag = useCallback((e: React.DragEvent, drag: SidebarReorderDrag) => {
+    setSidebarDrag(drag);
+    setSidebarInsertionTarget(null);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData(SIDEBAR_REORDER_MIME, JSON.stringify(drag));
+  }, []);
 
   // --- Context menu handlers ---
 
@@ -184,6 +214,106 @@ export default function Sidebar() {
         ? buildAreaMenuItems(contextMenu.area)
         : [];
 
+  const buildAreaMoves = useCallback((sourceId: string, index: number) => {
+    const sourceIndex = areas.findIndex((area) => area.id === sourceId);
+    if (sourceIndex === -1) return null;
+
+    const targetIndex = index > sourceIndex ? index - 1 : index;
+    if (targetIndex === sourceIndex) return null;
+
+    const reordered = [...areas];
+    const [moved] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    return reordered.map((area, nextIndex) => ({ id: area.id, index: nextIndex }));
+  }, [areas]);
+
+  const buildProjectMoves = useCallback((areaId: string | null, sourceId: string, index: number) => {
+    const group = projects.filter((project) => project.areaId === areaId);
+    const sourceIndex = group.findIndex((project) => project.id === sourceId);
+    if (sourceIndex === -1) return null;
+
+    const targetIndex = index > sourceIndex ? index - 1 : index;
+    if (targetIndex === sourceIndex) return null;
+
+    const reorderedGroup = [...group];
+    const [moved] = reorderedGroup.splice(sourceIndex, 1);
+    reorderedGroup.splice(targetIndex, 0, moved);
+
+    let groupIndex = 0;
+    const reorderedProjects = projects.map((project) =>
+      project.areaId === areaId ? reorderedGroup[groupIndex++] : project,
+    );
+
+    return reorderedProjects.map((project, nextIndex) => ({ id: project.id, index: nextIndex }));
+  }, [projects]);
+
+  const draggedAreaIndex = sidebarDrag?.kind === "area"
+    ? areas.findIndex((area) => area.id === sidebarDrag.id)
+    : -1;
+
+  const renderAreaDropZone = (index: number) => {
+    if (sidebarDrag?.kind !== "area") return null;
+
+    const isVisible = sidebarInsertionTarget?.kind === "area"
+      && sidebarInsertionTarget.index === index
+      && index !== draggedAreaIndex
+      && index !== draggedAreaIndex + 1;
+
+    return (
+      <div
+        key={`area-drop-zone-${index}`}
+        className="sidebar-drop-zone sidebar-drop-zone-area"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setSidebarInsertionTarget({ kind: "area", index });
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          if (sidebarDrag?.kind !== "area") return;
+          const moves = buildAreaMoves(sidebarDrag.id, index);
+          clearSidebarDrag();
+          if (moves) await reorderAreas(moves);
+        }}
+      >
+        {isVisible ? <SidebarDropSlot /> : null}
+      </div>
+    );
+  };
+
+  const renderProjectDropZone = (areaId: string | null, index: number) => {
+    if (sidebarDrag?.kind !== "project" || sidebarDrag.areaId !== areaId) return null;
+
+    const group = projects.filter((project) => project.areaId === areaId);
+    const draggedProjectIndex = group.findIndex((project) => project.id === sidebarDrag.id);
+    const isVisible = sidebarInsertionTarget?.kind === "project"
+      && sidebarInsertionTarget.areaId === areaId
+      && sidebarInsertionTarget.index === index
+      && index !== draggedProjectIndex
+      && index !== draggedProjectIndex + 1;
+
+    return (
+      <div
+        key={`project-drop-zone-${areaId ?? "root"}-${index}`}
+        className="sidebar-drop-zone sidebar-drop-zone-project"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setSidebarInsertionTarget({ kind: "project", areaId, index });
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          if (sidebarDrag?.kind !== "project" || sidebarDrag.areaId !== areaId) return;
+          const moves = buildProjectMoves(areaId, sidebarDrag.id, index);
+          clearSidebarDrag();
+          if (moves) await reorderProjects(moves);
+        }}
+      >
+        {isVisible ? <SidebarDropSlot /> : null}
+      </div>
+    );
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-toolbar" data-tauri-drag-region />
@@ -238,66 +368,83 @@ export default function Sidebar() {
       <div className="sidebar-separator" />
 
       {/* Areas with their projects */}
-      {areas.map((area) => {
+      {areas.map((area, areaIndex) => {
         const areaProjects = projectsByArea.get(area.id) ?? [];
         return (
-          <div className="sidebar-group" key={area.id}>
-            {renamingAreaId === area.id ? (
-              <SidebarRenameField
-                value={renamingAreaValue}
-                className="sidebar-rename-area"
-                onChange={setRenamingAreaValue}
-                onCommit={() => {
-                  const title = renamingAreaValue.trim();
-                  if (title) updateArea({ id: area.id, title });
-                  setRenamingAreaId(null);
-                }}
-                onCancel={() => setRenamingAreaId(null)}
-              />
-            ) : (
-              <div
-                className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}`}
-                onClick={() => setActiveView(`area-${area.id}`)}
-                onContextMenu={(e) => handleAreaContextMenu(e, area)}
-              >
-                <span className="sidebar-group-label-text">{area.title}</span>
-                <Button
-                  className="sidebar-add-btn"
-                  variant="ghost"
-                  size="sm"
-                  title={`Add project to ${area.title}`}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const project = await createProject({ title: "New Project", areaId: area.id });
-                    if (project) {
-                      setRenamingProjectId(project.id);
-                      setRenamingProjectValue("New Project");
-                    }
+          <Fragment key={area.id}>
+            {renderAreaDropZone(areaIndex)}
+            <div className="sidebar-group">
+              {renamingAreaId === area.id ? (
+                <SidebarRenameField
+                  value={renamingAreaValue}
+                  className="sidebar-rename-area"
+                  onChange={setRenamingAreaValue}
+                  onCommit={() => {
+                    const title = renamingAreaValue.trim();
+                    if (title) updateArea({ id: area.id, title });
+                    setRenamingAreaId(null);
                   }}
+                  onCancel={() => setRenamingAreaId(null)}
+                />
+              ) : (
+                <div
+                  className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}`}
+                  draggable
+                  onClick={() => setActiveView(`area-${area.id}`)}
+                  onContextMenu={(e) => handleAreaContextMenu(e, area)}
+                  onDragStart={(e) => beginSidebarDrag(e, { kind: "area", id: area.id })}
+                  onDragEnd={clearSidebarDrag}
                 >
-                  +
-                </Button>
-              </div>
-            )}
-            {areaProjects.map((p) => (
-              <ProjectItem
-                key={p.id}
-                project={p}
-                badge={projectTaskCounts.get(p.id) ?? 0}
-                activeView={activeView}
-                onClick={setActiveView}
-                onContextMenu={handleProjectContextMenu}
-                isRenaming={renamingProjectId === p.id}
-                renamingValue={renamingProjectValue}
-                onRenamingValueChange={setRenamingProjectValue}
-                onRenameCommit={commitProjectRename}
-                onRenameCancel={cancelProjectRename}
-                onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
-              />
-            ))}
-          </div>
+                  <span className="sidebar-group-label-text">{area.title}</span>
+                  <Button
+                    className="sidebar-add-btn"
+                    variant="ghost"
+                    size="sm"
+                    title={`Add project to ${area.title}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const project = await createProject({ title: "New Project", areaId: area.id });
+                      if (project) {
+                        setRenamingProjectId(project.id);
+                        setRenamingProjectValue("New Project");
+                      }
+                    }}
+                  >
+                    +
+                  </Button>
+                </div>
+              )}
+              {areaProjects.map((p, projectIndex) => (
+                <Fragment key={p.id}>
+                  {renderProjectDropZone(area.id, projectIndex)}
+                  <ProjectItem
+                    project={p}
+                    badge={projectTaskCounts.get(p.id) ?? 0}
+                    activeView={activeView}
+                    onClick={setActiveView}
+                    onContextMenu={handleProjectContextMenu}
+                    isRenaming={renamingProjectId === p.id}
+                    renamingValue={renamingProjectValue}
+                    onRenamingValueChange={setRenamingProjectValue}
+                    onRenameCommit={commitProjectRename}
+                    onRenameCancel={cancelProjectRename}
+                    onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
+                    draggable={renamingProjectId !== p.id}
+                    onDragStart={(e) => beginSidebarDrag(e, {
+                      kind: "project",
+                      id: p.id,
+                      areaId: area.id,
+                    })}
+                    onDragEnd={clearSidebarDrag}
+                  />
+                </Fragment>
+              ))}
+              {renderProjectDropZone(area.id, areaProjects.length)}
+            </div>
+          </Fragment>
         );
       })}
+      {renderAreaDropZone(areas.length)}
 
       {/* Standalone projects (no area) — same visual style, no heading */}
       {(() => {
@@ -305,22 +452,32 @@ export default function Sidebar() {
         if (standalone.length === 0) return null;
         return (
           <div className="sidebar-group">
-            {standalone.map((p) => (
-              <ProjectItem
-                key={p.id}
-                project={p}
-                badge={projectTaskCounts.get(p.id) ?? 0}
-                activeView={activeView}
-                onClick={setActiveView}
-                onContextMenu={handleProjectContextMenu}
-                isRenaming={renamingProjectId === p.id}
-                renamingValue={renamingProjectValue}
-                onRenamingValueChange={setRenamingProjectValue}
-                onRenameCommit={commitProjectRename}
-                onRenameCancel={cancelProjectRename}
-                onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
-              />
+            {standalone.map((p, index) => (
+              <Fragment key={p.id}>
+                {renderProjectDropZone(null, index)}
+                <ProjectItem
+                  project={p}
+                  badge={projectTaskCounts.get(p.id) ?? 0}
+                  activeView={activeView}
+                  onClick={setActiveView}
+                  onContextMenu={handleProjectContextMenu}
+                  isRenaming={renamingProjectId === p.id}
+                  renamingValue={renamingProjectValue}
+                  onRenamingValueChange={setRenamingProjectValue}
+                  onRenameCommit={commitProjectRename}
+                  onRenameCancel={cancelProjectRename}
+                  onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
+                  draggable={renamingProjectId !== p.id}
+                  onDragStart={(e) => beginSidebarDrag(e, {
+                    kind: "project",
+                    id: p.id,
+                    areaId: null,
+                  })}
+                  onDragEnd={clearSidebarDrag}
+                />
+              </Fragment>
             ))}
+            {renderProjectDropZone(null, standalone.length)}
           </div>
         );
       })()}

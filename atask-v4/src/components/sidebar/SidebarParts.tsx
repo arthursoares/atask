@@ -2,13 +2,26 @@ import { useState } from "react";
 import type { ActiveView, Project } from "../../types";
 import { Field } from "../../ui";
 
+export const SIDEBAR_REORDER_MIME = "application/x-atask-sidebar-item";
+
+function hasDragType(e: React.DragEvent, type: string) {
+  return Array.from(e.dataTransfer.types).includes(type);
+}
+
+function isTaskTransfer(e: React.DragEvent) {
+  return hasDragType(e, "text/plain") && !hasDragType(e, SIDEBAR_REORDER_MIME);
+}
+
 export function SidebarRow({
   active = false,
   children,
   className = "",
   isDragTarget = false,
+  draggable,
   onClick,
   onContextMenu,
+  onDragStart,
+  onDragEnd,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -17,8 +30,11 @@ export function SidebarRow({
   children: React.ReactNode;
   className?: string;
   isDragTarget?: boolean;
+  draggable?: boolean;
   onClick?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
@@ -26,13 +42,24 @@ export function SidebarRow({
   return (
     <div
       className={`sidebar-item${active ? " active" : ""}${isDragTarget ? " drag-target" : ""}${className ? ` ${className}` : ""}`}
+      draggable={draggable}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
       {children}
+    </div>
+  );
+}
+
+export function SidebarDropSlot() {
+  return (
+    <div className="sidebar-drop-slot" aria-hidden="true">
+      <span className="sidebar-drop-slot-dot" />
     </div>
   );
 }
@@ -99,12 +126,14 @@ export function NavItem({
       isDragTarget={isDragTarget}
       onClick={() => onClick(view)}
       onDragOver={onTaskDrop ? (e) => {
+        if (!isTaskTransfer(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setIsDragTarget(true);
       } : undefined}
       onDragLeave={onTaskDrop ? () => setIsDragTarget(false) : undefined}
       onDrop={onTaskDrop ? (e) => {
+        if (!isTaskTransfer(e)) return;
         e.preventDefault();
         setIsDragTarget(false);
         const taskId = e.dataTransfer.getData("text/plain");
@@ -130,6 +159,9 @@ export function ProjectItem({
   onRenameCommit,
   onRenameCancel,
   onTaskDrop,
+  draggable,
+  onDragStart,
+  onDragEnd,
 }: {
   project: Project;
   badge: number;
@@ -142,6 +174,9 @@ export function ProjectItem({
   onRenameCommit: () => void;
   onRenameCancel: () => void;
   onTaskDrop: (taskId: string, projectId: string) => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const view: ActiveView = `project-${project.id}`;
   const [isDragTarget, setIsDragTarget] = useState(false);
@@ -151,15 +186,20 @@ export function ProjectItem({
       active={activeView === view}
       className="sidebar-item-project"
       isDragTarget={isDragTarget}
+      draggable={draggable}
       onClick={() => onClick(view)}
       onContextMenu={(e) => onContextMenu(e, project)}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onDragOver={(e) => {
+        if (!isTaskTransfer(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setIsDragTarget(true);
       }}
       onDragLeave={() => setIsDragTarget(false)}
       onDrop={(e) => {
+        if (!isTaskTransfer(e)) return;
         e.preventDefault();
         setIsDragTarget(false);
         const taskId = e.dataTransfer.getData("text/plain");
