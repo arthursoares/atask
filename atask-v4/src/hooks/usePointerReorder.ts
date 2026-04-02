@@ -6,6 +6,8 @@ export interface PointerReorderState {
   activeId: string | null;
   dropIndex: number | null;
   isPointerDragging: boolean;
+  cursorX: number | null;
+  cursorY: number | null;
 }
 
 type StartEvent = React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>;
@@ -14,6 +16,9 @@ interface PointerReorderOptions<T extends ReorderableItem> {
   items: T[];
   onReorder: (moves: Array<{ id: string; index: number }>) => void | Promise<void>;
   shouldHandlePointerDown?: (event: StartEvent, id: string) => boolean;
+  onDragStart?: (id: string) => void;
+  onDragEnd?: (id: string) => void;
+  onCrossListDrop?: (id: string, dropTarget: Element) => boolean;
 }
 
 interface PointerStartArgs {
@@ -42,21 +47,34 @@ export interface PointerReorderReturn {
     onMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
   };
   cancelReorder: () => void;
+  getItemRect: (id: string) => DOMRect | null;
 }
 
 export default function usePointerReorder<T extends ReorderableItem>({
   items,
   onReorder,
   shouldHandlePointerDown,
+  onDragStart,
+  onDragEnd,
+  onCrossListDrop,
 }: PointerReorderOptions<T>): PointerReorderReturn {
   const [reorderState, setReorderState] = useState<PointerReorderState>({
     activeId: null,
     dropIndex: null,
     isPointerDragging: false,
+    cursorX: null,
+    cursorY: null,
   });
   const reorderStateRef = useRef(reorderState);
   const sessionRef = useRef<PointerDragSession | null>(null);
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
+  const onDragStartRef = useRef(onDragStart);
+  const onDragEndRef = useRef(onDragEnd);
+  const onCrossListDropRef = useRef(onCrossListDrop);
+
+  onDragStartRef.current = onDragStart;
+  onDragEndRef.current = onDragEnd;
+  onCrossListDropRef.current = onCrossListDrop;
 
   const setReorderStateSync = useCallback((nextState: PointerReorderState) => {
     reorderStateRef.current = nextState;
@@ -73,12 +91,18 @@ export default function usePointerReorder<T extends ReorderableItem>({
   }, []);
 
   const cancelReorder = useCallback(() => {
+    const prevId = sessionRef.current?.id ?? null;
     sessionRef.current = null;
     setReorderStateSync({
       activeId: null,
       dropIndex: null,
       isPointerDragging: false,
+      cursorX: null,
+      cursorY: null,
     });
+    if (prevId) {
+      onDragEndRef.current?.(prevId);
+    }
   }, [setReorderStateSync]);
 
   const getOrderedItems = useCallback(() => {
@@ -117,7 +141,10 @@ export default function usePointerReorder<T extends ReorderableItem>({
       activeId: args.id,
       dropIndex: null,
       isPointerDragging: false,
+      cursorX: args.clientX,
+      cursorY: args.clientY,
     });
+    onDragStartRef.current?.(args.id);
   }, [setReorderStateSync]);
 
   const updateReorder = useCallback((event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
@@ -134,6 +161,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
       activeId: session.id,
       dropIndex,
       isPointerDragging: true,
+      cursorX: event.clientX,
+      cursorY: event.clientY,
     });
   }, [getDropIndex, setReorderStateSync]);
 
@@ -146,6 +175,19 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (!currentState.activeId || currentState.dropIndex == null || !currentState.isPointerDragging) {
       cancelReorder();
       return;
+    }
+
+    const cursorX = event.clientX;
+    const cursorY = event.clientY;
+    const dropTarget = document.elementFromPoint(cursorX, cursorY);
+    const sidebarItem = dropTarget?.closest('[data-sidebar-item-id]');
+
+    if (sidebarItem && onCrossListDropRef.current) {
+      const handled = onCrossListDropRef.current(currentState.activeId, sidebarItem);
+      if (handled) {
+        cancelReorder();
+        return;
+      }
     }
 
     const sourceIndex = items.findIndex((item) => item.id === currentState.activeId);
@@ -273,10 +315,17 @@ export default function usePointerReorder<T extends ReorderableItem>({
     };
   }, [beginReorder, shouldHandlePointerDown]);
 
+  const getItemRect = useCallback((id: string) => {
+    const node = itemElementsRef.current.get(id);
+    if (!node) return null;
+    return node.getBoundingClientRect();
+  }, []);
+
   return useMemo(() => ({
     reorderState,
     registerItem,
     getPointerHandlers,
     cancelReorder,
-  }), [cancelReorder, getPointerHandlers, registerItem, reorderState]);
+    getItemRect,
+  }), [cancelReorder, getItemRect, getPointerHandlers, registerItem, reorderState]);
 }
