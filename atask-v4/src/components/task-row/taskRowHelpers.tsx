@@ -11,7 +11,6 @@ import {
   updateTask,
 } from "../../store";
 export { default as DropSlot } from "./DropSlot";
-export { default as DragIndicator } from "./DropSlot";
 
 export function formatDeadline(deadline: string): string {
   const today = new Date();

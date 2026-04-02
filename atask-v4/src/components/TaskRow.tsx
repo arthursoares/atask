@@ -16,7 +16,8 @@ import {
 import CheckboxCircle from './CheckboxCircle';
 import ContextMenu from './ContextMenu';
 import type { Task } from '../types';
-import { DragIndicator, buildTaskContextMenuItems, TaskMeta } from './task-row/taskRowHelpers';
+import DropSlot from './task-row/DropSlot';
+import { buildTaskContextMenuItems, TaskMeta } from './task-row/taskRowHelpers';
 
 interface TaskRowProps {
   task: Task;
@@ -119,7 +120,7 @@ export default function TaskRow({
         {...dragHandlers}
         {...dropHandlers}
       >
-        {isDragOver && <DragIndicator />}
+        {isDragOver && <DropSlot />}
         <CheckboxCircle
           checked={isCompleted}
           cancelled={isCancelled}
