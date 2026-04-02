@@ -39,6 +39,7 @@ interface TaskRowProps {
   reorderRef?: (node: HTMLDivElement | null) => void;
   reorderHandlers?: {
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+    onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   };
   isReordering?: boolean;
 }

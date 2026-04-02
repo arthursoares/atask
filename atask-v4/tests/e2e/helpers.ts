@@ -115,48 +115,110 @@ export async function getTaskTitles(): Promise<string[]> {
   });
 }
 
-async function getTaskRowByTitle(title: string): Promise<WebdriverIO.Element> {
-  const rows = await $$(".task-item");
-  for (const row of rows) {
-    const titleEl = await row.$(".task-title");
-    if (await titleEl.getText() === title) {
-      return row;
-    }
-  }
-
-  throw new Error(`Task "${title}" not found`);
-}
-
 export async function startPointerDragTaskByTitle(title: string) {
-  const source = await getTaskRowByTitle(title);
-  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
-    .move({ duration: 0, origin: source })
-    .down({ button: 0 })
-    .pause(50)
-    .move({ duration: 150, origin: "pointer", x: 0, y: 8 })
-    .pause(50)
-    .perform(true);
+  const started = await browser.execute((taskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === taskTitle;
+    }) as HTMLElement | undefined;
+    if (!source) {
+      return false;
+    }
+
+    const rect = source.getBoundingClientRect();
+    const clientX = Math.round(rect.left + 16);
+    const clientY = Math.round(rect.top + rect.height / 2);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY: clientY + 8,
+    }));
+
+    return true;
+  }, title);
+
+  if (!started) {
+    throw new Error(`Task "${title}" not found`);
+  }
 }
 
 export async function finishPointerDrag() {
-  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
-    .up({ button: 0 })
-    .perform(true);
-  await browser.releaseActions();
+  await browser.execute(() => {
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+    }));
+  });
 }
 
 export async function dragTaskByTitleToTaskByTitle(sourceTitle: string, targetTitle: string) {
-  const source = await getTaskRowByTitle(sourceTitle);
-  const target = await getTaskRowByTitle(targetTitle);
+  const reordered = await browser.execute((sourceTaskTitle: string, targetTaskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === sourceTaskTitle;
+    }) as HTMLElement | undefined;
+    const target = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === targetTaskTitle;
+    }) as HTMLElement | undefined;
+    if (!source || !target) {
+      return false;
+    }
 
-  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
-    .move({ duration: 0, origin: source })
-    .down({ button: 0 })
-    .pause(50)
-    .move({ duration: 200, origin: target, x: 0, y: -12 })
-    .pause(75)
-    .up({ button: 0 })
-    .perform();
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 16);
+    const sourceY = Math.round(sourceRect.top + sourceRect.height / 2);
+    const targetY = Math.round(targetRect.top + 4);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: sourceY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    return true;
+  }, sourceTitle, targetTitle);
+
+  if (!reordered) {
+    throw new Error(`Unable to reorder "${sourceTitle}" to "${targetTitle}"`);
+  }
 }
 
 /** Click on a task row by its title */

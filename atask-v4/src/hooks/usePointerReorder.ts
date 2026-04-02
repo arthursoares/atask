@@ -8,24 +8,28 @@ export interface PointerReorderState {
   isPointerDragging: boolean;
 }
 
+type StartEvent = React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>;
+
 interface PointerReorderOptions<T extends ReorderableItem> {
   items: T[];
   onReorder: (moves: Array<{ id: string; index: number }>) => void | Promise<void>;
-  shouldHandlePointerDown?: (event: React.PointerEvent<HTMLElement>, id: string) => boolean;
+  shouldHandlePointerDown?: (event: StartEvent, id: string) => boolean;
 }
 
 interface PointerStartArgs {
   id: string;
   clientX: number;
   clientY: number;
-  pointerId: number;
+  pointerId: number | null;
+  inputType: 'pointer' | 'mouse';
 }
 
 interface PointerDragSession {
   id: string;
-  pointerId: number;
+  pointerId: number | null;
   startX: number;
   startY: number;
+  inputType: 'pointer' | 'mouse';
 }
 
 const POINTER_DRAG_THRESHOLD = 4;
@@ -35,6 +39,7 @@ export interface PointerReorderReturn {
   registerItem: (id: string) => (node: HTMLElement | null) => void;
   getPointerHandlers: (id: string) => {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+    onMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
   };
   cancelReorder: () => void;
 }
@@ -105,6 +110,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       pointerId: args.pointerId,
       startX: args.clientX,
       startY: args.clientY,
+      inputType: args.inputType,
     };
 
     setReorderStateSync({
@@ -114,9 +120,10 @@ export default function usePointerReorder<T extends ReorderableItem>({
     });
   }, [setReorderStateSync]);
 
-  const updateReorder = useCallback((event: PointerEvent) => {
+  const updateReorder = useCallback((event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
     const session = sessionRef.current;
-    if (!session || session.pointerId !== event.pointerId) return;
+    if (!session || session.inputType !== inputType) return;
+    if (inputType === 'pointer' && session.pointerId !== (event as PointerEvent).pointerId) return;
 
     const movedEnough = Math.abs(event.clientX - session.startX) >= POINTER_DRAG_THRESHOLD
       || Math.abs(event.clientY - session.startY) >= POINTER_DRAG_THRESHOLD;
@@ -130,9 +137,10 @@ export default function usePointerReorder<T extends ReorderableItem>({
     });
   }, [getDropIndex, setReorderStateSync]);
 
-  const commitReorder = useCallback(async (event: PointerEvent) => {
+  const commitReorder = useCallback(async (event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
     const session = sessionRef.current;
-    if (!session || session.pointerId !== event.pointerId) return;
+    if (!session || session.inputType !== inputType) return;
+    if (inputType === 'pointer' && session.pointerId !== (event as PointerEvent).pointerId) return;
 
     const currentState = reorderStateRef.current;
     if (!currentState.activeId || currentState.dropIndex == null || !currentState.isPointerDragging) {
@@ -173,15 +181,21 @@ export default function usePointerReorder<T extends ReorderableItem>({
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      updateReorder(event);
+      updateReorder(event, 'pointer');
     };
     const handlePointerUp = (event: PointerEvent) => {
-      void commitReorder(event);
+      void commitReorder(event, 'pointer');
     };
     const handlePointerCancel = (event: PointerEvent) => {
       const session = sessionRef.current;
-      if (!session || session.pointerId !== event.pointerId) return;
+      if (!session || session.inputType !== 'pointer' || session.pointerId !== event.pointerId) return;
       cancelReorder();
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      updateReorder(event, 'mouse');
+    };
+    const handleMouseUp = (event: MouseEvent) => {
+      void commitReorder(event, 'mouse');
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -192,36 +206,54 @@ export default function usePointerReorder<T extends ReorderableItem>({
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [cancelReorder, commitReorder, updateReorder]);
 
-  const getPointerHandlers = useCallback((id: string) => ({
-    onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+  const getPointerHandlers = useCallback((id: string) => {
+    const startReorder = (event: StartEvent, inputType: 'pointer' | 'mouse') => {
       if (shouldHandlePointerDown && !shouldHandlePointerDown(event, id)) return;
-      if (event.button !== 0 || !event.isPrimary) return;
+      if (event.button !== 0) return;
+      if (inputType === 'pointer' && 'isPrimary' in event && !event.isPrimary) return;
+      if (sessionRef.current) return;
 
       event.preventDefault();
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // Pointer capture is a best-effort optimization.
+      if (inputType === 'pointer' && 'pointerId' in event) {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // Pointer capture is a best-effort optimization.
+        }
       }
 
       beginReorder({
         id,
         clientX: event.clientX,
         clientY: event.clientY,
-        pointerId: event.pointerId,
+        pointerId: 'pointerId' in event ? event.pointerId : null,
+        inputType,
       });
-    },
-  }), [beginReorder, shouldHandlePointerDown]);
+    };
+
+    return {
+      onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+        startReorder(event, 'pointer');
+      },
+      onMouseDown: (event: React.MouseEvent<HTMLElement>) => {
+        startReorder(event, 'mouse');
+      },
+    };
+  }, [beginReorder, shouldHandlePointerDown]);
 
   return useMemo(() => ({
     reorderState,
