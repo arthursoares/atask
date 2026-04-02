@@ -26,6 +26,28 @@ export const $showSidebar = atom<boolean>(true);
 export const $showShortcuts = atom<boolean>(false);
 export const $activeTagFilters = atom<Set<string>>(new Set());
 
+export interface TaskPointerDragState {
+  activeTaskId: string | null;
+  hoverTargetId: string | null;
+}
+
+export const $taskPointerDrag = atom<TaskPointerDragState>({
+  activeTaskId: null,
+  hoverTargetId: null,
+});
+
+export function startTaskPointerDrag(taskId: string) {
+  $taskPointerDrag.set({ activeTaskId: taskId, hoverTargetId: null });
+}
+
+export function setTaskPointerHoverTarget(targetId: string | null) {
+  $taskPointerDrag.set({ ...$taskPointerDrag.get(), hoverTargetId: targetId });
+}
+
+export function endTaskPointerDrag() {
+  $taskPointerDrag.set({ activeTaskId: null, hoverTargetId: null });
+}
+
 export function setActiveView(view: ActiveView) {
   $activeView.set(view);
 }

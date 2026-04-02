@@ -18,6 +18,7 @@ export {
   $showSidebar,
   $showShortcuts,
   $activeTagFilters,
+  $taskPointerDrag,
   setActiveView,
   selectTask,
   clearSelectedTask,
@@ -28,9 +29,12 @@ export {
   selectTaskRange,
   toggleTagFilter,
   clearTagFilters,
+  startTaskPointerDrag,
+  endTaskPointerDrag,
+  setTaskPointerHoverTarget,
   $syncStatus,
 } from './ui';
-export type { SyncStatusState } from './ui';
+export type { SyncStatusState, TaskPointerDragState } from './ui';
 
 // Selectors
 export {
