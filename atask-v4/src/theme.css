@@ -1484,14 +1484,17 @@ html, body {
     padding: var(--sp-4) var(--sp-5);
 }
 
+.task-edit-field,
 .detail-field {
     margin-bottom: var(--sp-4);
 }
 
+.task-edit-field-popover,
 .detail-field-popover {
     position: relative;
 }
 
+.task-edit-field-label,
 .detail-field-label {
     font-size: var(--text-xs);
     font-weight: 700;
@@ -1501,6 +1504,7 @@ html, body {
     margin-bottom: var(--sp-1);
 }
 
+.task-edit-field-value,
 .detail-field-value {
     font-size: var(--text-sm);
     color: var(--ink-secondary);
@@ -1564,12 +1568,14 @@ html, body {
     cursor: pointer;
 }
 
+.task-edit-notes-input,
 .detail-notes-input {
     background: transparent;
     border: none;
     outline: none;
     resize: vertical;
     width: 100%;
+    box-sizing: border-box;
     font-family: inherit;
     font-size: var(--text-sm);
     color: var(--ink-secondary);
