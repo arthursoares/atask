@@ -92,12 +92,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
       const rect = orderedItems[index].node.getBoundingClientRect();
       const centerY = rect.top + rect.height / 2;
       if (clientY < centerY) {
-        return index;
+        return items.findIndex((item) => item.id === orderedItems[index].id);
       }
     }
 
-    return orderedItems.length;
-  }, [getOrderedItems]);
+    return items.length;
+  }, [getOrderedItems, items]);
 
   const beginReorder = useCallback((args: PointerStartArgs) => {
     sessionRef.current = {
