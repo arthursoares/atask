@@ -10,7 +10,6 @@ import {
   reopenTask,
   updateTask,
 } from "../../store";
-export { default as DropSlot } from "./DropSlot";
 
 export function formatDeadline(deadline: string): string {
   const today = new Date();
