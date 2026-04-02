@@ -18,6 +18,14 @@ import ContextMenu from './ContextMenu';
 import type { Task } from '../types';
 import { buildTaskContextMenuItems, TaskMeta } from './task-row/taskRowHelpers';
 
+export function shouldHandleTaskRowPointerDown(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return true;
+  }
+
+  return target.closest('[data-reorder-ignore]') === null;
+}
+
 interface TaskRowProps {
   task: Task;
   isSelected: boolean;
@@ -28,11 +36,11 @@ interface TaskRowProps {
   onDoubleClick: () => void;
   showTriageActions?: boolean;
   hideProjectPill?: boolean;
-  dragHandlers?: {
-    draggable: true;
-    onDragStart: (e: React.DragEvent) => void;
-    onDragEnd: () => void;
+  reorderRef?: (node: HTMLDivElement | null) => void;
+  reorderHandlers?: {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   };
+  isReordering?: boolean;
 }
 
 export default function TaskRow({
@@ -45,7 +53,9 @@ export default function TaskRow({
   onDoubleClick,
   showTriageActions,
   hideProjectPill,
-  dragHandlers,
+  reorderRef,
+  reorderHandlers,
+  isReordering,
 }: TaskRowProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -102,19 +112,22 @@ export default function TaskRow({
   return (
     <>
       <div
-        className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}`}
+        ref={reorderRef}
+        className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}${isReordering ? ' task-item-dragging' : ''}`}
         style={{ position: 'relative' }}
         onClick={handleClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={handleContextMenu}
-        {...dragHandlers}
+        {...reorderHandlers}
       >
-        <CheckboxCircle
-          checked={isCompleted}
-          cancelled={isCancelled}
-          today={isToday}
-          onChange={handleCheckboxChange}
-        />
+        <div data-reorder-ignore>
+          <CheckboxCircle
+            checked={isCompleted}
+            cancelled={isCancelled}
+            today={isToday}
+            onChange={handleCheckboxChange}
+          />
+        </div>
 
         <div className="task-content">
           <span className={`task-title${isCompleted ? ' completed' : ''}`}>
@@ -130,7 +143,7 @@ export default function TaskRow({
         </div>
 
         {showTriageActions && (
-          <div className="task-actions">
+          <div className="task-actions" data-reorder-ignore>
             <button
               className="task-action-btn today-btn"
               title="Schedule for Today"

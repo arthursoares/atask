@@ -115,6 +115,50 @@ export async function getTaskTitles(): Promise<string[]> {
   });
 }
 
+async function getTaskRowByTitle(title: string): Promise<WebdriverIO.Element> {
+  const rows = await $$(".task-item");
+  for (const row of rows) {
+    const titleEl = await row.$(".task-title");
+    if (await titleEl.getText() === title) {
+      return row;
+    }
+  }
+
+  throw new Error(`Task "${title}" not found`);
+}
+
+export async function startPointerDragTaskByTitle(title: string) {
+  const source = await getTaskRowByTitle(title);
+  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
+    .move({ duration: 0, origin: source })
+    .down({ button: 0 })
+    .pause(50)
+    .move({ duration: 150, origin: "pointer", x: 0, y: 8 })
+    .pause(50)
+    .perform(true);
+}
+
+export async function finishPointerDrag() {
+  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
+    .up({ button: 0 })
+    .perform(true);
+  await browser.releaseActions();
+}
+
+export async function dragTaskByTitleToTaskByTitle(sourceTitle: string, targetTitle: string) {
+  const source = await getTaskRowByTitle(sourceTitle);
+  const target = await getTaskRowByTitle(targetTitle);
+
+  await browser.action("pointer", { parameters: { pointerType: "mouse" } })
+    .move({ duration: 0, origin: source })
+    .down({ button: 0 })
+    .pause(50)
+    .move({ duration: 200, origin: target, x: 0, y: -12 })
+    .pause(75)
+    .up({ button: 0 })
+    .perform();
+}
+
 /** Click on a task row by its title */
 export async function clickTask(title: string) {
   await browser.execute((t: string) => {

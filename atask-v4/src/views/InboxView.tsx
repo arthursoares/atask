@@ -11,12 +11,12 @@ import {
   createTask,
   reorderTasks,
 } from '../store/index';
-import TaskRow from '../components/TaskRow';
+import TaskRow, { shouldHandleTaskRowPointerDown } from '../components/TaskRow';
 import TaskInlineEditor from '../components/TaskInlineEditor';
 import NewTaskRow from '../components/NewTaskRow';
 import EmptyState from '../components/EmptyState';
 import DropSlot from '../components/task-row/DropSlot';
-import useDragReorder from '../hooks/useDragReorder';
+import usePointerReorder from '../hooks/usePointerReorder';
 
 const InboxIcon = (
   <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
@@ -45,16 +45,20 @@ export default function InboxView() {
   const expandedTaskId = useStore($expandedTaskId);
   const selectedTaskIds = useStore($selectedTaskIds);
 
-  const { dragState, getDragHandlers, getDropHandlers } = useDragReorder(tasks, reorderTasks);
-  const draggedTaskIndex = dragState.dragId
-    ? tasks.findIndex((task) => task.id === dragState.dragId)
+  const { reorderState, getPointerHandlers, registerItem } = usePointerReorder({
+    items: tasks,
+    onReorder: reorderTasks,
+    shouldHandlePointerDown: (event) => shouldHandleTaskRowPointerDown(event.target),
+  });
+  const draggedTaskIndex = reorderState.activeId
+    ? tasks.findIndex((task) => task.id === reorderState.activeId)
     : -1;
-  const isDragging = dragState.dragId !== null;
+  const isDragging = reorderState.isPointerDragging;
 
   const renderDropZone = (index: number) => {
     if (!isDragging) return null;
 
-    const isVisible = dragState.dropIndex === index
+    const isVisible = reorderState.dropIndex === index
       && index !== draggedTaskIndex
       && index !== draggedTaskIndex + 1;
     const edgeClass = index === 0
@@ -67,7 +71,6 @@ export default function InboxView() {
       <div
         key={`drop-zone-${index}`}
         className={`task-drop-zone${edgeClass}`}
-        {...getDropHandlers(index)}
       >
         {isVisible ? <DropSlot /> : null}
       </div>
@@ -97,7 +100,9 @@ export default function InboxView() {
                   onClick={() => selectTask(task.id)}
                   onDoubleClick={() => openTaskEditor(task.id)}
                   showTriageActions={true}
-                  dragHandlers={getDragHandlers(task.id)}
+                  reorderRef={registerItem(task.id)}
+                  reorderHandlers={getPointerHandlers(task.id)}
+                  isReordering={reorderState.activeId === task.id && reorderState.isPointerDragging}
                 />
               )}
             </Fragment>

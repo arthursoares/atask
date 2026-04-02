@@ -782,6 +782,11 @@ html, body {
     background: var(--sidebar-selected);
 }
 
+.task-item-dragging {
+    opacity: 0.55;
+    background: var(--sidebar-hover);
+}
+
 .task-content {
     flex: 1;
     min-width: 0;
