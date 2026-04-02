@@ -1446,6 +1446,16 @@ html, body {
     line-height: 1;
 }
 
+.new-task-input {
+    border: none;
+    background: none;
+    outline: none;
+    font-family: inherit;
+    font-size: var(--text-base);
+    color: var(--ink-primary);
+    flex: 1;
+}
+
 
 /* ═══════════════════════════════════════════
    Detail Panel
@@ -1640,6 +1650,41 @@ html, body {
     text-decoration: line-through;
 }
 
+.cl-item-row {
+    position: relative;
+}
+
+.cl-check-action {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.cl-item-title {
+    flex: 1;
+}
+
+.cl-delete-btn {
+    cursor: pointer;
+    color: var(--ink-quaternary);
+    font-size: var(--text-sm);
+    line-height: 1;
+    padding: 0 2px;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.cl-new-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--border);
+    outline: none;
+    font-size: var(--text-sm);
+    color: var(--ink-secondary);
+    width: 100%;
+    padding: 4px 0;
+    margin-top: var(--sp-1);
+}
+
 /* v1 names (aliases for backwards compat) */
 .detail-checklist-item {
     display: flex;
@@ -1774,6 +1819,12 @@ html, body {
     font-size: var(--text-xs);
     color: var(--ink-secondary);
     line-height: var(--leading-relaxed);
+}
+
+.activity-empty {
+    font-size: var(--text-xs);
+    color: var(--ink-tertiary);
+    padding: var(--sp-2) 0;
 }
 
 
@@ -2458,6 +2509,17 @@ textarea:focus-visible {
 
 .bulk-bar-btn.danger:hover {
     background: var(--deadline-bg);
+}
+
+.context-menu-shell {
+    position: fixed;
+    z-index: 200;
+    background: var(--canvas-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-popover);
+    overflow: hidden;
+    min-width: 200px;
 }
 
 .bulk-action-bar {

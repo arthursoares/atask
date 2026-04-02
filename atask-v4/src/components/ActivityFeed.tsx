@@ -31,9 +31,7 @@ interface ActivityFeedProps {
 export default function ActivityFeed({ taskId: _taskId }: ActivityFeedProps) {
   return (
     <div className="activity-stream">
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-tertiary)', padding: 'var(--sp-2) 0' }}>
-        No activity yet
-      </div>
+      <div className="activity-empty">No activity yet</div>
     </div>
   );
 }

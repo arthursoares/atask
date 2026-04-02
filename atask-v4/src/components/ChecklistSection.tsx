@@ -22,10 +22,9 @@ export default function ChecklistSection({ taskId }: ChecklistSectionProps) {
       {items.map((item) => {
         const isDone = item.status === 1;
         return (
-          <div key={item.id} className="cl-item" style={{ position: 'relative' }} role="group">
+          <div key={item.id} className="cl-item cl-item-row" role="group">
             <div
-              className={`cl-check${isDone ? ' done' : ''}`}
-              style={{ cursor: 'pointer', flexShrink: 0 }}
+              className={`cl-check${isDone ? ' done' : ''} cl-check-action`}
               onClick={() => toggleChecklistItem(item.id)}
             >
               {isDone && (
@@ -34,20 +33,11 @@ export default function ChecklistSection({ taskId }: ChecklistSectionProps) {
                 </svg>
               )}
             </div>
-            <span className={isDone ? 'cl-done-text' : undefined} style={{ flex: 1 }}>
+            <span className={`cl-item-title${isDone ? ' cl-done-text' : ''}`}>
               {item.title}
             </span>
             <span
               onClick={() => deleteChecklistItem(item.id)}
-              style={{
-                cursor: 'pointer',
-                color: 'var(--ink-quaternary)',
-                fontSize: 'var(--text-sm)',
-                lineHeight: 1,
-                padding: '0 2px',
-                opacity: 0,
-                transition: 'opacity 0.1s',
-              }}
               className="cl-delete-btn"
               title="Delete item"
             >
@@ -62,17 +52,7 @@ export default function ChecklistSection({ taskId }: ChecklistSectionProps) {
         onChange={(e) => setNewItemTitle(e.target.value)}
         onKeyDown={handleNewItemKeyDown}
         placeholder="New item"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          borderBottom: '1px dashed var(--border)',
-          outline: 'none',
-          fontSize: 'var(--text-sm)',
-          color: 'var(--ink-secondary)',
-          width: '100%',
-          padding: '4px 0',
-          marginTop: 'var(--sp-1)',
-        }}
+        className="cl-new-input"
       />
     </div>
   );

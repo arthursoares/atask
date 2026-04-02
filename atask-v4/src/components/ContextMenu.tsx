@@ -93,18 +93,8 @@ export default function ContextMenu({ items, position, onClose }: ContextMenuPro
   return (
     <div
       ref={menuRef}
-      style={{
-        position: 'fixed',
-        left: adjustedPos.x,
-        top: adjustedPos.y,
-        zIndex: 200,
-        background: 'var(--canvas-elevated)',
-        border: '1px solid var(--border-strong)',
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-popover)',
-        overflow: 'hidden',
-        minWidth: 200,
-      }}
+      className="context-menu-shell"
+      style={{ left: adjustedPos.x, top: adjustedPos.y }}
     >
       <MenuList
         items={items}

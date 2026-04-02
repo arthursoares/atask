@@ -46,20 +46,12 @@ export default function NewTaskRow({ onCreate }: NewTaskRowProps) {
         <input
           ref={inputRef}
           autoFocus
+          className="new-task-input"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           placeholder="New Task"
-          style={{
-            border: 'none',
-            background: 'none',
-            outline: 'none',
-            fontFamily: 'inherit',
-            fontSize: 'var(--text-base)',
-            color: 'var(--ink-primary)',
-            flex: 1,
-          }}
         />
       ) : (
         <span>New Task</span>
