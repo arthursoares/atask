@@ -162,6 +162,9 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
         onCloseExpandedTask={closeTaskEditor}
         onCreateTask={(title) => createTask(title)}
         onReorderTasks={reorderTasks}
+        onTaskDrop={async (taskId) => {
+          await moveTaskToSection(taskId, null);
+        }}
       />
 
       {/* Sections */}
@@ -198,6 +201,9 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
             onCloseMenu={() => setSectionMenu(null)}
             buildMenuItems={buildSectionMenuItems}
             onReorderTasks={reorderTasks}
+            onTaskDrop={async (taskId, sectionId) => {
+              await moveTaskToSection(taskId, sectionId);
+            }}
           />
         );
       })}

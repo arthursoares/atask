@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import SectionHeader from '../../components/SectionHeader';
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
 import { Field } from '../../ui';
 import ProjectTaskList from './ProjectTaskList';
 import type { ReorderMove, Section, Task } from '../../types';
+import { useStore } from '@nanostores/react';
+import { $taskPointerDrag } from '../../store/ui';
 
 interface ProjectSectionBlockProps {
   section: Section;
@@ -26,6 +29,7 @@ interface ProjectSectionBlockProps {
   onCloseMenu: () => void;
   buildMenuItems: (sectionId: string) => MenuItem[];
   onReorderTasks: (moves: ReorderMove[]) => Promise<void>;
+  onTaskDrop?: (taskId: string, sectionId: string) => void;
 }
 
 export default function ProjectSectionBlock({
@@ -50,7 +54,28 @@ export default function ProjectSectionBlock({
   onCloseMenu,
   buildMenuItems,
   onReorderTasks,
+  onTaskDrop,
 }: ProjectSectionBlockProps) {
+  const [isDropTarget, setIsDropTarget] = useState(false);
+  const taskDrag = useStore($taskPointerDrag);
+
+  const handlePointerEnter = () => {
+    if (taskDrag.activeTaskId && onTaskDrop) {
+      setIsDropTarget(true);
+    }
+  };
+
+  const handlePointerLeave = () => {
+    setIsDropTarget(false);
+  };
+
+  const handlePointerUp = () => {
+    if (taskDrag.activeTaskId && onTaskDrop) {
+      onTaskDrop(taskDrag.activeTaskId, section.id);
+    }
+    setIsDropTarget(false);
+  };
+
   return (
     <div>
       {isRenaming ? (
@@ -72,7 +97,15 @@ export default function ProjectSectionBlock({
           />
         </div>
       ) : (
-        <div onContextMenu={(event) => onContextMenu(event, section.id)}>
+        <div
+          onContextMenu={(event) => onContextMenu(event, section.id)}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
+          onPointerUp={handlePointerUp}
+          data-sidebar-item-kind="section"
+          data-sidebar-item-id={section.id}
+          style={isDropTarget ? { background: 'var(--accent-subtle)', borderRadius: 'var(--radius-md)' } : undefined}
+        >
           <SectionHeader
             title={section.title}
             count={tasks.length}

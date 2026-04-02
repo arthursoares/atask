@@ -5,17 +5,22 @@ import {
   $selectedTaskId,
   $expandedTaskId,
   $selectedTaskIds,
+  $projects,
   selectTask,
   openTaskEditor,
   closeTaskEditor,
   createTask,
   reorderTasks,
+  startTaskPointerDrag,
+  endTaskPointerDrag,
+  updateTask,
 } from '../store/index';
 import TaskRow, { shouldHandleTaskRowPointerDown } from '../components/TaskRow';
 import TaskInlineEditor from '../components/TaskInlineEditor';
 import NewTaskRow from '../components/NewTaskRow';
 import EmptyState from '../components/EmptyState';
 import DropSlot from '../components/task-row/DropSlot';
+import DragOverlay from '../components/DragOverlay';
 import usePointerReorder from '../hooks/usePointerReorder';
 
 const InboxIcon = (
@@ -45,11 +50,57 @@ export default function InboxView() {
   const expandedTaskId = useStore($expandedTaskId);
   const selectedTaskIds = useStore($selectedTaskIds);
 
-  const { reorderState, getPointerHandlers, registerItem } = usePointerReorder({
+  const handleCrossListDrop = (taskId: string, target: Element) => {
+    const sidebarItemId = target.getAttribute('data-sidebar-item-id');
+    const sidebarItemKind = target.getAttribute('data-sidebar-item-kind');
+
+    if (sidebarItemKind === 'project' && sidebarItemId) {
+      const allProjects = $projects.get();
+      const project = allProjects.find((p) => p.id === sidebarItemId);
+      updateTask({ id: taskId, projectId: sidebarItemId, areaId: project?.areaId ?? null, schedule: 0, startDate: null, timeSlot: null });
+      return true;
+    }
+
+    if (sidebarItemKind === 'area' && sidebarItemId) {
+      updateTask({ id: taskId, areaId: sidebarItemId, projectId: null, schedule: 0, startDate: null, timeSlot: null });
+      return true;
+    }
+
+    const closestNavItem = target.closest('[data-sidebar-item-kind="nav"]');
+    if (closestNavItem) {
+      const view = closestNavItem.getAttribute('data-sidebar-item-id');
+      if (view === 'inbox') {
+        updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null, projectId: null, areaId: null });
+        return true;
+      }
+      if (view === 'today') {
+        const today = new Date().toISOString().slice(0, 10);
+        updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null });
+        return true;
+      }
+      if (view === 'upcoming') {
+        updateTask({ id: taskId, schedule: 3, projectId: null, areaId: null });
+        return true;
+      }
+      if (view === 'someday') {
+        updateTask({ id: taskId, schedule: 2, projectId: null, areaId: null });
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
     items: tasks,
     onReorder: reorderTasks,
     shouldHandlePointerDown: (event) => shouldHandleTaskRowPointerDown(event.target),
+    onDragStart: startTaskPointerDrag,
+    onDragEnd: endTaskPointerDrag,
+    onCrossListDrop: handleCrossListDrop,
   });
+
+  const itemWidth = reorderState.activeId ? getItemRect(reorderState.activeId)?.width ?? null : null;
   const draggedTaskIndex = reorderState.activeId
     ? tasks.findIndex((task) => task.id === reorderState.activeId)
     : -1;
@@ -67,12 +118,33 @@ export default function InboxView() {
         ? ' task-drop-zone-edge-bottom'
         : '';
 
+    if (!isVisible) return null;
+
     return (
       <div
         key={`drop-zone-${index}`}
         className={`task-drop-zone${edgeClass}`}
       >
-        {isVisible ? <DropSlot /> : null}
+        <DropSlot />
+      </div>
+    );
+  };
+
+  const renderDragClone = (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return null;
+    return (
+      <div
+        style={{
+          background: 'var(--sidebar-hover)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          padding: '8px 12px',
+        }}
+      >
+        <span style={{ fontSize: 'var(--text-base)', color: 'var(--ink-primary)' }}>
+          {task.title}
+        </span>
       </div>
     );
   };
@@ -102,7 +174,7 @@ export default function InboxView() {
                   showTriageActions={true}
                   reorderRef={registerItem(task.id)}
                   reorderHandlers={getPointerHandlers(task.id)}
-                  isReordering={reorderState.activeId === task.id && reorderState.isPointerDragging}
+                  isReordering={reorderState.activeId === task.id}
                 />
               )}
             </Fragment>
@@ -111,6 +183,13 @@ export default function InboxView() {
         </>
       )}
       <NewTaskRow onCreate={createTask} />
+      <DragOverlay
+        activeId={reorderState.activeId}
+        cursorX={reorderState.cursorX}
+        cursorY={reorderState.cursorY}
+        itemWidth={itemWidth}
+        renderClone={renderDragClone}
+      />
     </div>
   );
 }
