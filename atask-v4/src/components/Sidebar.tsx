@@ -5,6 +5,7 @@ import {
   $areas,
   $projects,
   $tasks,
+  $taskPointerDrag,
   completeProject,
   reopenProject,
   deleteProject,
@@ -31,6 +32,7 @@ import {
   SidebarRow,
   shouldHandleSidebarRowPointerDown,
 } from "./sidebar/SidebarParts";
+import DragOverlay from "./DragOverlay";
 import usePointerReorder from "../hooks/usePointerReorder";
 
 type ContextMenuState =
@@ -69,7 +71,7 @@ function SidebarProjectGroup({
   onProjectReorder,
   setActiveView,
 }: SidebarProjectGroupProps) {
-  const { reorderState, getPointerHandlers, registerItem } = usePointerReorder({
+  const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
     items: projects,
     onReorder: async (moves) => {
       const orderedIds = [...moves].sort((left, right) => left.index - right.index).map((move) => move.id);
@@ -82,6 +84,27 @@ function SidebarProjectGroup({
     ? projects.findIndex((project) => project.id === reorderState.activeId)
     : -1;
 
+  const itemWidth = reorderState.activeId ? getItemRect(reorderState.activeId)?.width ?? null : null;
+
+  const renderDragClone = (id: string) => {
+    const project = projects.find((p) => p.id === id);
+    if (!project) return null;
+    return (
+      <div
+        style={{
+          background: 'var(--sidebar-hover)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          padding: '8px 12px',
+        }}
+      >
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
+          {project.title}
+        </span>
+      </div>
+    );
+  };
+
   const renderDropZone = (index: number) => {
     if (!reorderState.isPointerDragging) return null;
 
@@ -89,12 +112,14 @@ function SidebarProjectGroup({
       && index !== draggedProjectIndex
       && index !== draggedProjectIndex + 1;
 
+    if (!isVisible) return null;
+
     return (
       <div
         key={`project-drop-zone-${areaId ?? "root"}-${index}`}
         className="sidebar-drop-zone sidebar-drop-zone-project"
       >
-        {isVisible ? <SidebarDropSlot /> : null}
+        <SidebarDropSlot />
       </div>
     );
   };
@@ -118,11 +143,18 @@ function SidebarProjectGroup({
             onTaskDrop={onTaskDrop}
             reorderRef={registerItem(project.id)}
             reorderHandlers={getPointerHandlers(project.id)}
-            isReordering={reorderState.activeId === project.id && reorderState.isPointerDragging}
+            isReordering={reorderState.activeId === project.id}
           />
         </Fragment>
       ))}
       {renderDropZone(projects.length)}
+      <DragOverlay
+        activeId={reorderState.activeId}
+        cursorX={reorderState.cursorX}
+        cursorY={reorderState.cursorY}
+        itemWidth={itemWidth}
+        renderClone={renderDragClone}
+      />
     </>
   );
 }
@@ -140,6 +172,9 @@ export default function Sidebar() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [renamingAreaId, setRenamingAreaId] = useState<string | null>(null);
   const [renamingAreaValue, setRenamingAreaValue] = useState("");
+  const [hoveredAreaId, setHoveredAreaId] = useState<string | null>(null);
+  const taskDrag = useStore($taskPointerDrag);
+  const isTaskDragActive = taskDrag.activeTaskId !== null;
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renamingProjectValue, setRenamingProjectValue] = useState("");
 
@@ -338,12 +373,35 @@ export default function Sidebar() {
       && index !== draggedAreaIndex
       && index !== draggedAreaIndex + 1;
 
+    if (!isVisible) return null;
+
     return (
       <div
         key={`area-drop-zone-${index}`}
         className="sidebar-drop-zone sidebar-drop-zone-area"
       >
-        {isVisible ? <SidebarDropSlot /> : null}
+        <SidebarDropSlot />
+      </div>
+    );
+  };
+
+  const areaItemWidth = areaReorder.reorderState.activeId ? areaReorder.getItemRect(areaReorder.reorderState.activeId)?.width ?? null : null;
+
+  const renderAreaDragClone = (id: string) => {
+    const area = areas.find((a) => a.id === id);
+    if (!area) return null;
+    return (
+      <div
+        style={{
+          background: 'var(--sidebar-hover)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          padding: '8px 12px',
+        }}
+      >
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
+          {area.title}
+        </span>
       </div>
     );
   };
@@ -403,7 +461,8 @@ export default function Sidebar() {
       {areas.map((area, areaIndex) => {
         const areaProjects = projectsByArea.get(area.id) ?? [];
         const areaReorderHandlers = areaReorder.getPointerHandlers(area.id);
-        const isAreaReordering = areaReorder.reorderState.activeId === area.id && areaReorder.reorderState.isPointerDragging;
+        const isAreaReordering = areaReorder.reorderState.activeId === area.id;
+        const isAreaDropTarget = hoveredAreaId === area.id && isTaskDragActive;
 
         return (
           <Fragment key={area.id}>
@@ -426,13 +485,15 @@ export default function Sidebar() {
               ) : (
                 <div
                   ref={areaReorder.registerItem(area.id)}
-                  className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}${isAreaReordering ? " sidebar-item-dragging" : ""}`}
+                  className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}${isAreaReordering ? " sidebar-item-dragging" : ""}${isAreaDropTarget ? " drag-target" : ""}`}
                   data-sidebar-item-id={area.id}
                   data-sidebar-item-kind="area"
                   onClick={() => setActiveView(`area-${area.id}`)}
                   onContextMenu={(event) => handleAreaContextMenu(event, area)}
                   onPointerDown={areaReorderHandlers.onPointerDown}
                   onMouseDown={areaReorderHandlers.onMouseDown}
+                  onPointerEnter={() => isTaskDragActive && setHoveredAreaId(area.id)}
+                  onPointerLeave={() => setHoveredAreaId(null)}
                 >
                   <span className="sidebar-group-label-text">{area.title}</span>
                   <Button
@@ -549,6 +610,14 @@ export default function Sidebar() {
           onClose={closeContextMenu}
         />
       )}
+
+      <DragOverlay
+        activeId={areaReorder.reorderState.activeId}
+        cursorX={areaReorder.reorderState.cursorX}
+        cursorY={areaReorder.reorderState.cursorY}
+        itemWidth={areaItemWidth}
+        renderClone={renderAreaDragClone}
+      />
     </div>
   );
 }

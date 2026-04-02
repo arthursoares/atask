@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useStore } from "@nanostores/react";
 import type { ActiveView, Project } from "../../types";
 import { Field } from "../../ui";
+import { $taskPointerDrag } from "../../store/ui";
 
 function hasDragType(e: React.DragEvent, type: string) {
   return Array.from(e.dataTransfer.types).includes(type);
@@ -33,6 +35,8 @@ export function SidebarRow({
   onDragOver,
   onDragLeave,
   onDrop,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   active?: boolean;
   children: React.ReactNode;
@@ -51,6 +55,8 @@ export function SidebarRow({
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
 }) {
   return (
     <div
@@ -62,6 +68,8 @@ export function SidebarRow({
       onContextMenu={onContextMenu}
       onPointerDown={reorderHandlers?.onPointerDown}
       onMouseDown={reorderHandlers?.onMouseDown}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -134,12 +142,27 @@ export function NavItem({
   onTaskDrop?: (taskId: string) => void;
 }) {
   const [isDragTarget, setIsDragTarget] = useState(false);
+  const taskDrag = useStore($taskPointerDrag);
+
+  const handlePointerEnter = () => {
+    if (taskDrag.activeTaskId) {
+      setIsDragTarget(true);
+    }
+  };
+
+  const handlePointerLeave = () => {
+    setIsDragTarget(false);
+  };
 
   return (
     <SidebarRow
       active={activeView === view}
       isDragTarget={isDragTarget}
+      dataSidebarItemId={view}
+      dataSidebarItemKind="nav"
       onClick={() => onClick(view)}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
       onDragOver={onTaskDrop ? (e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
@@ -198,6 +221,17 @@ export function ProjectItem({
 }) {
   const view: ActiveView = `project-${project.id}`;
   const [isDragTarget, setIsDragTarget] = useState(false);
+  const taskDrag = useStore($taskPointerDrag);
+
+  const handlePointerEnter = () => {
+    if (taskDrag.activeTaskId) {
+      setIsDragTarget(true);
+    }
+  };
+
+  const handlePointerLeave = () => {
+    setIsDragTarget(false);
+  };
 
   return (
     <SidebarRow
@@ -211,6 +245,8 @@ export function ProjectItem({
       isReordering={isReordering}
       onClick={() => onClick(view)}
       onContextMenu={(e) => onContextMenu(e, project)}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
       onDragOver={(e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
