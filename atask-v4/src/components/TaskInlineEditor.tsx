@@ -131,9 +131,8 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
     }
   };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setNotesValue(val);
+  const handleNotesChange = (nextValue: string) => {
+    setNotesValue(nextValue);
     adjustHeight();
   };
 

@@ -1,9 +1,10 @@
-import type { ChangeEvent, KeyboardEvent, RefObject } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
+import TaskEditNotesField from '../task-edit/TaskEditNotesField';
 
 interface EditorNotesFieldProps {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
-  onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  onChange: (nextValue: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
@@ -14,9 +15,9 @@ export default function EditorNotesField({
   onKeyDown,
 }: EditorNotesFieldProps) {
   return (
-    <textarea
-      ref={textareaRef}
-      className="task-notes-input"
+    <TaskEditNotesField
+      textareaRef={textareaRef}
+      className="task-notes-input task-inline-notes-input"
       value={value}
       onChange={onChange}
       onKeyDown={onKeyDown}
