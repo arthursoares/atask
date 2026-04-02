@@ -975,6 +975,7 @@ html, body {
 .task-inline-notes-input.task-edit-notes-input {
     margin-left: 27px;
     width: calc(100% - 27px);
+    line-height: normal;
     resize: none;
     overflow: hidden;
 }
