@@ -5,7 +5,10 @@ import {
   doubleClickTask,
   getTaskTitles,
   elementExists,
-  pressKeys,
+  getInlineEditorNotes,
+  isInlineEditorOpen,
+  setInlineEditorNotes,
+  escapeInlineEditorNotes,
 } from "./helpers";
 
 describe("Inline Editor Pickers", () => {
@@ -129,6 +132,19 @@ describe("Inline Editor Pickers", () => {
       if (editing) (editing as HTMLElement).click();
     });
     await browser.pause(200);
+  });
+
+  it("should persist inline notes after closing with Escape from the notes field", async () => {
+    const notes = "Inline note persisted through shared field";
+
+    await setInlineEditorNotes(notes);
+    expect(await getInlineEditorNotes()).toBe(notes);
+
+    await escapeInlineEditorNotes();
+    expect(await isInlineEditorOpen()).toBe(false);
+
+    await doubleClickTask("Picker Test Task");
+    expect(await getInlineEditorNotes()).toBe(notes);
   });
 
   it("should close inline editor with Escape and preserve task", async () => {

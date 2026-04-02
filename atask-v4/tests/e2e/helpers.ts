@@ -914,6 +914,42 @@ export async function setInlineEditorTitle(value: string) {
   await browser.pause(200);
 }
 
+/** Get inline editor notes textarea value */
+export async function getInlineEditorNotes(): Promise<string> {
+  return browser.execute(() => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    return textarea?.value ?? "";
+  });
+}
+
+/** Set inline editor notes textarea value */
+export async function setInlineEditorNotes(value: string) {
+  await browser.execute((v: string) => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    if (textarea) {
+      const nativeSet = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (nativeSet) {
+        nativeSet.call(textarea, v);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  }, value);
+  await browser.pause(200);
+}
+
+/** Press Escape on the inline editor notes textarea */
+export async function escapeInlineEditorNotes() {
+  await browser.execute(() => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    if (textarea) {
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }),
+      );
+    }
+  });
+  await browser.pause(300);
+}
+
 // ---------------------------------------------------------------------------
 // Triage Actions (Inbox view)
 // ---------------------------------------------------------------------------

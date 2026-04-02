@@ -972,11 +972,13 @@ html, body {
     color: var(--ink-secondary);
 }
 
-
 .task-inline-notes-input.task-edit-notes-input {
+    margin-left: 27px;
+    width: calc(100% - 27px);
     resize: none;
     overflow: hidden;
 }
+
 .attr-bar {
     display: flex;
     align-items: center;
