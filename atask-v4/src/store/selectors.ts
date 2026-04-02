@@ -39,6 +39,7 @@ export const $inbox = computed(
       .filter(
         (t) =>
           t.schedule === 0 &&
+          t.projectId === null &&
           (t.status === 0 || (t.status === 1 && isCompletedToday(t))) &&
           passesTagFilter(t.id, filters, tagMap),
       )
