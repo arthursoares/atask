@@ -158,17 +158,21 @@ describe("Sidebar Management", () => {
         projectDropZone.dispatchEvent(new DragEvent("dragover", { bubbles: true, dataTransfer }));
 
         const visibleSlotCount = document.querySelectorAll(".sidebar-drop-slot").length;
+        projectDropZone.dispatchEvent(new DragEvent("dragleave", { bubbles: true, dataTransfer }));
+        const slotCountAfterLeave = document.querySelectorAll(".sidebar-drop-slot").length;
         projectItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
 
         return {
           dropZoneCount: dropZones.length,
           visibleSlotCount,
+          slotCountAfterLeave,
         };
       });
 
       expect(dragState).not.toBeNull();
       expect(dragState?.dropZoneCount).toBeGreaterThan(0);
       expect(dragState?.visibleSlotCount).toBeGreaterThan(0);
+      expect(dragState?.slotCountAfterLeave).toBe(0);
     });
   });
 

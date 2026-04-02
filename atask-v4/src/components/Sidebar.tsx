@@ -218,7 +218,9 @@ export default function Sidebar() {
 
   const buildAreaMoves = useCallback((sourceId: string, index: number) => {
     const activeAreaIds = new Set(areas.map((area) => area.id));
-    const inactiveAreas = allAreas.filter((area) => !activeAreaIds.has(area.id));
+    const inactiveAreas = allAreas
+      .filter((area) => !activeAreaIds.has(area.id))
+      .sort((a, b) => a.index - b.index);
     const sourceIndex = areas.findIndex((area) => area.id === sourceId);
     if (sourceIndex === -1) return null;
 
@@ -233,7 +235,9 @@ export default function Sidebar() {
 
   const buildProjectMoves = useCallback((areaId: string | null, sourceId: string, index: number) => {
     const activeProjectIds = new Set(projects.map((project) => project.id));
-    const inactiveProjects = allProjects.filter((project) => !activeProjectIds.has(project.id));
+    const inactiveProjects = allProjects
+      .filter((project) => !activeProjectIds.has(project.id))
+      .sort((a, b) => a.index - b.index);
     const group = projects.filter((project) => project.areaId === areaId);
     const sourceIndex = group.findIndex((project) => project.id === sourceId);
     if (sourceIndex === -1) return null;
