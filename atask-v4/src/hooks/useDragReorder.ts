@@ -23,29 +23,32 @@ interface UseDragReorderReturn {
 
 export default function useDragReorder(
   tasks: Task[],
-  onReorder: (moves: Array<{ id: string; index: number }>) => void,
+  onReorder: (moves: Array<{ id: string; index: number }>) => void | Promise<void>,
 ): UseDragReorderReturn {
   const [dragState, setDragState] = useState<DragState>({ dragId: null, dropIndex: null });
   const dragIdRef = useRef<string | null>(null);
+  const dragElementRef = useRef<HTMLElement | null>(null);
   const resetDragState = useCallback(() => {
     setDragState({ dragId: null, dropIndex: null });
     dragIdRef.current = null;
+    dragElementRef.current = null;
   }, []);
 
   const getDragHandlers = useCallback((taskId: string) => ({
     draggable: true as const,
     onDragStart: (e: React.DragEvent) => {
       dragIdRef.current = taskId;
+      dragElementRef.current = e.currentTarget as HTMLElement;
       setDragState({ dragId: taskId, dropIndex: null });
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', taskId);
       // Make the drag image semi-transparent
-      const el = e.currentTarget as HTMLElement;
-      el.style.opacity = '0.5';
+      dragElementRef.current.style.opacity = '0.5';
     },
     onDragEnd: () => {
-      const el = document.querySelector('.task-item[style*="opacity"]') as HTMLElement | null;
-      if (el) el.style.opacity = '';
+      if (dragElementRef.current) {
+        dragElementRef.current.style.opacity = '';
+      }
       resetDragState();
     },
   }), [resetDragState]);
@@ -59,29 +62,30 @@ export default function useDragReorder(
     onDragLeave: () => {
       // Only clear if leaving to outside
     },
-    onDrop: (e: React.DragEvent) => {
+    onDrop: async (e: React.DragEvent) => {
       e.preventDefault();
       const sourceId = dragIdRef.current;
-      if (!sourceId) return;
+      try {
+        if (!sourceId) return;
 
-      const sourceIndex = tasks.findIndex(t => t.id === sourceId);
-      if (sourceIndex === -1) return;
+        const sourceIndex = tasks.findIndex(t => t.id === sourceId);
+        if (sourceIndex === -1) return;
 
-      // Build new order
-      const reordered = [...tasks];
-      const [moved] = reordered.splice(sourceIndex, 1);
-      const targetIndex = index > sourceIndex ? index - 1 : index;
-      if (targetIndex === sourceIndex) {
+        // Build new order
+        const reordered = [...tasks];
+        const [moved] = reordered.splice(sourceIndex, 1);
+        const targetIndex = index > sourceIndex ? index - 1 : index;
+        if (targetIndex === sourceIndex) {
+          return;
+        }
+        reordered.splice(targetIndex, 0, moved);
+
+        // Generate moves array with new indices
+        const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
+        await onReorder(moves);
+      } finally {
         resetDragState();
-        return;
       }
-      reordered.splice(targetIndex, 0, moved);
-
-      // Generate moves array with new indices
-      const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
-      onReorder(moves);
-
-      resetDragState();
     },
   }), [onReorder, resetDragState, tasks]);
 

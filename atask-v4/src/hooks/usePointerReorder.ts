@@ -11,6 +11,7 @@ export interface PointerReorderState {
 interface PointerReorderOptions<T extends ReorderableItem> {
   items: T[];
   onReorder: (moves: Array<{ id: string; index: number }>) => void | Promise<void>;
+  shouldHandlePointerDown?: (event: React.PointerEvent<HTMLElement>, id: string) => boolean;
 }
 
 interface PointerStartArgs {
@@ -41,6 +42,7 @@ export interface PointerReorderReturn {
 export default function usePointerReorder<T extends ReorderableItem>({
   items,
   onReorder,
+  shouldHandlePointerDown,
 }: PointerReorderOptions<T>): PointerReorderReturn {
   const [reorderState, setReorderState] = useState<PointerReorderState>({
     activeId: null,
@@ -201,6 +203,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
 
   const getPointerHandlers = useCallback((id: string) => ({
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+      if (shouldHandlePointerDown && !shouldHandlePointerDown(event, id)) return;
       if (event.button !== 0 || !event.isPrimary) return;
 
       event.preventDefault();
@@ -217,7 +220,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
         pointerId: event.pointerId,
       });
     },
-  }), [beginReorder]);
+  }), [beginReorder, shouldHandlePointerDown]);
 
   return useMemo(() => ({
     reorderState,
