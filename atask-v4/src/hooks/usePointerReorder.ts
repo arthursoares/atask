@@ -172,7 +172,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (inputType === 'pointer' && session.pointerId !== (event as PointerEvent).pointerId) return;
 
     const currentState = reorderStateRef.current;
-    if (!currentState.activeId || currentState.dropIndex == null || !currentState.isPointerDragging) {
+    if (!currentState.activeId) {
       cancelReorder();
       return;
     }
@@ -188,6 +188,16 @@ export default function usePointerReorder<T extends ReorderableItem>({
         cancelReorder();
         return;
       }
+    }
+
+    if (!currentState.isPointerDragging) {
+      cancelReorder();
+      return;
+    }
+
+    if (currentState.dropIndex == null) {
+      cancelReorder();
+      return;
     }
 
     const sourceIndex = items.findIndex((item) => item.id === currentState.activeId);

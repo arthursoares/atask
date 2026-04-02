@@ -354,8 +354,8 @@ html, body {
 
 .sidebar-item-dragging,
 .sidebar-group-label.sidebar-item-dragging {
-    opacity: 0.55;
     background: var(--sidebar-hover);
+    opacity: 0.5;
 }
 
 .sidebar-drop-zone {
@@ -789,8 +789,8 @@ html, body {
 }
 
 .task-item-dragging {
-    opacity: 0.55;
     background: var(--sidebar-hover);
+    opacity: 0.5;
 }
 
 .task-content {
