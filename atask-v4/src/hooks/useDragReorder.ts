@@ -28,10 +28,19 @@ export default function useDragReorder(
   const [dragState, setDragState] = useState<DragState>({ dragId: null, dropIndex: null });
   const dragIdRef = useRef<string | null>(null);
   const dragElementRef = useRef<HTMLElement | null>(null);
+  const dragElementRestoredRef = useRef(true);
+
+  const restoreDraggedElement = useCallback(() => {
+    const dragElement = dragElementRef.current;
+    if (!dragElement || dragElementRestoredRef.current) return;
+
+    dragElement.style.opacity = '';
+    dragElementRestoredRef.current = true;
+  }, []);
+
   const resetDragState = useCallback(() => {
     setDragState({ dragId: null, dropIndex: null });
     dragIdRef.current = null;
-    dragElementRef.current = null;
   }, []);
 
   const getDragHandlers = useCallback((taskId: string) => ({
@@ -39,6 +48,7 @@ export default function useDragReorder(
     onDragStart: (e: React.DragEvent) => {
       dragIdRef.current = taskId;
       dragElementRef.current = e.currentTarget as HTMLElement;
+      dragElementRestoredRef.current = false;
       setDragState({ dragId: taskId, dropIndex: null });
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', taskId);
@@ -46,12 +56,11 @@ export default function useDragReorder(
       dragElementRef.current.style.opacity = '0.5';
     },
     onDragEnd: () => {
-      if (dragElementRef.current) {
-        dragElementRef.current.style.opacity = '';
-      }
+      restoreDraggedElement();
       resetDragState();
+      dragElementRef.current = null;
     },
-  }), [resetDragState]);
+  }), [resetDragState, restoreDraggedElement]);
 
   const getDropHandlers = useCallback((index: number) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -84,10 +93,11 @@ export default function useDragReorder(
         const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
         await onReorder(moves);
       } finally {
+        restoreDraggedElement();
         resetDragState();
       }
     },
-  }), [onReorder, resetDragState, tasks]);
+  }), [onReorder, resetDragState, restoreDraggedElement, tasks]);
 
   return { dragState, getDragHandlers, getDropHandlers };
 }

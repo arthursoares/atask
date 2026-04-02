@@ -53,9 +53,10 @@ export default function usePointerReorder<T extends ReorderableItem>({
   const sessionRef = useRef<PointerDragSession | null>(null);
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
 
-  useEffect(() => {
-    reorderStateRef.current = reorderState;
-  }, [reorderState]);
+  const setReorderStateSync = useCallback((nextState: PointerReorderState) => {
+    reorderStateRef.current = nextState;
+    setReorderState(nextState);
+  }, []);
 
   const registerItem = useCallback((id: string) => (node: HTMLElement | null) => {
     if (node) {
@@ -68,12 +69,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
 
   const cancelReorder = useCallback(() => {
     sessionRef.current = null;
-    setReorderState({
+    setReorderStateSync({
       activeId: null,
       dropIndex: null,
       isPointerDragging: false,
     });
-  }, []);
+  }, [setReorderStateSync]);
 
   const getOrderedItems = useCallback(() => {
     return items
@@ -106,12 +107,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
       startY: args.clientY,
     };
 
-    setReorderState({
+    setReorderStateSync({
       activeId: args.id,
       dropIndex: null,
       isPointerDragging: false,
     });
-  }, []);
+  }, [setReorderStateSync]);
 
   const updateReorder = useCallback((event: PointerEvent) => {
     const session = sessionRef.current;
@@ -122,12 +123,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (!movedEnough && !reorderStateRef.current.isPointerDragging) return;
 
     const dropIndex = getDropIndex(event.clientY);
-    setReorderState({
+    setReorderStateSync({
       activeId: session.id,
       dropIndex,
       isPointerDragging: true,
     });
-  }, [getDropIndex]);
+  }, [getDropIndex, setReorderStateSync]);
 
   const commitReorder = useCallback(async (event: PointerEvent) => {
     const session = sessionRef.current;
