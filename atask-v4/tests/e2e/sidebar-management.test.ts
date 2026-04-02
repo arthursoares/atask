@@ -57,6 +57,17 @@ describe("Sidebar Management", () => {
       const labels = await getSidebarLabels();
       expect(labels.some((l) => l.includes("New Project"))).toBe(true);
     });
+
+    it("should create a second project for sidebar drag testing", async () => {
+      await pressKeys("O", true, true);
+      await browser.pause(300);
+      await clickCommandPaletteItem("New Project");
+      await browser.pause(500);
+
+      const labels = await getSidebarLabels();
+      const projectCount = labels.filter((label) => label.includes("New Project")).length;
+      expect(projectCount).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe("Project context menu", () => {
@@ -121,6 +132,43 @@ describe("Sidebar Management", () => {
       });
       // May or may not have areas with projects - just verify no crash
       expect(Array.isArray(areaLabels)).toBe(true);
+    });
+  });
+
+  describe("Sidebar drag slots", () => {
+    it("should show sidebar drop zones and a visible slot while dragging a project", async () => {
+      const dragState = await browser.execute(() => {
+        const items = Array.from(document.querySelectorAll(".sidebar-item"));
+        const projectItem = items.find((item) => item.textContent?.includes("New Project")) as HTMLElement | undefined;
+        if (!projectItem) return null;
+
+        const dataTransfer = new DataTransfer();
+        projectItem.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
+
+        const dropZones = Array.from(document.querySelectorAll(".sidebar-drop-zone"));
+        const projectDropZone = dropZones.find((zone) =>
+          zone.classList.contains("sidebar-drop-zone-project"),
+        ) as HTMLElement | undefined;
+
+        if (!projectDropZone) {
+          projectItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+          return null;
+        }
+
+        projectDropZone.dispatchEvent(new DragEvent("dragover", { bubbles: true, dataTransfer }));
+
+        const visibleSlotCount = document.querySelectorAll(".sidebar-drop-slot").length;
+        projectItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+
+        return {
+          dropZoneCount: dropZones.length,
+          visibleSlotCount,
+        };
+      });
+
+      expect(dragState).not.toBeNull();
+      expect(dragState?.dropZoneCount).toBeGreaterThan(0);
+      expect(dragState?.visibleSlotCount).toBeGreaterThan(0);
     });
   });
 

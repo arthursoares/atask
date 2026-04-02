@@ -2,9 +2,9 @@ import { Fragment, useState, useCallback } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $activeView,
+  $areas,
+  $projects,
   $tasks,
-  useActiveProjects,
-  useActiveAreas,
   completeProject,
   reopenProject,
   deleteProject,
@@ -51,11 +51,13 @@ type SidebarInsertionTarget =
 
 export default function Sidebar() {
   const activeView = useStore($activeView);
+  const allProjects = useStore($projects);
+  const allAreas = useStore($areas);
   const tasks = useStore($tasks);
   const setActiveView = (v: ActiveView) => $activeView.set(v);
 
-  const projects = useActiveProjects();
-  const areas = useActiveAreas();
+  const projects = [...allProjects].filter((project) => project.status === 0).sort((a, b) => a.index - b.index);
+  const areas = [...allAreas].filter((area) => !area.archived).sort((a, b) => a.index - b.index);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [renamingAreaId, setRenamingAreaId] = useState<string | null>(null);
@@ -215,6 +217,8 @@ export default function Sidebar() {
         : [];
 
   const buildAreaMoves = useCallback((sourceId: string, index: number) => {
+    const activeAreaIds = new Set(areas.map((area) => area.id));
+    const inactiveAreas = allAreas.filter((area) => !activeAreaIds.has(area.id));
     const sourceIndex = areas.findIndex((area) => area.id === sourceId);
     if (sourceIndex === -1) return null;
 
@@ -224,10 +228,12 @@ export default function Sidebar() {
     const reordered = [...areas];
     const [moved] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, moved);
-    return reordered.map((area, nextIndex) => ({ id: area.id, index: nextIndex }));
-  }, [areas]);
+    return [...reordered, ...inactiveAreas].map((area, nextIndex) => ({ id: area.id, index: nextIndex }));
+  }, [allAreas, areas]);
 
   const buildProjectMoves = useCallback((areaId: string | null, sourceId: string, index: number) => {
+    const activeProjectIds = new Set(projects.map((project) => project.id));
+    const inactiveProjects = allProjects.filter((project) => !activeProjectIds.has(project.id));
     const group = projects.filter((project) => project.areaId === areaId);
     const sourceIndex = group.findIndex((project) => project.id === sourceId);
     if (sourceIndex === -1) return null;
@@ -244,8 +250,8 @@ export default function Sidebar() {
       project.areaId === areaId ? reorderedGroup[groupIndex++] : project,
     );
 
-    return reorderedProjects.map((project, nextIndex) => ({ id: project.id, index: nextIndex }));
-  }, [projects]);
+    return [...reorderedProjects, ...inactiveProjects].map((project, nextIndex) => ({ id: project.id, index: nextIndex }));
+  }, [allProjects, projects]);
 
   const draggedAreaIndex = sidebarDrag?.kind === "area"
     ? areas.findIndex((area) => area.id === sidebarDrag.id)
@@ -267,6 +273,11 @@ export default function Sidebar() {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           setSidebarInsertionTarget({ kind: "area", index });
+        }}
+        onDragLeave={() => {
+          setSidebarInsertionTarget((current) =>
+            current?.kind === "area" && current.index === index ? null : current,
+          );
         }}
         onDrop={async (e) => {
           e.preventDefault();
@@ -300,6 +311,13 @@ export default function Sidebar() {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           setSidebarInsertionTarget({ kind: "project", areaId, index });
+        }}
+        onDragLeave={() => {
+          setSidebarInsertionTarget((current) =>
+            current?.kind === "project" && current.areaId === areaId && current.index === index
+              ? null
+              : current,
+          );
         }}
         onDrop={async (e) => {
           e.preventDefault();
