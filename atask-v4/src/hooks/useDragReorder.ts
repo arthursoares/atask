@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { Task } from '../types';
+export { default as usePointerReorder } from './usePointerReorder';
 
 interface DragState {
   dragId: string | null;
