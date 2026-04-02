@@ -29,61 +29,102 @@ describe("Drag and Drop Reorder", () => {
     expect(draggableCount).toBeGreaterThanOrEqual(3);
   });
 
-  it("should reorder tasks via simulated drag", async () => {
-    // Simulate drag reorder using HTML5 Drag API
-    // Drag "Drag C" above "Drag A"
-    const reordered = await browser.execute(() => {
-      const items = document.querySelectorAll(".task-item");
-      let dragItem: Element | null = null;
-      let dropTarget: Element | null = null;
-
-      for (const item of items) {
+  it("should render slot drop zones only during an active drag", async () => {
+    const dragState = await browser.execute(() => {
+      const items = Array.from(document.querySelectorAll(".task-item"));
+      const dragItem = items.find((item) => {
         const title = item.querySelector(".task-title");
-        if (title?.textContent === "Drag C") dragItem = item;
-        if (title?.textContent === "Drag A") dropTarget = item;
-      }
+        return title?.textContent === "Drag C";
+      }) as HTMLElement | undefined;
 
-      if (!dragItem || !dropTarget) return false;
+      if (!dragItem) return null;
 
-      // Create and dispatch drag events
+      const beforeCount = document.querySelectorAll(".task-drop-zone").length;
       const dataTransfer = new DataTransfer();
-      dataTransfer.setData("text/plain", "");
-
       dragItem.dispatchEvent(
         new DragEvent("dragstart", { bubbles: true, dataTransfer }),
       );
 
-      dropTarget.dispatchEvent(
+      const zoneCount = document.querySelectorAll(".task-drop-zone").length;
+      const visibleSlotCount = document.querySelectorAll(".task-drop-slot").length;
+      dragItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+      const afterCount = document.querySelectorAll(".task-drop-zone").length;
+
+      return {
+        taskCount: items.length,
+        beforeCount,
+        zoneCount,
+        visibleSlotCount,
+        afterCount,
+      };
+    });
+
+    expect(dragState).not.toBeNull();
+    expect(dragState?.beforeCount).toBe(0);
+    expect(dragState?.zoneCount).toBe(dragState!.taskCount + 1);
+    expect(dragState?.visibleSlotCount).toBe(0);
+    expect(dragState?.afterCount).toBe(0);
+  });
+
+  it("should reorder tasks by dropping onto a slot drop zone", async () => {
+    const reordered = await browser.execute(() => {
+      const items = Array.from(document.querySelectorAll(".task-item"));
+      const dragItemIndex = items.findIndex((item) => {
+        const title = item.querySelector(".task-title");
+        return title?.textContent === "Drag C";
+      });
+      const dropIndex = items.findIndex((item) => {
+        const title = item.querySelector(".task-title");
+        return title?.textContent === "Drag A";
+      });
+
+      if (dragItemIndex === -1 || dropIndex === -1) return null;
+
+      const dragItem = items[dragItemIndex] as HTMLElement;
+      const dataTransfer = new DataTransfer();
+      dragItem.dispatchEvent(
+        new DragEvent("dragstart", { bubbles: true, dataTransfer }),
+      );
+
+      const dropZones = Array.from(document.querySelectorAll(".task-drop-zone"));
+      const dropZone = dropZones[dropIndex] as HTMLElement | undefined;
+      if (!dropZone) {
+        dragItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+        return null;
+      }
+
+      dropZone.dispatchEvent(
         new DragEvent("dragover", { bubbles: true, dataTransfer }),
       );
 
-      dropTarget.dispatchEvent(
+      const slotVisibleDuringDrag = dropZone.querySelector(".task-drop-slot") !== null;
+
+      dropZone.dispatchEvent(
         new DragEvent("drop", { bubbles: true, dataTransfer }),
       );
 
-      dragItem.dispatchEvent(
-        new DragEvent("dragend", { bubbles: true }),
-      );
+      dragItem.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
 
-      return true;
+      const titles = Array.from(document.querySelectorAll(".task-title"))
+        .map((el) => el.textContent ?? "")
+        .filter(Boolean);
+
+      return {
+        slotVisibleDuringDrag,
+        titles,
+        remainingDropZones: document.querySelectorAll(".task-drop-zone").length,
+      };
     });
 
-    await browser.pause(500);
+    expect(reordered).not.toBeNull();
+    expect(reordered?.slotVisibleDuringDrag).toBe(true);
+    expect(reordered?.remainingDropZones).toBe(0);
 
-    // Note: HTML5 drag simulation in WebDriver may not fully work,
-    // but we verify the drag infrastructure exists
-    expect(reordered).toBe(true);
-  });
-
-  it("should have drop indicator support", async () => {
-    // Verify that dragover events create visual indicators
-    const hasDragState = await browser.execute(() => {
-      // useDragReorder sets dragState.dropIndex on dragover
-      // We can verify the hook exists by checking the drag handlers are wired up
-      const items = document.querySelectorAll(".task-item[draggable='true']");
-      return items.length > 0;
-    });
-    expect(hasDragState).toBe(true);
+    const dragAIndex = reordered!.titles.indexOf("Drag A");
+    const dragCIndex = reordered!.titles.indexOf("Drag C");
+    expect(dragAIndex).toBeGreaterThanOrEqual(0);
+    expect(dragCIndex).toBeGreaterThanOrEqual(0);
+    expect(dragCIndex).toBeLessThan(dragAIndex);
   });
 
   after(async () => {

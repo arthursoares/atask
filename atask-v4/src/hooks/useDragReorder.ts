@@ -18,10 +18,6 @@ interface UseDragReorderReturn {
     onDragLeave: () => void;
     onDrop: (e: React.DragEvent) => void;
   };
-  getContainerHandlers: () => {
-    onDragOver: (e: React.DragEvent) => void;
-    onDrop: (e: React.DragEvent) => void;
-  };
 }
 
 export default function useDragReorder(
@@ -88,30 +84,5 @@ export default function useDragReorder(
     },
   }), [onReorder, resetDragState, tasks]);
 
-  const getContainerHandlers = useCallback(() => ({
-    onDragOver: (e: React.DragEvent) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    },
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault();
-      // Drop at end if not over a specific item
-      const sourceId = dragIdRef.current;
-      if (!sourceId) return;
-
-      const sourceIndex = tasks.findIndex(t => t.id === sourceId);
-      if (sourceIndex === -1) return;
-
-      const reordered = [...tasks];
-      const [moved] = reordered.splice(sourceIndex, 1);
-      reordered.push(moved);
-
-      const moves = reordered.map((t, i) => ({ id: t.id, index: i }));
-      onReorder(moves);
-
-      resetDragState();
-    },
-  }), [onReorder, resetDragState, tasks]);
-
-  return { dragState, getDragHandlers, getDropHandlers, getContainerHandlers };
+  return { dragState, getDragHandlers, getDropHandlers };
 }
