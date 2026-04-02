@@ -15,6 +15,7 @@ export default function TaskEditField({
 }: TaskEditFieldProps) {
   const rootClassName = [
     'task-edit-field',
+    'detail-field',
     popover ? 'task-edit-field-popover' : '',
     className ?? '',
   ]
@@ -23,8 +24,8 @@ export default function TaskEditField({
 
   return (
     <div className={rootClassName}>
-      <div className="task-edit-field-label">{label}</div>
-      <div className="task-edit-field-value">{children}</div>
+      <div className="task-edit-field-label detail-field-label">{label}</div>
+      <div className="task-edit-field-value detail-field-value">{children}</div>
     </div>
   );
 }
