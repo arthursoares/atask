@@ -31,6 +31,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch(include_str!("migrations/001_schema.sql"))?;
         conn.execute_batch(include_str!("migrations/002_settings.sql"))?;
+        conn.execute_batch(include_str!("migrations/003_activities.sql"))?;
         Ok(())
     }
 }
