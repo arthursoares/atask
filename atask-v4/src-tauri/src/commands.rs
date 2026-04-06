@@ -319,8 +319,10 @@ pub fn create_task(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = create_task_impl(&conn, params)?;
     // Send minimal JSON with id + title for the Go API
-    let body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
-    queue_pending_op(&conn, "POST", "/tasks", Some(&body))?;
+    let create_body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
+    queue_pending_op(&conn, "POST", "/tasks", Some(&create_body))?;
+    let patch_body = serde_json::to_string(&task).unwrap_or_default();
+    queue_pending_op(&conn, "PATCH", &format!("/tasks/{}", task.id), Some(&patch_body))?;
     Ok(task)
 }
 
@@ -594,7 +596,7 @@ pub fn update_task(
 
     let task = query_task(&conn, &params.id)?;
     let body = serde_json::to_string(&task).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/tasks/{}", task.id), Some(&body))?;
+    queue_pending_op(&conn, "PATCH", &format!("/tasks/{}", task.id), Some(&body))?;
     Ok(task)
 }
 
@@ -649,8 +651,10 @@ pub(crate) fn duplicate_task_impl(conn: &rusqlite::Connection, id: &str) -> Resu
 pub fn duplicate_task(db: tauri::State<'_, Database>, id: String) -> Result<Task, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = duplicate_task_impl(&conn, &id)?;
-    let body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
-    queue_pending_op(&conn, "POST", "/tasks", Some(&body))?;
+    let create_body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
+    queue_pending_op(&conn, "POST", "/tasks", Some(&create_body))?;
+    let patch_body = serde_json::to_string(&task).unwrap_or_default();
+    queue_pending_op(&conn, "PATCH", &format!("/tasks/{}", task.id), Some(&patch_body))?;
     Ok(task)
 }
 
@@ -726,7 +730,7 @@ pub fn set_today_index(
     )
     .map_err(|e| e.to_string())?;
 
-    let index_json = serde_json::json!({"today_index": index}).to_string();
+    let index_json = serde_json::json!({"index": index}).to_string();
     queue_pending_op(
         &conn,
         "PUT",
@@ -752,7 +756,10 @@ pub fn move_task_to_section(
     )
     .map_err(|e| e.to_string())?;
 
-    let section_json = serde_json::json!({"section_id": section_id}).to_string();
+    let section_json = match &section_id {
+        Some(sid) => serde_json::json!({"id": sid}).to_string(),
+        None => serde_json::json!({"id": null}).to_string(),
+    };
     queue_pending_op(
         &conn,
         "PUT",
@@ -898,8 +905,10 @@ pub fn create_project(
 ) -> Result<Project, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let project = create_project_impl(&conn, params)?;
-    let body = serde_json::json!({"id": project.id, "title": project.title}).to_string();
-    queue_pending_op(&conn, "POST", "/projects", Some(&body))?;
+    let create_body = serde_json::json!({"id": project.id, "title": project.title}).to_string();
+    queue_pending_op(&conn, "POST", "/projects", Some(&create_body))?;
+    let patch_body = serde_json::to_string(&project).unwrap_or_default();
+    queue_pending_op(&conn, "PATCH", &format!("/projects/{}", project.id), Some(&patch_body))?;
     Ok(project)
 }
 
@@ -961,7 +970,7 @@ pub fn update_project(
     let body = serde_json::to_string(&project).unwrap_or_default();
     queue_pending_op(
         &conn,
-        "PUT",
+        "PATCH",
         &format!("/projects/{}", project.id),
         Some(&body),
     )?;
@@ -1044,7 +1053,10 @@ pub fn move_project_to_area(
     )
     .map_err(|e| e.to_string())?;
 
-    let area_json = serde_json::json!({"area_id": area_id}).to_string();
+    let area_json = match &area_id {
+        Some(aid) => serde_json::json!({"id": aid}).to_string(),
+        None => serde_json::json!({"id": null}).to_string(),
+    };
     queue_pending_op(
         &conn,
         "PUT",
@@ -1130,7 +1142,7 @@ pub fn update_area(
 
     let area = read_area(&conn, &params.id)?;
     let body = serde_json::to_string(&area).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/areas/{}", area.id), Some(&body))?;
+    queue_pending_op(&conn, "PATCH", &format!("/areas/{}", area.id), Some(&body))?;
     Ok(area)
 }
 
@@ -1236,7 +1248,7 @@ pub fn create_section(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let project_id = params.project_id.clone();
     let section = create_section_impl(&conn, params)?;
-    let body = serde_json::to_string(&section).unwrap_or_default();
+    let body = serde_json::json!({"id": section.id, "title": section.title}).to_string();
     queue_pending_op(
         &conn,
         "POST",
@@ -1286,7 +1298,7 @@ pub fn update_section(
         .map_err(|e| e.to_string())?;
 
     let section = read_section(&conn, &params.id)?;
-    let body = serde_json::to_string(&section).unwrap_or_default();
+    let body = serde_json::json!({"title": section.title}).to_string();
     queue_pending_op(
         &conn,
         "PUT",
@@ -1362,15 +1374,8 @@ pub fn toggle_section_archived(
     )
     .map_err(|e| e.to_string())?;
 
-    let section = read_section(&conn, &id)?;
-    let body = serde_json::to_string(&section).unwrap_or_default();
-    queue_pending_op(
-        &conn,
-        "PUT",
-        &format!("/projects/{}/sections/{}", section.project_id, section.id),
-        Some(&body),
-    )?;
-    Ok(section)
+    // Section archived state has no Go endpoint — local-only
+    read_section(&conn, &id)
 }
 
 #[tauri::command]
@@ -1436,7 +1441,7 @@ pub fn create_tag(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let tag = create_tag_impl(&conn, params)?;
     if let Some(ref t) = tag {
-        let body = serde_json::to_string(t).unwrap_or_default();
+        let body = serde_json::json!({"id": t.id, "title": t.title}).to_string();
         queue_pending_op(&conn, "POST", "/tags", Some(&body))?;
     }
     Ok(tag)
@@ -1461,7 +1466,7 @@ pub fn update_tag(db: tauri::State<'_, Database>, params: UpdateTagParams) -> Re
     .map_err(|e| e.to_string())?;
 
     let tag = read_tag(&conn, &params.id)?;
-    let body = serde_json::to_string(&tag).unwrap_or_default();
+    let body = serde_json::json!({"title": tag.title}).to_string();
     queue_pending_op(&conn, "PUT", &format!("/tags/{}", tag.id), Some(&body))?;
     Ok(tag)
 }
@@ -1565,7 +1570,7 @@ pub fn create_checklist_item(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task_id = params.task_id.clone();
     let item = create_checklist_item_impl(&conn, params)?;
-    let body = serde_json::to_string(&item).unwrap_or_default();
+    let body = serde_json::json!({"title": item.title}).to_string();
     queue_pending_op(
         &conn,
         "POST",
@@ -1597,7 +1602,7 @@ pub fn update_checklist_item(
     .map_err(|e| e.to_string())?;
 
     let item = read_checklist_item(&conn, &params.id)?;
-    let body = serde_json::to_string(&item).unwrap_or_default();
+    let body = serde_json::json!({"title": item.title}).to_string();
     queue_pending_op(
         &conn,
         "PUT",
