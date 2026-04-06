@@ -10,6 +10,7 @@ import { $taskPointerDrag } from '../../store/ui';
 interface ProjectSectionBlockProps {
   section: Section;
   tasks: Task[];
+  projectId: string;
   expandedTaskId: string | null;
   selectedTaskId: string | null;
   selectedTaskIds: Set<string>;
@@ -35,6 +36,7 @@ interface ProjectSectionBlockProps {
 export default function ProjectSectionBlock({
   section,
   tasks,
+  projectId,
   expandedTaskId,
   selectedTaskId,
   selectedTaskIds,
@@ -119,6 +121,7 @@ export default function ProjectSectionBlock({
       {!section.collapsed && (
         <ProjectTaskList
           tasks={tasks}
+          projectId={projectId}
           expandedTaskId={expandedTaskId}
           selectedTaskId={selectedTaskId}
           selectedTaskIds={selectedTaskIds}

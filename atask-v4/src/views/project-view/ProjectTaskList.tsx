@@ -9,9 +9,11 @@ import type { ReorderMove, Task } from '../../types';
 import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects } from '../../store/index';
 import { useStore } from '@nanostores/react';
 import { $taskPointerDrag } from '../../store/ui';
+import { todayLocal } from '../../lib/dates';
 
 interface ProjectTaskListProps {
   tasks: Task[];
+  projectId: string;
   expandedTaskId: string | null;
   selectedTaskId: string | null;
   selectedTaskIds: Set<string>;
@@ -25,6 +27,7 @@ interface ProjectTaskListProps {
 
 export default function ProjectTaskList({
   tasks,
+  projectId,
   expandedTaskId,
   selectedTaskId,
   selectedTaskIds,
@@ -41,7 +44,7 @@ export default function ProjectTaskList({
     const sidebarItemId = target.getAttribute('data-sidebar-item-id');
     const sidebarItemKind = target.getAttribute('data-sidebar-item-kind');
 
-    if (sidebarItemKind === 'project' && sidebarItemId) {
+    if (sidebarItemKind === 'project' && sidebarItemId && sidebarItemId !== projectId) {
       const allProjects = $projects.get();
       const project = allProjects.find((p) => p.id === sidebarItemId);
       updateTask({ id: taskId, projectId: sidebarItemId, areaId: project?.areaId ?? null, schedule: 0, startDate: null, timeSlot: null });
@@ -71,7 +74,7 @@ export default function ProjectTaskList({
         return true;
       }
       if (view === 'today') {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayLocal();
         updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null, sectionId: null });
         return true;
       }

@@ -154,6 +154,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
       {/* Sectionless tasks */}
       <ProjectTaskList
         tasks={sectionlessTasks}
+        projectId={project.id}
         expandedTaskId={expandedTaskId}
         selectedTaskId={selectedTaskId}
         selectedTaskIds={selectedTaskIds}
@@ -178,6 +179,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
             key={section.id}
             section={section}
             tasks={sectionTasks}
+            projectId={project.id}
             expandedTaskId={expandedTaskId}
             selectedTaskId={selectedTaskId}
             selectedTaskIds={selectedTaskIds}
