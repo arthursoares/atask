@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS projectTags (
+    projectId TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    tagId TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (projectId, tagId)
+);
