@@ -29,9 +29,12 @@ func setupTaskAndAuthTestServer(t *testing.T) *http.ServeMux {
 	bus := event.NewBus()
 
 	taskSvc := service.NewTaskService(db, es, bus)
+	projectSvc := service.NewProjectService(db, es, bus)
+	sectionSvc := service.NewSectionService(db, es, bus)
+	areaSvc := service.NewAreaService(db, es, bus)
 	authSvc := service.NewAuthService(db, "test-secret")
 
-	taskHandler := api.NewTaskHandler(taskSvc)
+	taskHandler := api.NewTaskHandler(taskSvc, projectSvc, sectionSvc, areaSvc)
 	authHandler := api.NewAuthHandler(authSvc)
 
 	mux := http.NewServeMux()

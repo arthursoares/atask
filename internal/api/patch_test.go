@@ -31,11 +31,12 @@ func setupPatchTestServer(t *testing.T) *http.ServeMux {
 
 	taskSvc := service.NewTaskService(db, es, bus)
 	projectSvc := service.NewProjectService(db, es, bus)
+	sectionSvc := service.NewSectionService(db, es, bus)
 	areaSvc := service.NewAreaService(db, es, bus)
 
 	mux := http.NewServeMux()
-	api.NewTaskHandler(taskSvc).RegisterRoutes(mux)
-	api.NewProjectHandler(projectSvc).RegisterRoutes(mux)
+	api.NewTaskHandler(taskSvc, projectSvc, sectionSvc, areaSvc).RegisterRoutes(mux)
+	api.NewProjectHandler(projectSvc, areaSvc).RegisterRoutes(mux)
 	api.NewAreaHandler(areaSvc).RegisterRoutes(mux)
 	return mux
 }

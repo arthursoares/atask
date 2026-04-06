@@ -13,11 +13,12 @@ import (
 // ProjectHandler holds the ProjectService and handles project HTTP routes.
 type ProjectHandler struct {
 	projects *service.ProjectService
+	areas    *service.AreaService
 }
 
 // NewProjectHandler constructs a ProjectHandler.
-func NewProjectHandler(projects *service.ProjectService) *ProjectHandler {
-	return &ProjectHandler{projects: projects}
+func NewProjectHandler(projects *service.ProjectService, areas *service.AreaService) *ProjectHandler {
+	return &ProjectHandler{projects: projects, areas: areas}
 }
 
 // RegisterRoutes registers all project routes on the mux.
@@ -320,6 +321,40 @@ func (h *ProjectHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	actor := actorFromRequest(r)
 
+	// --- Pre-validate: project exists ---
+	if _, err := h.projects.Get(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// --- Pre-validate: parse date fields ---
+	var deadline *time.Time
+	if body.Deadline != nil && *body.Deadline != "" {
+		t, err := time.Parse("2006-01-02", *body.Deadline)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "invalid deadline format")
+			return
+		}
+		deadline = &t
+	}
+
+	// --- Pre-validate: referenced entities exist ---
+	if body.AreaID != nil && *body.AreaID != "" {
+		if _, err := h.areas.Get(r.Context(), *body.AreaID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				RespondError(w, http.StatusUnprocessableEntity, "area not found")
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	// --- Apply mutations (all pre-validations passed) ---
 	if body.Title != nil {
 		if err := h.projects.UpdateTitle(r.Context(), id, *body.Title, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
@@ -333,16 +368,7 @@ func (h *ProjectHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.Deadline != nil {
-		var date *time.Time
-		if *body.Deadline != "" {
-			t, err := time.Parse("2006-01-02", *body.Deadline)
-			if err != nil {
-				RespondError(w, http.StatusBadRequest, "invalid deadline format")
-				return
-			}
-			date = &t
-		}
-		if err := h.projects.SetDeadline(r.Context(), id, date, actor); err != nil {
+		if err := h.projects.SetDeadline(r.Context(), id, deadline, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -366,7 +392,7 @@ func (h *ProjectHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.Get(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "project not found")
+		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, project)

@@ -70,8 +70,8 @@ func main() {
 	// Create handlers
 	authHandler := api.NewAuthHandler(authService)
 	areaHandler := api.NewAreaHandler(areaService)
-	taskHandler := api.NewTaskHandler(taskService)
-	projectHandler := api.NewProjectHandler(projectService)
+	taskHandler := api.NewTaskHandler(taskService, projectService, sectionService, areaService)
+	projectHandler := api.NewProjectHandler(projectService, areaService)
 	sectionHandler := api.NewSectionHandler(sectionService)
 	tagHandler := api.NewTagHandler(tagService)
 	locationHandler := api.NewLocationHandler(locationService)

@@ -12,12 +12,15 @@ import (
 
 // TaskHandler holds the TaskService and handles task HTTP routes.
 type TaskHandler struct {
-	tasks *service.TaskService
+	tasks    *service.TaskService
+	projects *service.ProjectService
+	sections *service.SectionService
+	areas    *service.AreaService
 }
 
 // NewTaskHandler constructs a TaskHandler.
-func NewTaskHandler(tasks *service.TaskService) *TaskHandler {
-	return &TaskHandler{tasks: tasks}
+func NewTaskHandler(tasks *service.TaskService, projects *service.ProjectService, sections *service.SectionService, areas *service.AreaService) *TaskHandler {
+	return &TaskHandler{tasks: tasks, projects: projects, sections: sections, areas: areas}
 }
 
 // RegisterRoutes registers all task routes on the mux.
@@ -574,6 +577,69 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	actor := actorFromRequest(r)
 
+	// --- Pre-validate: task exists ---
+	if _, err := h.tasks.Get(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "task not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// --- Pre-validate: parse date fields ---
+	var startDate *time.Time
+	if body.StartDate != nil && *body.StartDate != "" {
+		t, err := time.Parse("2006-01-02", *body.StartDate)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "invalid startDate format")
+			return
+		}
+		startDate = &t
+	}
+	var deadline *time.Time
+	if body.Deadline != nil && *body.Deadline != "" {
+		t, err := time.Parse("2006-01-02", *body.Deadline)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "invalid deadline format")
+			return
+		}
+		deadline = &t
+	}
+
+	// --- Pre-validate: referenced entities exist ---
+	if body.ProjectID != nil && *body.ProjectID != "" {
+		if _, err := h.projects.Get(r.Context(), *body.ProjectID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				RespondError(w, http.StatusUnprocessableEntity, "project not found")
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if body.SectionID != nil && *body.SectionID != "" {
+		if _, err := h.sections.Get(r.Context(), *body.SectionID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				RespondError(w, http.StatusUnprocessableEntity, "section not found")
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if body.AreaID != nil && *body.AreaID != "" {
+		if _, err := h.areas.Get(r.Context(), *body.AreaID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				RespondError(w, http.StatusUnprocessableEntity, "area not found")
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	// --- Apply mutations (all pre-validations passed) ---
 	if body.Title != nil {
 		if err := h.tasks.UpdateTitle(r.Context(), id, *body.Title, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
@@ -593,31 +659,13 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.StartDate != nil {
-		var date *time.Time
-		if *body.StartDate != "" {
-			t, err := time.Parse("2006-01-02", *body.StartDate)
-			if err != nil {
-				RespondError(w, http.StatusBadRequest, "invalid startDate format")
-				return
-			}
-			date = &t
-		}
-		if err := h.tasks.SetStartDate(r.Context(), id, date, actor); err != nil {
+		if err := h.tasks.SetStartDate(r.Context(), id, startDate, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 	if body.Deadline != nil {
-		var date *time.Time
-		if *body.Deadline != "" {
-			t, err := time.Parse("2006-01-02", *body.Deadline)
-			if err != nil {
-				RespondError(w, http.StatusBadRequest, "invalid deadline format")
-				return
-			}
-			date = &t
-		}
-		if err := h.tasks.SetDeadline(r.Context(), id, date, actor); err != nil {
+		if err := h.tasks.SetDeadline(r.Context(), id, deadline, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -655,7 +703,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	task, err := h.tasks.Get(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "task not found")
+		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, task)
