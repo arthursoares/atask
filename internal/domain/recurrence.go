@@ -7,7 +7,7 @@ type RecurrenceMode string
 
 const (
 	RecurrenceModeFixed           RecurrenceMode = "fixed"
-	RecurrenceModeAfterCompletion RecurrenceMode = "after_completion"
+	RecurrenceModeAfterCompletion RecurrenceMode = "afterCompletion"
 )
 
 // RecurrenceUnit defines the time unit for recurrence intervals.
@@ -27,10 +27,10 @@ type RecurrenceEnd struct {
 
 // RecurrenceRule describes the recurrence configuration for a task.
 type RecurrenceRule struct {
-	Mode     RecurrenceMode
-	Interval int
-	Unit     RecurrenceUnit
-	End      *RecurrenceEnd
+	Mode     RecurrenceMode `json:"type"`
+	Interval int            `json:"interval"`
+	Unit     RecurrenceUnit `json:"unit"`
+	End      *RecurrenceEnd `json:"end,omitempty"`
 }
 
 // Validate checks that the RecurrenceRule fields are valid.
@@ -43,7 +43,7 @@ func (r *RecurrenceRule) Validate() error {
 	case RecurrenceModeFixed, RecurrenceModeAfterCompletion:
 		// valid
 	default:
-		return errors.New("recurrence mode must be \"fixed\" or \"after_completion\"")
+		return errors.New("recurrence mode must be \"fixed\" or \"afterCompletion\"")
 	}
 
 	switch r.Unit {
