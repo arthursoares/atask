@@ -10,6 +10,7 @@ import {
   openTaskEditor,
   closeTaskEditor,
   useActiveProjects,
+  reorderTasks,
 } from '../store/index';
 import EmptyState from '../components/EmptyState';
 import ProgressBar from '../components/ProgressBar';
@@ -75,6 +76,7 @@ export default function AreaView({ areaId }: AreaViewProps) {
         onSelectTask={selectTask}
         onExpandTask={openTaskEditor}
         onCloseExpandedTask={closeTaskEditor}
+        onReorder={reorderTasks}
       />
 
       {areaProjects.length === 0 && areaTasks.length === 0 && (
