@@ -46,7 +46,7 @@ pub struct CreateTaskParams {
 
 fn query_task(conn: &rusqlite::Connection, id: &str) -> Result<Task, String> {
     conn.query_row(
-        "SELECT id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus, repeatRule FROM tasks WHERE id = ?1",
+        "SELECT id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, locationId, createdAt, updatedAt, syncStatus, repeatRule FROM tasks WHERE id = ?1",
         rusqlite::params![id],
         |row| {
             Ok(Task {
@@ -64,10 +64,11 @@ fn query_task(conn: &rusqlite::Connection, id: &str) -> Result<Task, String> {
                 project_id: row.get(11)?,
                 section_id: row.get(12)?,
                 area_id: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
-                sync_status: row.get(16)?,
-                repeat_rule: row.get(17)?,
+                location_id: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
+                sync_status: row.get(17)?,
+                repeat_rule: row.get(18)?,
             })
         },
     )
@@ -76,7 +77,7 @@ fn query_task(conn: &rusqlite::Connection, id: &str) -> Result<Task, String> {
 
 fn query_all_tasks(conn: &rusqlite::Connection) -> Result<Vec<Task>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus, repeatRule FROM tasks")
+        .prepare("SELECT id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, locationId, createdAt, updatedAt, syncStatus, repeatRule FROM tasks")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -95,10 +96,11 @@ fn query_all_tasks(conn: &rusqlite::Connection) -> Result<Vec<Task>, String> {
                 project_id: row.get(11)?,
                 section_id: row.get(12)?,
                 area_id: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
-                sync_status: row.get(16)?,
-                repeat_rule: row.get(17)?,
+                location_id: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
+                sync_status: row.get(17)?,
+                repeat_rule: row.get(18)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -210,6 +212,22 @@ fn query_all_task_tags(conn: &rusqlite::Connection) -> Result<Vec<TaskTag>, Stri
         .map_err(|e| e.to_string())
 }
 
+fn query_all_project_tags(conn: &rusqlite::Connection) -> Result<Vec<ProjectTag>, String> {
+    let mut stmt = conn
+        .prepare("SELECT projectId, tagId FROM projectTags")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProjectTag {
+                project_id: row.get(0)?,
+                tag_id: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
 fn query_all_checklist_items(conn: &rusqlite::Connection) -> Result<Vec<ChecklistItem>, String> {
     let mut stmt = conn
         .prepare(
@@ -253,6 +271,28 @@ fn query_all_activities(conn: &rusqlite::Connection) -> Result<Vec<Activity>, St
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+fn query_all_locations(conn: &rusqlite::Connection) -> Result<Vec<Location>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, name, latitude, longitude, radius, address, createdAt, updatedAt FROM locations")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Location {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                latitude: row.get(2)?,
+                longitude: row.get(3)?,
+                radius: row.get(4)?,
+                address: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
 pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, String> {
     Ok(AppState {
         tasks: query_all_tasks(conn)?,
@@ -261,8 +301,10 @@ pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, Str
         sections: query_all_sections(conn)?,
         tags: query_all_tags(conn)?,
         task_tags: query_all_task_tags(conn)?,
+        project_tags: query_all_project_tags(conn)?,
         checklist_items: query_all_checklist_items(conn)?,
         activities: query_all_activities(conn)?,
+        locations: query_all_locations(conn)?,
     })
 }
 
@@ -514,6 +556,10 @@ pub fn update_task(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let now = Utc::now().to_rfc3339();
 
+    // Track whether repeat_rule was provided so we can queue a separate
+    // recurrence sync op (Go PATCH does not handle repeatRule).
+    let repeat_rule_changed = params.repeat_rule.is_some();
+
     let mut sets: Vec<String> = Vec::new();
     let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -597,6 +643,24 @@ pub fn update_task(
     let task = query_task(&conn, &params.id)?;
     let body = serde_json::to_string(&task).unwrap_or_default();
     queue_pending_op(&conn, "PATCH", &format!("/tasks/{}", task.id), Some(&body))?;
+
+    // The Go PATCH endpoint does not handle repeatRule — recurrence uses a
+    // dedicated PUT /tasks/{id}/recurrence endpoint that accepts the rule
+    // object or null (to clear).  Queue this as a separate pending op when
+    // the caller changed the repeat rule.
+    if repeat_rule_changed {
+        let recurrence_body = match &task.repeat_rule {
+            Some(json_str) => json_str.clone(),
+            None => "null".to_string(),
+        };
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/tasks/{}/recurrence", task.id),
+            Some(&recurrence_body),
+        )?;
+    }
+
     Ok(task)
 }
 
@@ -1005,6 +1069,22 @@ pub fn reopen_project(db: tauri::State<'_, Database>, id: String) -> Result<Proj
     .map_err(|e| e.to_string())?;
 
     queue_pending_op(&conn, "POST", &format!("/projects/{}/reopen", id), None)?;
+
+    read_project(&conn, &id)
+}
+
+#[tauri::command]
+pub fn cancel_project(db: tauri::State<'_, Database>, id: String) -> Result<Project, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE projects SET status = 2, completedAt = ?1, updatedAt = ?1 WHERE id = ?2",
+        rusqlite::params![now, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    queue_pending_op(&conn, "POST", &format!("/projects/{}/cancel", id), None)?;
 
     read_project(&conn, &id)
 }
@@ -1537,6 +1617,54 @@ pub fn remove_tag_from_task(
     Ok(())
 }
 
+#[tauri::command]
+pub fn add_tag_to_project(
+    db: tauri::State<'_, Database>,
+    project_id: String,
+    tag_id: String,
+) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO projectTags (projectId, tagId) VALUES (?1, ?2)",
+        rusqlite::params![project_id, tag_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/projects/{}/tags/{}", project_id, tag_id),
+        None,
+    )?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_tag_from_project(
+    db: tauri::State<'_, Database>,
+    project_id: String,
+    tag_id: String,
+) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "DELETE FROM projectTags WHERE projectId = ?1 AND tagId = ?2",
+        rusqlite::params![project_id, tag_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    queue_pending_op(
+        &conn,
+        "DELETE",
+        &format!("/projects/{}/tags/{}", project_id, tag_id),
+        None,
+    )?;
+
+    Ok(())
+}
+
 // --- Checklist Commands ---
 
 #[derive(Debug, Deserialize)]
@@ -1853,6 +1981,7 @@ pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
         "DELETE FROM activities;
          DELETE FROM checklistItems;
          DELETE FROM taskTags;
+         DELETE FROM projectTags;
          DELETE FROM tasks;
          DELETE FROM sections;
          DELETE FROM projects;

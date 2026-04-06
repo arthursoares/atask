@@ -27,6 +27,7 @@ func (h *ChecklistHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/{id}/checklist/{itemId}/complete", h.CompleteItem)
 	mux.HandleFunc("POST /tasks/{id}/checklist/{itemId}/uncomplete", h.UncompleteItem)
 	mux.HandleFunc("DELETE /tasks/{id}/checklist/{itemId}", h.RemoveItem)
+	mux.HandleFunc("PUT /tasks/{id}/checklist/{itemId}/reorder", h.ReorderItem)
 }
 
 func (h *ChecklistHandler) AddItem(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +110,28 @@ func (h *ChecklistHandler) UncompleteItem(w http.ResponseWriter, r *http.Request
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.ChecklistItemUncompleted), map[string]string{"id": itemID})
+}
+
+func (h *ChecklistHandler) ReorderItem(w http.ResponseWriter, r *http.Request) {
+	itemID := r.PathValue("itemId")
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondDecodeError(w, err)
+		return
+	}
+
+	if err := h.checklist.ReorderItem(r.Context(), itemID, body.Index, actorFromRequest(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "checklist item not found")
+			return
+		}
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	RespondEvent(w, http.StatusOK, string(domain.ChecklistItemReordered), map[string]string{"id": itemID})
 }
 
 func (h *ChecklistHandler) RemoveItem(w http.ResponseWriter, r *http.Request) {

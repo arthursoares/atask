@@ -25,6 +25,11 @@ UPDATE checklist_items SET status = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
 RETURNING *;
 
+-- name: UpdateChecklistItemIndex :one
+UPDATE checklist_items SET "index" = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING *;
+
 -- name: SoftDeleteChecklistItem :exec
 UPDATE checklist_items SET deleted = 1, deleted_at = ?, updated_at = ?
 WHERE id = ?;

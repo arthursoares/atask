@@ -132,6 +132,35 @@ func (q *Queries) SoftDeleteChecklistItem(ctx context.Context, arg SoftDeleteChe
 	return err
 }
 
+const updateChecklistItemIndex = `-- name: UpdateChecklistItemIndex :one
+UPDATE checklist_items SET "index" = ?, updated_at = ?
+WHERE id = ? AND deleted = 0
+RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+`
+
+type UpdateChecklistItemIndexParams struct {
+	Index     int64     `json:"index"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+}
+
+func (q *Queries) UpdateChecklistItemIndex(ctx context.Context, arg UpdateChecklistItemIndexParams) (ChecklistItem, error) {
+	row := q.db.QueryRowContext(ctx, updateChecklistItemIndex, arg.Index, arg.UpdatedAt, arg.ID)
+	var i ChecklistItem
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Status,
+		&i.TaskID,
+		&i.Index,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateChecklistItemStatus = `-- name: UpdateChecklistItemStatus :one
 UPDATE checklist_items SET status = ?, updated_at = ?
 WHERE id = ? AND deleted = 0

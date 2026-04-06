@@ -101,6 +101,7 @@ const (
 	ChecklistItemCompleted    EventType = "checklist.item_completed"
 	ChecklistItemUncompleted  EventType = "checklist.item_uncompleted"
 	ChecklistItemTitleChanged EventType = "checklist.item_title_changed"
+	ChecklistItemReordered   EventType = "checklist.item_reordered"
 )
 
 // Activity events.

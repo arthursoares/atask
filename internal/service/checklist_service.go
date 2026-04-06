@@ -209,6 +209,23 @@ func (s *ChecklistService) UncompleteItem(ctx context.Context, id, actorID strin
 	return s.publishChecklistEvent(ctx, domain.ChecklistItemUncompleted, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
 }
 
+// ReorderItem updates the index of a checklist item and emits checklist.item_reordered.
+func (s *ChecklistService) ReorderItem(ctx context.Context, id string, newIndex int, actorID string) error {
+	now := timeNow()
+	_, err := s.queries.UpdateChecklistItemIndex(ctx, sqlc.UpdateChecklistItemIndexParams{
+		Index:     int64(newIndex),
+		UpdatedAt: now,
+		ID:        id,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{"index": newIndex}
+	indexJSON, _ := json.Marshal(newIndex)
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemReordered, id, actorID, now, payload, domain.DeltaModified, strPtr("index"), indexJSON)
+}
+
 // RemoveItem soft-deletes a checklist item and emits checklist.item_removed.
 func (s *ChecklistService) RemoveItem(ctx context.Context, id, actorID string) error {
 	now := timeNow()
