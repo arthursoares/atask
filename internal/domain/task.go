@@ -24,6 +24,7 @@ type Task struct {
 	AreaID         *string         `json:"areaId,omitempty"`
 	LocationID     *string         `json:"locationId,omitempty"`
 	RecurrenceRule *RecurrenceRule `json:"repeatRule,omitempty"`
+	TimeSlot       *string         `json:"timeSlot,omitempty"`
 	Tags           []string        `json:"tags"`
 	Timestamps
 	SoftDelete

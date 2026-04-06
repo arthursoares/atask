@@ -120,6 +120,8 @@ type Section struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	Archived  int64          `json:"archived"`
+	Collapsed int64          `json:"collapsed"`
 }
 
 type Tag struct {
@@ -154,6 +156,7 @@ type Task struct {
 	DeletedAt      sql.NullTime   `json:"deleted_at"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
+	TimeSlot       sql.NullString `json:"time_slot"`
 }
 
 type TaskLink struct {

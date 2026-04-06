@@ -99,6 +99,11 @@ func taskFromRow(row sqlc.Task) *domain.Task {
 		}
 	}
 
+	if row.TimeSlot.Valid {
+		ts := row.TimeSlot.String
+		t.TimeSlot = &ts
+	}
+
 	if row.Deleted != 0 && row.DeletedAt.Valid {
 		da := row.DeletedAt.Time
 		t.SoftDelete = domain.SoftDelete{

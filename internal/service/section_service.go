@@ -46,6 +46,8 @@ func sectionFromRow(row sqlc.Section) *domain.Section {
 	if row.ProjectID.Valid {
 		s.ProjectID = row.ProjectID.String
 	}
+	s.Archived = row.Archived != 0
+	s.Collapsed = row.Collapsed != 0
 	if row.Deleted != 0 && row.DeletedAt.Valid {
 		da := row.DeletedAt.Time
 		s.SoftDelete = domain.SoftDelete{

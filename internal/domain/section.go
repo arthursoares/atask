@@ -13,6 +13,8 @@ type Section struct {
 	Title     string `json:"title"`
 	ProjectID string `json:"projectId"`
 	Index     int    `json:"index"`
+	Archived  bool   `json:"archived"`
+	Collapsed bool   `json:"collapsed"`
 	Timestamps
 	SoftDelete
 }
