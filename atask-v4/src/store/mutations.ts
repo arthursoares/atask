@@ -81,6 +81,7 @@ function removeTaskArtifacts(taskIds: Set<string>): void {
   if (taskIds.size === 0) return;
   $checklistItems.set($checklistItems.get().filter((item) => !taskIds.has(item.taskId)));
   $taskTags.set($taskTags.get().filter((taskTag) => !taskIds.has(taskTag.taskId)));
+  $taskLinks.set($taskLinks.get().filter((link) => !taskIds.has(link.taskId) && !taskIds.has(link.linkedTaskId)));
   clearTaskUiState(taskIds);
 }
 
