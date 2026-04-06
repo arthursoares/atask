@@ -422,9 +422,9 @@ pub fn spawn_sync_worker(conn: Arc<Mutex<Connection>>, app_handle: tauri::AppHan
 
 // --- Upsert functions ---
 
-/// Upsert a task from server JSON (snake_case/PascalCase) into local DB (camelCase columns).
+/// Upsert a task from server JSON (camelCase/PascalCase) into local DB (camelCase columns).
 pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
-    // Handle both snake_case and PascalCase field names from Go API
+    // Handle both camelCase (new Go) and PascalCase (old data) field names
     let s = |key: &str, alt: &str| -> &str {
         j.get(key)
             .or_else(|| j.get(alt))
@@ -454,7 +454,7 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
     }
 
     let repeat_rule = j
-        .get("recurrence_rule")
+        .get("repeatRule")
         .or_else(|| j.get("RecurrenceRule"))
         .and_then(|v| {
             if v.is_null() {
@@ -475,17 +475,17 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
             s("notes", "Notes"),
             i("status", "Status"),
             i("schedule", "Schedule"),
-            opt_s("start_date", "StartDate"),
+            opt_s("startDate", "StartDate"),
             opt_s("deadline", "Deadline"),
-            opt_s("completed_at", "CompletedAt"),
+            opt_s("completedAt", "CompletedAt"),
             i("index", "Index"),
-            opt_i("today_index", "TodayIndex"),
-            opt_s("time_slot", "TimeSlot"),
-            opt_s("project_id", "ProjectID"),
-            opt_s("section_id", "SectionID"),
-            opt_s("area_id", "AreaID"),
-            s("created_at", "CreatedAt"),
-            s("updated_at", "UpdatedAt"),
+            opt_i("todayIndex", "TodayIndex"),
+            opt_s("timeSlot", "TimeSlot"),
+            opt_s("projectId", "ProjectID"),
+            opt_s("sectionId", "SectionID"),
+            opt_s("areaId", "AreaID"),
+            s("createdAt", "CreatedAt"),
+            s("updatedAt", "UpdatedAt"),
             repeat_rule,
         ],
     )
@@ -524,8 +524,8 @@ pub fn upsert_project(conn: &Connection, j: &serde_json::Value) -> Result<(), St
          title=?2, notes=?3, status=?4, color=?5, areaId=?6, \"index\"=?7, completedAt=?8, updatedAt=?10",
         rusqlite::params![
             id, s("title", "Title"), s("notes", "Notes"), i("status", "Status"),
-            s("color", "Color"), opt_s("area_id", "AreaID"), i("index", "Index"),
-            opt_s("completed_at", "CompletedAt"), s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt"),
+            s("color", "Color"), opt_s("areaId", "AreaID"), i("index", "Index"),
+            opt_s("completedAt", "CompletedAt"), s("createdAt", "CreatedAt"), s("updatedAt", "UpdatedAt"),
         ],
     )
     .map(|_| ())
@@ -571,8 +571,8 @@ pub fn upsert_area(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
             s("title", "Title"),
             i("index", "Index"),
             archived,
-            s("created_at", "CreatedAt"),
-            s("updated_at", "UpdatedAt")
+            s("createdAt", "CreatedAt"),
+            s("updatedAt", "UpdatedAt")
         ],
     )
     .map(|_| ())
@@ -623,7 +623,7 @@ pub fn upsert_section(conn: &Connection, j: &serde_json::Value) -> Result<(), St
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8) \
          ON CONFLICT(id) DO UPDATE SET \
          title=?2, projectId=?3, \"index\"=?4, archived=?5, collapsed=?6, updatedAt=?8",
-        rusqlite::params![id, s("title", "Title"), s("project_id", "ProjectID"), i("index", "Index"), archived, collapsed, s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt")],
+        rusqlite::params![id, s("title", "Title"), s("projectId", "ProjectID"), i("index", "Index"), archived, collapsed, s("createdAt", "CreatedAt"), s("updatedAt", "UpdatedAt")],
     )
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -649,12 +649,12 @@ pub fn upsert_activity(conn: &Connection, j: &serde_json::Value) -> Result<(), S
          taskId=?2, actorId=?3, actorType=?4, type=?5, content=?6, createdAt=?7",
         rusqlite::params![
             id,
-            s("task_id", "TaskID"),
-            s("actor_id", "ActorID"),
-            s("actor_type", "ActorType"),
+            s("taskId", "TaskID"),
+            s("actorId", "ActorID"),
+            s("actorType", "ActorType"),
             s("type", "Type"),
             s("content", "Content"),
-            s("created_at", "CreatedAt")
+            s("createdAt", "CreatedAt")
         ],
     )
     .map(|_| ())
@@ -689,8 +689,8 @@ pub fn upsert_tag(conn: &Connection, j: &serde_json::Value) -> Result<(), String
             id,
             s("title", "Title"),
             i("index", "Index"),
-            s("created_at", "CreatedAt"),
-            s("updated_at", "UpdatedAt")
+            s("createdAt", "CreatedAt"),
+            s("updatedAt", "UpdatedAt")
         ],
     )
     .map(|_| ())
