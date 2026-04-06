@@ -317,6 +317,10 @@ fn pull_deltas_blocking(
             "section" => "sections",
             "tag" => "tags",
             "activity" => "activities",
+            // checklist_item deltas are handled by delete_entity above for deletes.
+            // For creates/updates, checklist items arrive embedded in their parent
+            // task response (via GET /tasks/{id}), so no individual fetch is needed.
+            // The _ => continue fallback safely skips them.
             _ => continue,
         };
 
@@ -490,7 +494,29 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
         ],
     )
     .map(|_| ())
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // Sync task-tag associations from server response.
+    // The Go API returns tags as an array of tag ID strings.
+    if let Some(tags) = j.get("tags").and_then(|v| v.as_array()) {
+        conn.execute(
+            "DELETE FROM taskTags WHERE taskId = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        for tag_val in tags {
+            if let Some(tag_id) = tag_val.as_str() {
+                conn.execute(
+                    "INSERT OR IGNORE INTO taskTags (taskId, tagId) VALUES (?1, ?2)",
+                    rusqlite::params![id, tag_id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn upsert_project(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
