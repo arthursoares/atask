@@ -124,6 +124,8 @@ pub fn run() {
             // Settings commands
             commands::get_settings,
             commands::update_settings,
+            // Test commands
+            commands::reset_database,
             // Sync commands
             sync_commands::get_sync_status,
             sync_commands::trigger_sync,

@@ -1,11 +1,17 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   elementExists,
 } from "./helpers";
 
 describe("Empty States", () => {
   before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await waitForAppReady();
   });
 

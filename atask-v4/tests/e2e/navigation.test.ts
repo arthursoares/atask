@@ -1,7 +1,12 @@
-import { waitForAppReady, navigateTo, getViewTitle, pressKeys, elementExists } from "./helpers";
+import { waitForAppReady, resetDatabase, navigateTo, getViewTitle, pressKeys, elementExists } from "./helpers";
 
 describe("Navigation", () => {
   before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await waitForAppReady();
   });
 

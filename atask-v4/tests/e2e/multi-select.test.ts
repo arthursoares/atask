@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
@@ -14,6 +15,11 @@ describe("Multi-Select & Bulk Operations", () => {
     await createTaskViaUI("Multi A");
     await createTaskViaUI("Multi B");
     await createTaskViaUI("Multi C");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should Cmd+click to multi-select tasks", async () => {

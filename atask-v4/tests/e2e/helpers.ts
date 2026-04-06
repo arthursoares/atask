@@ -9,6 +9,13 @@
 // App lifecycle
 // ---------------------------------------------------------------------------
 
+/** Reset the database to a clean state (deletes all user data) */
+export async function resetDatabase() {
+  await browser.execute(() =>
+    (window as any).__TAURI_INTERNALS__.invoke("reset_database"),
+  );
+}
+
 /** Wait for the app to be fully loaded */
 export async function waitForAppReady() {
   await browser.waitUntil(

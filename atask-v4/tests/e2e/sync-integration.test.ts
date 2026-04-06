@@ -13,6 +13,7 @@
 
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
@@ -76,6 +77,11 @@ describe("Sync Integration — Bidirectional", () => {
       console.log("Could not authenticate — skipping");
       apiAvailable = false;
     }
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   describe("API → Client (server creates task)", () => {

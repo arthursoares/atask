@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   clickTask,
@@ -14,6 +15,11 @@ describe("Detail Panel", () => {
     await waitForAppReady();
     await navigateTo("Inbox");
     await createTaskViaUI("Detail Test");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should open when clicking a task", async () => {

@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   clickTask,
@@ -21,6 +22,11 @@ describe("QuickMovePicker", () => {
     await clickCommandPaletteItem("New Project");
     await browser.pause(500);
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should create a task to move", async () => {

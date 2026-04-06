@@ -1760,3 +1760,19 @@ pub fn update_settings(
 
     get_settings(db)
 }
+
+#[tauri::command]
+pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "DELETE FROM checklistItems;
+         DELETE FROM taskTags;
+         DELETE FROM tasks;
+         DELETE FROM sections;
+         DELETE FROM projects;
+         DELETE FROM areas;
+         DELETE FROM tags;
+         DELETE FROM pendingOps;"
+    )
+    .map_err(|e| e.to_string())
+}

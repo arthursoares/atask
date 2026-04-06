@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   getSidebarLabels,
   getSidebarAreaIds,
@@ -12,6 +13,11 @@ import {
 
 describe("Sidebar Management", () => {
   before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await waitForAppReady();
   });
 

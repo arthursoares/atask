@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
@@ -19,6 +20,11 @@ import {
 
 describe("Projects & Sections", () => {
   before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await waitForAppReady();
   });
 

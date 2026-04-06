@@ -17,6 +17,7 @@
 
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
@@ -162,6 +163,11 @@ describe("Sync Round-Trip", () => {
 
     await navigateTo("Inbox");
     await browser.pause(500);
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   // --- Outbound: Client → Server ---
