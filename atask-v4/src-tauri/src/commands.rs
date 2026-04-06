@@ -233,6 +233,26 @@ fn query_all_checklist_items(conn: &rusqlite::Connection) -> Result<Vec<Checklis
         .map_err(|e| e.to_string())
 }
 
+fn query_all_activities(conn: &rusqlite::Connection) -> Result<Vec<Activity>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, taskId, actorId, actorType, type, content, createdAt FROM activities ORDER BY createdAt ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Activity {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                actor_id: row.get(2)?,
+                actor_type: row.get(3)?,
+                activity_type: row.get(4)?,
+                content: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, String> {
     Ok(AppState {
         tasks: query_all_tasks(conn)?,
@@ -242,6 +262,7 @@ pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, Str
         tags: query_all_tags(conn)?,
         task_tags: query_all_task_tags(conn)?,
         checklist_items: query_all_checklist_items(conn)?,
+        activities: query_all_activities(conn)?,
     })
 }
 
@@ -1762,10 +1783,70 @@ pub fn update_settings(
 }
 
 #[tauri::command]
+pub fn get_task_activities(db: tauri::State<'_, Database>, task_id: String) -> Result<Vec<Activity>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, taskId, actorId, actorType, type, content, createdAt FROM activities WHERE taskId = ?1 ORDER BY createdAt ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([&task_id], |row| {
+            Ok(Activity {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                actor_id: row.get(2)?,
+                actor_type: row.get(3)?,
+                activity_type: row.get(4)?,
+                content: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_activity(
+    db: tauri::State<'_, Database>,
+    task_id: String,
+    actor_type: String,
+    activity_type: String,
+    content: String,
+) -> Result<Activity, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO activities (id, taskId, actorId, actorType, type, content, createdAt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![id, task_id, "local", actor_type, activity_type, content, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "actor_type": actor_type,
+        "type": activity_type,
+        "content": content,
+    })
+    .to_string();
+    queue_pending_op(&conn, "POST", &format!("/tasks/{}/activity", task_id), Some(&body))?;
+
+    Ok(Activity {
+        id,
+        task_id,
+        actor_id: Some("local".to_string()),
+        actor_type,
+        activity_type,
+        content,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
 pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     conn.execute_batch(
-        "DELETE FROM checklistItems;
+        "DELETE FROM activities;
+         DELETE FROM checklistItems;
          DELETE FROM taskTags;
          DELETE FROM tasks;
          DELETE FROM sections;

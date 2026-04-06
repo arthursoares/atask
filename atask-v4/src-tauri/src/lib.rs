@@ -121,6 +121,9 @@ pub fn run() {
             commands::toggle_checklist_item,
             commands::delete_checklist_item,
             commands::reorder_checklist_items,
+            // Activity commands
+            commands::get_task_activities,
+            commands::create_activity,
             // Settings commands
             commands::get_settings,
             commands::update_settings,
