@@ -92,6 +92,7 @@ pub fn run() {
             commands::create_project,
             commands::update_project,
             commands::complete_project,
+            commands::cancel_project,
             commands::reopen_project,
             commands::delete_project,
             commands::move_project_to_area,
@@ -115,12 +116,19 @@ pub fn run() {
             commands::delete_tag,
             commands::add_tag_to_task,
             commands::remove_tag_from_task,
+            commands::add_tag_to_project,
+            commands::remove_tag_from_project,
             // Checklist commands
             commands::create_checklist_item,
             commands::update_checklist_item,
             commands::toggle_checklist_item,
             commands::delete_checklist_item,
             commands::reorder_checklist_items,
+            // Location commands
+            commands::create_location,
+            commands::update_location,
+            commands::delete_location,
+            commands::set_task_location,
             // Activity commands
             commands::get_task_activities,
             commands::create_activity,

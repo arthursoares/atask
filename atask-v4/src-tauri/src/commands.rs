@@ -293,6 +293,26 @@ fn query_all_locations(conn: &rusqlite::Connection) -> Result<Vec<Location>, Str
         .map_err(|e| e.to_string())
 }
 
+fn read_location(conn: &rusqlite::Connection, id: &str) -> Result<Location, String> {
+    conn.query_row(
+        "SELECT id, name, latitude, longitude, radius, address, createdAt, updatedAt FROM locations WHERE id = ?1",
+        rusqlite::params![id],
+        |row| {
+            Ok(Location {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                latitude: row.get(2)?,
+                longitude: row.get(3)?,
+                radius: row.get(4)?,
+                address: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
 pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, String> {
     Ok(AppState {
         tasks: query_all_tasks(conn)?,
@@ -1974,6 +1994,107 @@ pub fn create_activity(
     })
 }
 
+// --- Location Commands ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLocationParams {
+    pub name: String,
+}
+
+#[tauri::command]
+pub fn create_location(
+    db: tauri::State<'_, Database>,
+    params: CreateLocationParams,
+) -> Result<Location, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO locations (id, name, createdAt, updatedAt) VALUES (?1, ?2, ?3, ?3)",
+        rusqlite::params![id, params.name, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let loc = read_location(&conn, &id)?;
+    let body = serde_json::json!({"id": loc.id, "name": loc.name}).to_string();
+    queue_pending_op(&conn, "POST", "/locations", Some(&body))?;
+    Ok(loc)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLocationParams {
+    pub id: String,
+    pub name: String,
+}
+
+#[tauri::command]
+pub fn update_location(
+    db: tauri::State<'_, Database>,
+    params: UpdateLocationParams,
+) -> Result<Location, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE locations SET name = ?1, updatedAt = ?2 WHERE id = ?3",
+        rusqlite::params![params.name, now, params.id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let loc = read_location(&conn, &params.id)?;
+    let body = serde_json::json!({"name": loc.name}).to_string();
+    queue_pending_op(&conn, "PUT", &format!("/locations/{}", loc.id), Some(&body))?;
+    Ok(loc)
+}
+
+#[tauri::command]
+pub fn delete_location(db: tauri::State<'_, Database>, id: String) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // Clear locationId on tasks that reference this location
+    conn.execute(
+        "UPDATE tasks SET locationId = NULL WHERE locationId = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute("DELETE FROM locations WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+
+    queue_pending_op(&conn, "DELETE", &format!("/locations/{}", id), None)?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_task_location(
+    db: tauri::State<'_, Database>,
+    task_id: String,
+    location_id: Option<String>,
+) -> Result<Task, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE tasks SET locationId = ?1, updatedAt = ?2 WHERE id = ?3",
+        rusqlite::params![location_id, now, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let task = query_task(&conn, &task_id)?;
+    let body = serde_json::json!({"id": location_id}).to_string();
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/tasks/{}/location", task_id),
+        Some(&body),
+    )?;
+    Ok(task)
+}
+
 #[tauri::command]
 pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
@@ -1987,6 +2108,7 @@ pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
          DELETE FROM projects;
          DELETE FROM areas;
          DELETE FROM tags;
+         DELETE FROM locations;
          DELETE FROM pendingOps;"
     )
     .map_err(|e| e.to_string())

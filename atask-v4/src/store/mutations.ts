@@ -7,12 +7,13 @@ export function setOnMutation(cb: () => void) { onMutation = cb; }
 
 function notifySync() { onMutation?.(); }
 import { $tasks, $taskTags } from './tasks';
-import { $projects } from './projects';
+import { $projects, $projectTags } from './projects';
 import { $areas } from './areas';
 import { $sections } from './sections';
 import { $tags } from './tags';
 import { $checklistItems } from './checklist';
 import { $activities } from './activities';
+import { $locations } from './locations';
 import {
   $activeView,
   $selectedTaskId,
@@ -36,6 +37,9 @@ import type {
   UpdateSectionParams,
   CreateTagParams,
   UpdateTagParams,
+  Location,
+  CreateLocationParams,
+  UpdateLocationParams,
   CreateChecklistItemParams,
   UpdateChecklistItemParams,
   ReorderMove,
@@ -92,6 +96,7 @@ function deleteProjectFromStores(projectId: string): void {
   $projects.set(removeItem($projects.get(), projectId));
   $tasks.set($tasks.get().filter((task) => task.projectId !== projectId));
   $sections.set($sections.get().filter((section) => section.projectId !== projectId));
+  $projectTags.set($projectTags.get().filter((pt) => pt.projectId !== projectId));
   removeTaskArtifacts(taskIds);
 
   if ($activeView.get() === `project-${projectId}`) {
@@ -102,6 +107,7 @@ function deleteProjectFromStores(projectId: string): void {
 function removeTagFromStores(tagId: string): void {
   $tags.set(removeItem($tags.get(), tagId));
   $taskTags.set($taskTags.get().filter((taskTag) => taskTag.tagId !== tagId));
+  $projectTags.set($projectTags.get().filter((pt) => pt.tagId !== tagId));
 
   const next = new Set($activeTagFilters.get());
   next.delete(tagId);
@@ -118,8 +124,10 @@ export async function loadAll(): Promise<void> {
   $sections.set(data.sections);
   $tags.set(data.tags);
   $taskTags.set(data.taskTags);
+  $projectTags.set(data.projectTags);
   $checklistItems.set(data.checklistItems);
   $activities.set(data.activities);
+  $locations.set(data.locations);
 }
 
 // --- Task actions ---
@@ -231,6 +239,12 @@ export async function updateProject(params: UpdateProjectParams): Promise<void> 
 export async function completeProject(id: string): Promise<void> {
   const project = await tauri.completeProject(id);
   $projects.set(replaceItem($projects.get(), project));
+}
+
+export async function cancelProject(id: string): Promise<void> {
+  const project = await tauri.cancelProject(id);
+  $projects.set(replaceItem($projects.get(), project));
+  notifySync();
 }
 
 export async function reopenProject(id: string): Promise<void> {
@@ -345,6 +359,20 @@ export async function removeTagFromTask(taskId: string, tagId: string): Promise<
   );
 }
 
+export async function addTagToProject(projectId: string, tagId: string): Promise<void> {
+  await tauri.addTagToProject(projectId, tagId);
+  $projectTags.set(appendItem($projectTags.get(), { projectId, tagId }));
+  notifySync();
+}
+
+export async function removeTagFromProject(projectId: string, tagId: string): Promise<void> {
+  await tauri.removeTagFromProject(projectId, tagId);
+  $projectTags.set(
+    $projectTags.get().filter((pt) => !(pt.projectId === projectId && pt.tagId === tagId)),
+  );
+  notifySync();
+}
+
 // --- Checklist actions ---
 
 export async function createChecklistItem(params: CreateChecklistItemParams): Promise<ChecklistItem> {
@@ -384,6 +412,37 @@ export async function createActivity(taskId: string, content: string): Promise<v
 export async function createMutationActivity(taskId: string, content: string): Promise<void> {
   const activity = await tauri.createActivityCommand(taskId, 'human', 'status_change', content);
   $activities.set([...$activities.get(), activity]);
+}
+
+// --- Sync mutations ---
+
+// --- Location actions ---
+
+export async function createLocation(params: CreateLocationParams): Promise<Location> {
+  const location = await tauri.createLocation(params);
+  $locations.set(appendItem($locations.get(), location));
+  notifySync();
+  return location;
+}
+
+export async function updateLocation(params: UpdateLocationParams): Promise<void> {
+  const location = await tauri.updateLocation(params);
+  $locations.set(replaceItem($locations.get(), location));
+  notifySync();
+}
+
+export async function deleteLocation(id: string): Promise<void> {
+  await tauri.deleteLocation(id);
+  $locations.set(removeItem($locations.get(), id));
+  // Clear locationId on tasks that referenced this location
+  $tasks.set($tasks.get().map((t) => (t.locationId === id ? { ...t, locationId: null } : t)));
+  notifySync();
+}
+
+export async function setTaskLocation(taskId: string, locationId: string | null): Promise<void> {
+  const task = await tauri.setTaskLocation(taskId, locationId);
+  $tasks.set(replaceItem($tasks.get(), task));
+  notifySync();
 }
 
 // --- Sync mutations ---

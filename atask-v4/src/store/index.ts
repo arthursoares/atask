@@ -1,11 +1,12 @@
 // Atoms
 export { $tasks, $taskTags, $tagsByTaskId } from './tasks';
-export { $projects, $activeProjects, useActiveProjects } from './projects';
+export { $projects, $projectTags, $tagsByProjectId, $activeProjects, useActiveProjects } from './projects';
 export { $areas, $activeAreas, useActiveAreas } from './areas';
 export { $sections, useSectionsForProject } from './sections';
 export { $tags, useTagsForTask } from './tags';
 export { $checklistItems, useChecklistForTask } from './checklist';
 export { $activities, useActivitiesForTask } from './activities';
+export { $locations } from './locations';
 
 // UI atoms
 export {
@@ -72,6 +73,7 @@ export {
   createProject,
   updateProject,
   completeProject,
+  cancelProject,
   reopenProject,
   deleteProject,
   moveProjectToArea,
@@ -92,6 +94,8 @@ export {
   deleteTag,
   addTagToTask,
   removeTagFromTask,
+  addTagToProject,
+  removeTagFromProject,
   createChecklistItem,
   updateChecklistItem,
   toggleChecklistItem,
@@ -99,5 +103,9 @@ export {
   reorderChecklistItems,
   createActivity,
   createMutationActivity,
+  createLocation,
+  updateLocation,
+  deleteLocation,
+  setTaskLocation,
   initialSync,
 } from './mutations';

@@ -17,6 +17,7 @@ pub struct Task {
     pub project_id: Option<String>,
     pub section_id: Option<String>,
     pub area_id: Option<String>,
+    pub location_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub sync_status: i32,
@@ -81,6 +82,13 @@ pub struct TaskTag {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectTag {
+    pub project_id: String,
+    pub tag_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ChecklistItem {
     pub id: String,
     pub title: String,
@@ -104,6 +112,19 @@ pub struct Activity {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+    pub id: String,
+    pub name: String,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub radius: Option<i32>,
+    pub address: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
@@ -113,6 +134,8 @@ pub struct AppState {
     pub sections: Vec<Section>,
     pub tags: Vec<Tag>,
     pub task_tags: Vec<TaskTag>,
+    pub project_tags: Vec<ProjectTag>,
     pub checklist_items: Vec<ChecklistItem>,
     pub activities: Vec<Activity>,
+    pub locations: Vec<Location>,
 }

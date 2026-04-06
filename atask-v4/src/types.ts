@@ -15,6 +15,7 @@ export interface Task {
   projectId: string | null;
   sectionId: string | null;
   areaId: string | null;
+  locationId: string | null;
   createdAt: string;
   updatedAt: string;
   syncStatus: number;
@@ -67,6 +68,11 @@ export interface TaskTag {
   tagId: string;
 }
 
+export interface ProjectTag {
+  projectId: string;
+  tagId: string;
+}
+
 export interface ChecklistItem {
   id: string;
   title: string;
@@ -87,6 +93,17 @@ export interface Activity {
   createdAt: string;
 }
 
+export interface Location {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  radius: number | null;
+  address: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppState {
   tasks: Task[];
   projects: Project[];
@@ -94,8 +111,10 @@ export interface AppState {
   sections: Section[];
   tags: Tag[];
   taskTags: TaskTag[];
+  projectTags: ProjectTag[];
   checklistItems: ChecklistItem[];
   activities: Activity[];
+  locations: Location[];
 }
 
 // Repeat rule (stored as JSON string in repeatRule field)
@@ -176,6 +195,15 @@ export interface CreateTagParams {
 export interface UpdateTagParams {
   id: string;
   title: string;
+}
+
+export interface CreateLocationParams {
+  name: string;
+}
+
+export interface UpdateLocationParams {
+  id: string;
+  name: string;
 }
 
 export interface CreateChecklistItemParams {

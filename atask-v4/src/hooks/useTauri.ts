@@ -10,6 +10,7 @@ import type {
   Tag,
   ChecklistItem,
   Activity,
+  Location,
   CreateTaskParams,
   UpdateTaskParams,
   CreateProjectParams,
@@ -20,6 +21,8 @@ import type {
   UpdateSectionParams,
   CreateTagParams,
   UpdateTagParams,
+  CreateLocationParams,
+  UpdateLocationParams,
   CreateChecklistItemParams,
   UpdateChecklistItemParams,
   ReorderMove,
@@ -94,6 +97,10 @@ export function completeProject(id: string): Promise<Project> {
 
 export function reopenProject(id: string): Promise<Project> {
   return invoke<Project>("reopen_project", { id });
+}
+
+export function cancelProject(id: string): Promise<Project> {
+  return invoke<Project>("cancel_project", { id });
 }
 
 export function deleteProject(id: string): Promise<void> {
@@ -185,6 +192,38 @@ export function removeTagFromTask(
   tagId: string,
 ): Promise<void> {
   return invoke<void>("remove_tag_from_task", { taskId, tagId });
+}
+
+export function addTagToProject(
+  projectId: string,
+  tagId: string,
+): Promise<void> {
+  return invoke<void>("add_tag_to_project", { projectId, tagId });
+}
+
+export function removeTagFromProject(
+  projectId: string,
+  tagId: string,
+): Promise<void> {
+  return invoke<void>("remove_tag_from_project", { projectId, tagId });
+}
+
+// --- Location commands ---
+
+export function createLocation(params: CreateLocationParams): Promise<Location> {
+  return invoke<Location>("create_location", { params });
+}
+
+export function updateLocation(params: UpdateLocationParams): Promise<Location> {
+  return invoke<Location>("update_location", { params });
+}
+
+export function deleteLocation(id: string): Promise<void> {
+  return invoke<void>("delete_location", { id });
+}
+
+export function setTaskLocation(taskId: string, locationId: string | null): Promise<Task> {
+  return invoke<Task>("set_task_location", { taskId, locationId });
 }
 
 // --- Checklist commands ---

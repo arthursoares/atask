@@ -199,6 +199,7 @@ fn delete_entity(conn: &Connection, entity_type: &str, entity_id: &str) -> Resul
         "tag" => "tags",
         "checklist_item" => "checklistItems",
         "activity" => "activities",
+        "location" => "locations",
         _ => return Ok(()),
     };
 
@@ -317,6 +318,7 @@ fn pull_deltas_blocking(
             "section" => "sections",
             "tag" => "tags",
             "activity" => "activities",
+            "location" => "locations",
             // checklist_item deltas are handled by delete_entity above for deletes.
             // For creates/updates, checklist items arrive embedded in their parent
             // task response (via GET /tasks/{id}), so no individual fetch is needed.
@@ -350,6 +352,7 @@ fn pull_deltas_blocking(
             "section" => upsert_section(&c, &json)?,
             "tag" => upsert_tag(&c, &json)?,
             "activity" => upsert_activity(&c, &json)?,
+            "location" => upsert_location(&c, &json)?,
             _ => {}
         }
     }
@@ -469,10 +472,10 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
         });
 
     conn.execute(
-        "INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus, repeatRule) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17) \
+        "INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, locationId, createdAt, updatedAt, syncStatus, repeatRule) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,0,?18) \
          ON CONFLICT(id) DO UPDATE SET \
-         title=?2, notes=?3, status=?4, schedule=?5, startDate=?6, deadline=?7, completedAt=?8, \"index\"=?9, todayIndex=?10, timeSlot=?11, projectId=?12, sectionId=?13, areaId=?14, updatedAt=?16, syncStatus=0, repeatRule=?17",
+         title=?2, notes=?3, status=?4, schedule=?5, startDate=?6, deadline=?7, completedAt=?8, \"index\"=?9, todayIndex=?10, timeSlot=?11, projectId=?12, sectionId=?13, areaId=?14, locationId=?15, updatedAt=?17, syncStatus=0, repeatRule=?18",
         rusqlite::params![
             id,
             s("title", "Title"),
@@ -488,6 +491,7 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
             opt_s("projectId", "ProjectID"),
             opt_s("sectionId", "SectionID"),
             opt_s("areaId", "AreaID"),
+            opt_s("locationId", "LocationID"),
             s("createdAt", "CreatedAt"),
             s("updatedAt", "UpdatedAt"),
             repeat_rule,
@@ -723,6 +727,54 @@ pub fn upsert_tag(conn: &Connection, j: &serde_json::Value) -> Result<(), String
     .map_err(|e| e.to_string())
 }
 
+pub fn upsert_location(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
+    let s = |key: &str, alt: &str| -> &str {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+    };
+    let opt_f = |key: &str, alt: &str| -> Option<f64> {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_f64() })
+    };
+    let opt_i = |key: &str, alt: &str| -> Option<i64> {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_i64() })
+    };
+    let opt_s = |key: &str, alt: &str| -> Option<&str> {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_str() })
+    };
+
+    let id = s("id", "ID");
+    if id.is_empty() {
+        return Ok(());
+    }
+
+    conn.execute(
+        "INSERT INTO locations (id, name, latitude, longitude, radius, address, createdAt, updatedAt) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8) \
+         ON CONFLICT(id) DO UPDATE SET \
+         name=?2, latitude=?3, longitude=?4, radius=?5, address=?6, updatedAt=?8",
+        rusqlite::params![
+            id,
+            s("name", "Name"),
+            opt_f("latitude", "Latitude"),
+            opt_f("longitude", "Longitude"),
+            opt_i("radius", "Radius"),
+            opt_s("address", "Address"),
+            s("createdAt", "CreatedAt"),
+            s("updatedAt", "UpdatedAt")
+        ],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -736,6 +788,10 @@ mod tests {
             .expect("settings migration");
         conn.execute_batch(include_str!("migrations/003_activities.sql"))
             .expect("activities migration");
+        conn.execute_batch(include_str!("migrations/004_locations.sql"))
+            .expect("locations migration");
+        // Add locationId to tasks (in-memory DB needs this explicitly)
+        let _ = conn.execute_batch("ALTER TABLE tasks ADD COLUMN locationId TEXT REFERENCES locations(id)");
         conn
     }
 

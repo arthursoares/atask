@@ -32,6 +32,29 @@ impl Database {
         conn.execute_batch(include_str!("migrations/001_schema.sql"))?;
         conn.execute_batch(include_str!("migrations/002_settings.sql"))?;
         conn.execute_batch(include_str!("migrations/003_activities.sql"))?;
+        conn.execute_batch(include_str!("migrations/004_locations.sql"))?;
+        // Add locationId column to tasks if it doesn't exist yet
+        Self::add_column_if_missing(&conn, "tasks", "locationId", "TEXT REFERENCES locations(id)")?;
+        conn.execute_batch(include_str!("migrations/005_project_tags.sql"))?;
+        Ok(())
+    }
+
+    fn add_column_if_missing(
+        conn: &Connection,
+        table: &str,
+        column: &str,
+        col_type: &str,
+    ) -> Result<()> {
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+        let has_column = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .any(|name| name.as_deref() == Ok(column));
+        if !has_column {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {} ADD COLUMN {} {}",
+                table, column, col_type
+            ))?;
+        }
         Ok(())
     }
 }
