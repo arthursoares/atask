@@ -9,6 +9,7 @@ import type {
   Section,
   Tag,
   ChecklistItem,
+  Activity,
   CreateTaskParams,
   UpdateTaskParams,
   CreateProjectParams,
@@ -213,6 +214,21 @@ export function reorderChecklistItems(
   moves: ReorderMove[],
 ): Promise<void> {
   return invoke<void>("reorder_checklist_items", { taskId, moves });
+}
+
+// --- Activity commands ---
+
+export function getTaskActivities(taskId: string): Promise<Activity[]> {
+  return invoke<Activity[]>("get_task_activities", { taskId });
+}
+
+export function createActivityCommand(
+  taskId: string,
+  actorType: string,
+  activityType: string,
+  content: string,
+): Promise<Activity> {
+  return invoke<Activity>("create_activity", { taskId, actorType, activityType, content });
 }
 
 // --- Settings commands ---

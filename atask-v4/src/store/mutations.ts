@@ -12,6 +12,7 @@ import { $areas } from './areas';
 import { $sections } from './sections';
 import { $tags } from './tags';
 import { $checklistItems } from './checklist';
+import { $activities } from './activities';
 import {
   $activeView,
   $selectedTaskId,
@@ -118,6 +119,7 @@ export async function loadAll(): Promise<void> {
   $tags.set(data.tags);
   $taskTags.set(data.taskTags);
   $checklistItems.set(data.checklistItems);
+  $activities.set(data.activities);
 }
 
 // --- Task actions ---
@@ -350,6 +352,19 @@ export async function deleteChecklistItem(id: string): Promise<void> {
 export async function reorderChecklistItems(taskId: string, moves: ReorderMove[]): Promise<void> {
   await tauri.reorderChecklistItems(taskId, moves);
   $checklistItems.set(applyReorder($checklistItems.get(), moves));
+}
+
+// --- Activity actions ---
+
+export async function createActivity(taskId: string, content: string): Promise<void> {
+  const activity = await tauri.createActivityCommand(taskId, 'human', 'comment', content);
+  $activities.set([...$activities.get(), activity]);
+  notifySync();
+}
+
+export async function createMutationActivity(taskId: string, content: string): Promise<void> {
+  const activity = await tauri.createActivityCommand(taskId, 'human', 'status_change', content);
+  $activities.set([...$activities.get(), activity]);
 }
 
 // --- Sync mutations ---
