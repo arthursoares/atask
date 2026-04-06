@@ -198,6 +198,7 @@ fn delete_entity(conn: &Connection, entity_type: &str, entity_id: &str) -> Resul
         "section" => "sections",
         "tag" => "tags",
         "checklist_item" => "checklistItems",
+        "activity" => "activities",
         _ => return Ok(()),
     };
 
@@ -315,6 +316,7 @@ fn pull_deltas_blocking(
             "area" => "areas",
             "section" => "sections",
             "tag" => "tags",
+            "activity" => "activities",
             _ => continue,
         };
 
@@ -326,10 +328,11 @@ fn pull_deltas_blocking(
 
         let resp = resp.map_err(|e| e.to_string())?;
         if !resp.status().is_success() {
-            return Err(format!(
-                "entity fetch failed for {entity_type}/{entity_id}: {}",
+            eprintln!(
+                "entity fetch failed for {entity_type}/{entity_id}: {} — skipping",
                 resp.status()
-            ));
+            );
+            continue;
         }
 
         let json = resp
@@ -342,6 +345,7 @@ fn pull_deltas_blocking(
             "area" => upsert_area(&c, &json)?,
             "section" => upsert_section(&c, &json)?,
             "tag" => upsert_tag(&c, &json)?,
+            "activity" => upsert_activity(&c, &json)?,
             _ => {}
         }
     }
@@ -625,6 +629,38 @@ pub fn upsert_section(conn: &Connection, j: &serde_json::Value) -> Result<(), St
     .map_err(|e| e.to_string())
 }
 
+pub fn upsert_activity(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
+    let s = |key: &str, alt: &str| -> &str {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+    };
+
+    let id = s("id", "ID");
+    if id.is_empty() {
+        return Ok(());
+    }
+
+    conn.execute(
+        "INSERT INTO activities (id, taskId, actorId, actorType, type, content, createdAt) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7) \
+         ON CONFLICT(id) DO UPDATE SET \
+         taskId=?2, actorId=?3, actorType=?4, type=?5, content=?6, createdAt=?7",
+        rusqlite::params![
+            id,
+            s("task_id", "TaskID"),
+            s("actor_id", "ActorID"),
+            s("actor_type", "ActorType"),
+            s("type", "Type"),
+            s("content", "Content"),
+            s("created_at", "CreatedAt")
+        ],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 pub fn upsert_tag(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     let s = |key: &str, alt: &str| -> &str {
         j.get(key)
@@ -672,6 +708,8 @@ mod tests {
             .expect("schema migration");
         conn.execute_batch(include_str!("migrations/002_settings.sql"))
             .expect("settings migration");
+        conn.execute_batch(include_str!("migrations/003_activities.sql"))
+            .expect("activities migration");
         conn
     }
 
