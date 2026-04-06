@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   pressKeys,
   isCommandPaletteOpen,
@@ -11,6 +12,11 @@ describe("Command Palette", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should open with ⇧⌘O", async () => {

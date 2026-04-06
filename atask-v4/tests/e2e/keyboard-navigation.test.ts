@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
@@ -15,6 +16,11 @@ describe("Keyboard Navigation & Shortcuts", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   describe("Arrow key navigation", () => {

@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS activities (
+  id TEXT PRIMARY KEY,
+  taskId TEXT NOT NULL,
+  actorId TEXT,
+  actorType TEXT NOT NULL,
+  type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
+);

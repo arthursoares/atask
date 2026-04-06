@@ -1,14 +1,25 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   getTaskTitles,
+  dragTaskByTitleToTaskByTitle,
+  finishPointerDrag,
+  getNativeTaskDragPayload,
+  startPointerDragTaskByTitle,
+  blurWindow,
 } from "./helpers";
 
 describe("Drag and Drop Reorder", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should create tasks for drag testing", async () => {
@@ -21,69 +32,93 @@ describe("Drag and Drop Reorder", () => {
     expect(titles).toContain("Drag C");
   });
 
-  it("should have draggable attribute on task rows", async () => {
-    const draggableCount = await browser.execute(() => {
-      const items = document.querySelectorAll(".task-item[draggable='true']");
-      return items.length;
+  it("should render slot drop zones only during an active pointer drag", async () => {
+    const beforeCount = await browser.execute(() => {
+      return document.querySelectorAll(".task-drop-zone").length;
     });
-    expect(draggableCount).toBeGreaterThanOrEqual(3);
+    expect(beforeCount).toBe(0);
+
+    const taskCount = await browser.execute(() => {
+      return document.querySelectorAll(".task-item").length;
+    });
+
+    await startPointerDragTaskByTitle("Drag C");
+
+    await browser.waitUntil(
+      async () => {
+        const zoneCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return zoneCount === taskCount + 1;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not appear during drag" },
+    );
+
+    const visibleSlotCount = await browser.execute(() => {
+      return document.querySelectorAll(".task-drop-slot").length;
+    });
+    expect(visibleSlotCount).toBe(0);
+
+    await finishPointerDrag();
+
+    await browser.waitUntil(
+      async () => {
+        const afterCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return afterCount === 0;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not clear after drag end" },
+    );
   });
 
-  it("should reorder tasks via simulated drag", async () => {
-    // Simulate drag reorder using HTML5 Drag API
-    // Drag "Drag C" above "Drag A"
-    const reordered = await browser.execute(() => {
-      const items = document.querySelectorAll(".task-item");
-      let dragItem: Element | null = null;
-      let dropTarget: Element | null = null;
+  it("should expose native task drag payloads for sidebar drops without starting pointer reorder", async () => {
+    const dragPayload = await getNativeTaskDragPayload("Drag B");
 
-      for (const item of items) {
-        const title = item.querySelector(".task-title");
-        if (title?.textContent === "Drag C") dragItem = item;
-        if (title?.textContent === "Drag A") dropTarget = item;
-      }
-
-      if (!dragItem || !dropTarget) return false;
-
-      // Create and dispatch drag events
-      const dataTransfer = new DataTransfer();
-      dataTransfer.setData("text/plain", "");
-
-      dragItem.dispatchEvent(
-        new DragEvent("dragstart", { bubbles: true, dataTransfer }),
-      );
-
-      dropTarget.dispatchEvent(
-        new DragEvent("dragover", { bubbles: true, dataTransfer }),
-      );
-
-      dropTarget.dispatchEvent(
-        new DragEvent("drop", { bubbles: true, dataTransfer }),
-      );
-
-      dragItem.dispatchEvent(
-        new DragEvent("dragend", { bubbles: true }),
-      );
-
-      return true;
-    });
-
-    await browser.pause(500);
-
-    // Note: HTML5 drag simulation in WebDriver may not fully work,
-    // but we verify the drag infrastructure exists
-    expect(reordered).toBe(true);
+    expect(dragPayload.draggable).toBe(true);
+    expect(dragPayload.typeCalls).toContain("text/plain");
+    expect(dragPayload.payload).toBeTruthy();
+    expect(dragPayload.visibleDropZoneCount).toBe(0);
   });
 
-  it("should have drop indicator support", async () => {
-    // Verify that dragover events create visual indicators
-    const hasDragState = await browser.execute(() => {
-      // useDragReorder sets dragState.dropIndex on dragover
-      // We can verify the hook exists by checking the drag handlers are wired up
-      const items = document.querySelectorAll(".task-item[draggable='true']");
-      return items.length > 0;
-    });
-    expect(hasDragState).toBe(true);
+  it("should reorder tasks with pointer dragging", async () => {
+    await dragTaskByTitleToTaskByTitle("Drag C", "Drag A");
+
+    const titles = await getTaskTitles();
+
+    const dragAIndex = titles.indexOf("Drag A");
+    const dragCIndex = titles.indexOf("Drag C");
+    expect(dragAIndex).toBeGreaterThanOrEqual(0);
+    expect(dragCIndex).toBeGreaterThanOrEqual(0);
+    expect(dragCIndex).toBeLessThan(dragAIndex);
+  });
+
+  it("should cancel pointer reorder when the window blurs during mouse dragging", async () => {
+    await startPointerDragTaskByTitle("Drag B");
+
+    await browser.waitUntil(
+      async () => {
+        const zoneCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return zoneCount > 0;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not appear during drag" },
+    );
+
+    await blurWindow();
+
+    await browser.waitUntil(
+      async () => {
+        const zoneCount = await browser.execute(() => {
+          return document.querySelectorAll(".task-drop-zone").length;
+        });
+        return zoneCount === 0;
+      },
+      { timeout: 3000, timeoutMsg: "Task drop zones did not clear after window blur" },
+    );
+
+    await finishPointerDrag();
   });
 
   after(async () => {

@@ -46,32 +46,15 @@ export default function BulkActionBar() {
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 'var(--sp-5)',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      background: 'var(--canvas-elevated)',
-      border: '1px solid var(--border-strong)',
-      borderRadius: 'var(--radius-xl)',
-      boxShadow: 'var(--shadow-popover)',
-      padding: 'var(--sp-2) var(--sp-4)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 'var(--sp-3)',
-      zIndex: 90,
-      fontSize: 'var(--text-sm)',
-    }}>
-      <span style={{ fontWeight: 700, color: 'var(--ink-primary)' }}>
-        {count} selected
-      </span>
-      <span style={{ width: 1, height: 16, background: 'var(--separator)' }} />
+    <div className="bulk-action-bar">
+      <span className="bulk-action-count">{count} selected</span>
+      <span className="bulk-action-separator" />
       <button className="bulk-bar-btn" onClick={handleComplete}>✓ Complete</button>
       <button className="bulk-bar-btn" onClick={handleScheduleToday}>★ Today</button>
       <button className="bulk-bar-btn" onClick={handleScheduleSomeday}>Someday</button>
       <button className="bulk-bar-btn" onClick={handleMoveToInbox}>Inbox</button>
       <button className="bulk-bar-btn" onClick={handleCancel}>Cancel</button>
-      <span style={{ width: 1, height: 16, background: 'var(--separator)' }} />
+      <span className="bulk-action-separator" />
       <button className="bulk-bar-btn danger" onClick={handleDelete}>Delete</button>
       <button className="bulk-bar-btn" onClick={handleClearSelection} title="Clear selection">✕</button>
     </div>

@@ -2,8 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 )
+
+const maxJSONBodyBytes = 1 << 20
 
 // RespondJSON writes a JSON response with the given status code.
 func RespondJSON(w http.ResponseWriter, status int, data any) {
@@ -38,5 +44,58 @@ func RespondError(w http.ResponseWriter, status int, message string) {
 
 // DecodeJSON reads and decodes JSON from the request body into dst.
 func DecodeJSON(r *http.Request, dst any) error {
-	return json.NewDecoder(r.Body).Decode(dst)
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxJSONBodyBytes+1))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	if dec.InputOffset() > maxJSONBodyBytes {
+		return fmt.Errorf("request body exceeds %d bytes", maxJSONBodyBytes)
+	}
+
+	if err := dec.Decode(&struct{}{}); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return errors.New("request body must contain a single JSON object")
+	}
+
+	return errors.New("request body must contain a single JSON object")
+}
+
+func decodeErrorMessage(err error) string {
+	if errors.Is(err, io.EOF) {
+		return "request body must not be empty"
+	}
+
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return "request body contains malformed JSON"
+	}
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		if typeErr.Field != "" {
+			return fmt.Sprintf("request body contains an invalid value for %q", typeErr.Field)
+		}
+		return "request body contains an invalid value"
+	}
+
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "json: unknown field "):
+		field := strings.TrimPrefix(msg, "json: unknown field ")
+		return fmt.Sprintf("request body contains unknown field %s", field)
+	case strings.HasPrefix(msg, "request body exceeds "):
+		return msg
+	case msg == "request body must contain a single JSON object":
+		return msg
+	default:
+		return "invalid JSON"
+	}
+}
+
+func RespondDecodeError(w http.ResponseWriter, err error) {
+	RespondError(w, http.StatusBadRequest, decodeErrorMessage(err))
 }

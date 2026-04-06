@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { updateTask } from '../store';
+import { PopoverPanel } from '../ui';
 
 interface WhenPickerProps {
   taskId: string;
@@ -102,11 +103,8 @@ export default function WhenPicker({
   const dayLabels = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
   return (
-    <div className="when-popover" ref={popoverRef}>
-      <div className="when-header">When</div>
-      <div className="when-sep" />
+    <PopoverPanel title="When" className="when-popover" popoverRef={popoverRef}>
 
-      {/* Today */}
       <div
         className={`when-option${isToday ? ' selected' : ''}`}
         onClick={handleToday}
@@ -173,6 +171,6 @@ export default function WhenPicker({
 
       <div className="when-sep" />
       <div className="when-clear" onClick={handleClear}>Clear</div>
-    </div>
+    </PopoverPanel>
   );
 }

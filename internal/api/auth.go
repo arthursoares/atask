@@ -36,7 +36,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *AuthHandler) UpdateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

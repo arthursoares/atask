@@ -1,5 +1,5 @@
 import { atom } from 'nanostores';
-import type { ActiveView } from '../types';
+import type { ActiveView, Task } from '../types';
 
 export interface SyncStatusState {
   isSyncing: boolean;
@@ -25,6 +25,90 @@ export const $showSearch = atom<boolean>(false);
 export const $showSidebar = atom<boolean>(true);
 export const $showShortcuts = atom<boolean>(false);
 export const $activeTagFilters = atom<Set<string>>(new Set());
+
+export interface TaskPointerDragState {
+  activeTaskId: string | null;
+  hoverTargetId: string | null;
+}
+
+export const $taskPointerDrag = atom<TaskPointerDragState>({
+  activeTaskId: null,
+  hoverTargetId: null,
+});
+
+export function startTaskPointerDrag(taskId: string) {
+  $taskPointerDrag.set({ activeTaskId: taskId, hoverTargetId: null });
+}
+
+export function setTaskPointerHoverTarget(targetId: string | null) {
+  $taskPointerDrag.set({ ...$taskPointerDrag.get(), hoverTargetId: targetId });
+}
+
+export function endTaskPointerDrag() {
+  $taskPointerDrag.set({ activeTaskId: null, hoverTargetId: null });
+}
+
+export function setActiveView(view: ActiveView) {
+  $activeView.set(view);
+}
+
+export function selectTask(taskId: string | null, options?: { preserveMultiSelection?: boolean }) {
+  if (taskId !== null && !options?.preserveMultiSelection) {
+    $selectedTaskIds.set(new Set());
+  }
+  $selectedTaskId.set(taskId);
+}
+
+export function clearSelectedTask() {
+  $selectedTaskId.set(null);
+}
+
+export function clearSelectedTasks() {
+  $selectedTaskIds.set(new Set());
+}
+
+export function openTaskEditor(taskId: string) {
+  $expandedTaskId.set(taskId);
+}
+
+export function closeTaskEditor() {
+  $expandedTaskId.set(null);
+}
+
+export function toggleTaskSelection(taskId: string) {
+  const next = new Set($selectedTaskIds.get());
+  if (next.has(taskId)) {
+    next.delete(taskId);
+  } else {
+    next.add(taskId);
+  }
+  $selectedTaskIds.set(next);
+}
+
+export function selectTaskRange(taskId: string, taskList: Task[]) {
+  const currentSelectedIds = $selectedTaskIds.get();
+  const currentSelectedId = $selectedTaskId.get();
+  const lastId =
+    currentSelectedId || (currentSelectedIds.size > 0 ? [...currentSelectedIds].pop() ?? null : null);
+
+  if (!lastId) {
+    selectTask(taskId);
+    return;
+  }
+
+  const lastIdx = taskList.findIndex((task) => task.id === lastId);
+  const currentIdx = taskList.findIndex((task) => task.id === taskId);
+
+  if (lastIdx < 0 || currentIdx < 0) {
+    selectTask(taskId);
+    return;
+  }
+
+  const start = Math.min(lastIdx, currentIdx);
+  const end = Math.max(lastIdx, currentIdx);
+  const range = taskList.slice(start, end + 1).map((task) => task.id);
+  $selectedTaskIds.set(new Set([...currentSelectedIds, ...range]));
+}
 
 export function toggleTagFilter(tagId: string) {
   const next = new Set($activeTagFilters.get());

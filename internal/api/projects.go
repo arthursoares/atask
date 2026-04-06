@@ -43,7 +43,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *ProjectHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *ProjectHandler) UpdateNotes(w http.ResponseWriter, r *http.Request) {
 		Notes string `json:"notes"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *ProjectHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
 		Date *string `json:"date"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -233,7 +233,7 @@ func (h *ProjectHandler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 		Color string `json:"color"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -255,7 +255,7 @@ func (h *ProjectHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {
 		ID *string `json:"id"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

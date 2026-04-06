@@ -6,10 +6,7 @@ import { resolve } from "path";
 function getAppBinaryPath(): string {
   const target = resolve("src-tauri/target/debug");
   if (platform() === "darwin") {
-    return resolve(
-      target,
-      "bundle/macos/atask.app/Contents/MacOS/atask-v4",
-    );
+    return resolve(target, "atask-v4");
   } else if (platform() === "win32") {
     return resolve(target, "atask-v4.exe");
   }

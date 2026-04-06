@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   clickTask,
@@ -21,6 +22,11 @@ describe("Detail Panel Interactions", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   describe("Title editing", () => {

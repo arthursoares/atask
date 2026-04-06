@@ -34,7 +34,7 @@ func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *TagHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+		RespondDecodeError(w, err)
 		return
 	}
 

@@ -47,7 +47,10 @@ pub fn get_sync_status(db: tauri::State<'_, Database>) -> Result<SyncStatus, Str
 }
 
 #[tauri::command]
-pub fn trigger_sync(db: tauri::State<'_, Database>, app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn trigger_sync(
+    db: tauri::State<'_, Database>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
     // Perform a full sync cycle: flush pending ops + pull deltas
     crate::sync::sync_now_blocking(&db.conn, &app_handle)
 }
@@ -113,7 +116,7 @@ fn pull_all_from_server(
         .map_err(|e| e.to_string())?;
 
     for task in &tasks {
-        crate::sync::upsert_task(conn, task);
+        crate::sync::upsert_task(conn, task)?;
     }
 
     // Fetch projects
@@ -126,7 +129,7 @@ fn pull_all_from_server(
         .map_err(|e| e.to_string())?;
 
     for project in &projects {
-        crate::sync::upsert_project(conn, project);
+        crate::sync::upsert_project(conn, project)?;
     }
 
     // Fetch areas
@@ -139,7 +142,7 @@ fn pull_all_from_server(
         .map_err(|e| e.to_string())?;
 
     for area in &areas {
-        crate::sync::upsert_area(conn, area);
+        crate::sync::upsert_area(conn, area)?;
     }
 
     // Fetch sections
@@ -152,7 +155,7 @@ fn pull_all_from_server(
         .map_err(|e| e.to_string())?;
 
     for section in &sections {
-        crate::sync::upsert_section(conn, section);
+        crate::sync::upsert_section(conn, section)?;
     }
 
     // Fetch tags
@@ -165,7 +168,7 @@ fn pull_all_from_server(
         .map_err(|e| e.to_string())?;
 
     for tag in &tags {
-        crate::sync::upsert_tag(conn, tag);
+        crate::sync::upsert_tag(conn, tag)?;
     }
 
     Ok(())
@@ -230,11 +233,12 @@ pub fn initial_sync(
 
     // Record last_sync_at
     let now = chrono::Utc::now().to_rfc3339();
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO settings (key, value) VALUES ('last_sync_at', ?1)
          ON CONFLICT(key) DO UPDATE SET value = ?1",
         rusqlite::params![now],
-    );
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }

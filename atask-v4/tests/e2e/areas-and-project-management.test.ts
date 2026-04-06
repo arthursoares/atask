@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   pressKeys,
   getSidebarLabels,
@@ -13,6 +14,11 @@ import {
 
 describe("Areas and Project Management", () => {
   before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await waitForAppReady();
   });
 

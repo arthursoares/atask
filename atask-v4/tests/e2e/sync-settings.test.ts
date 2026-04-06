@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   elementExists,
 } from "./helpers";
@@ -8,6 +9,11 @@ describe("Sync Settings", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Settings");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should show sync toggle", async () => {

@@ -1,27 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { $tags, $tagsByTaskId, addTagToTask, removeTagFromTask, createTag } from '../store/index';
+import { PopoverPanel } from '../ui';
 
 interface TagPickerProps {
   taskId: string;
   onClose: () => void;
 }
-
-const popoverStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: '100%',
-  left: 0,
-  marginTop: 6,
-  background: 'var(--canvas-elevated)',
-  border: '1px solid var(--border-strong)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: 'var(--shadow-popover)',
-  minWidth: 200,
-  padding: 0,
-  zIndex: 50,
-  overflow: 'hidden',
-  userSelect: 'none',
-};
 
 export default function TagPicker({ taskId, onClose }: TagPickerProps) {
   const tags = useStore($tags);
@@ -31,7 +16,6 @@ export default function TagPicker({ taskId, onClose }: TagPickerProps) {
 
   const [newTagInput, setNewTagInput] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Click-outside to close
   useEffect(() => {
@@ -67,89 +51,44 @@ export default function TagPicker({ taskId, onClose }: TagPickerProps) {
   };
 
   return (
-    <div style={popoverStyle} ref={popoverRef}>
-      {/* Header */}
-      <div
-        style={{
-          fontSize: 'var(--text-xs)',
-          fontWeight: 700,
-          color: 'var(--ink-tertiary)',
-          padding: 'var(--sp-3) var(--sp-4) var(--sp-2)',
-          textAlign: 'center',
-        }}
-      >
-        Tags
-      </div>
-      <div style={{ height: 1, background: 'var(--separator)' }} />
-
-      {/* Tag list */}
+    <PopoverPanel title="Tags" popoverRef={popoverRef}>
       {tags.length === 0 && (
-        <div
-          style={{
-            fontSize: 'var(--text-sm)',
-            color: 'var(--ink-quaternary)',
-            padding: 'var(--sp-3) var(--sp-4)',
-            textAlign: 'center',
-          }}
-        >
+        <div className="ui-picker-empty-state">
           No tags yet
         </div>
       )}
       {tags.map((tag) => {
         const checked = taskTagIds.has(tag.id);
         return (
-          <div
+          <button
             key={tag.id}
+            type="button"
+            className="ui-picker-row"
             onClick={() => handleToggle(tag.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--sp-3)',
-              padding: '5px var(--sp-4)',
-              fontSize: 'var(--text-base)',
-              color: 'var(--ink-primary)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-hover)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = '';
-            }}
           >
             <input
               type="checkbox"
               checked={checked}
               readOnly
-              style={{ pointerEvents: 'none' }}
+              className="ui-picker-checkbox"
             />
-            <span>{tag.title}</span>
-          </div>
+            <span className="ui-picker-label">{tag.title}</span>
+          </button>
         );
       })}
 
-      <div style={{ height: 1, background: 'var(--separator)' }} />
+      <div className="ui-popover-separator" />
 
-      {/* New tag input */}
-      <div style={{ padding: 'var(--sp-2) var(--sp-4)' }}>
+      <div className="ui-picker-input-wrap">
         <input
-          ref={inputRef}
           type="text"
+          className="ui-picker-input"
           placeholder="New tag…"
           value={newTagInput}
           onChange={(e) => setNewTagInput(e.target.value)}
           onKeyDown={handleNewTagKeyDown}
-          style={{
-            width: '100%',
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--ink-primary)',
-            fontFamily: 'inherit',
-          }}
         />
       </div>
-    </div>
+    </PopoverPanel>
   );
 }

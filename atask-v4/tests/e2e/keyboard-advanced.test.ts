@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   clickTask,
@@ -14,6 +15,11 @@ describe("Advanced Keyboard Shortcuts", () => {
   before(async () => {
     await waitForAppReady();
     await navigateTo("Inbox");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   describe("Select all (Cmd+A)", () => {

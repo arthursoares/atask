@@ -5,6 +5,7 @@ export { $areas, $activeAreas, useActiveAreas } from './areas';
 export { $sections, useSectionsForProject } from './sections';
 export { $tags, useTagsForTask } from './tags';
 export { $checklistItems, useChecklistForTask } from './checklist';
+export { $activities, useActivitiesForTask } from './activities';
 
 // UI atoms
 export {
@@ -18,11 +19,23 @@ export {
   $showSidebar,
   $showShortcuts,
   $activeTagFilters,
+  $taskPointerDrag,
+  setActiveView,
+  selectTask,
+  clearSelectedTask,
+  clearSelectedTasks,
+  openTaskEditor,
+  closeTaskEditor,
+  toggleTaskSelection,
+  selectTaskRange,
   toggleTagFilter,
   clearTagFilters,
+  startTaskPointerDrag,
+  endTaskPointerDrag,
+  setTaskPointerHoverTarget,
   $syncStatus,
 } from './ui';
-export type { SyncStatusState } from './ui';
+export type { SyncStatusState, TaskPointerDragState } from './ui';
 
 // Selectors
 export {
@@ -84,5 +97,7 @@ export {
   toggleChecklistItem,
   deleteChecklistItem,
   reorderChecklistItems,
+  createActivity,
+  createMutationActivity,
   initialSync,
 } from './mutations';

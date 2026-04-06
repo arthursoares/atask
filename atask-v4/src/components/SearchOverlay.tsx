@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useStore } from "@nanostores/react";
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useStore } from '@nanostores/react';
 import {
   $tasks,
   $projects,
   $showSearch,
-  $activeView,
-  $selectedTaskId,
-} from "../store/index";
-import type { Task, Project } from "../types";
+  setActiveView,
+  selectTask,
+} from '../store/index';
+import type { Task, Project } from '../types';
 
 interface SearchResult {
   type: "task" | "project";
@@ -139,20 +139,20 @@ export default function SearchOverlay() {
 
   const handleSelect = useCallback(
     (result: SearchResult) => {
-      if (result.type === "project" && result.project) {
-        $activeView.set(`project-${result.project.id}`);
-      } else if (result.type === "task" && result.task) {
+      if (result.type === 'project' && result.project) {
+        setActiveView(`project-${result.project.id}`);
+      } else if (result.type === 'task' && result.task) {
         const task = result.task;
         if (task.projectId) {
-          $activeView.set(`project-${task.projectId}`);
+          setActiveView(`project-${task.projectId}`);
         } else if (task.schedule === 0) {
-          $activeView.set("inbox");
+          setActiveView('inbox');
         } else if (task.schedule === 1) {
-          $activeView.set("today");
+          setActiveView('today');
         } else if (task.schedule === 2) {
-          $activeView.set("someday");
+          setActiveView('someday');
         }
-        $selectedTaskId.set(task.id);
+        selectTask(task.id);
       }
       handleClose();
     },
@@ -219,27 +219,17 @@ export default function SearchOverlay() {
                 <span className="cmd-item-label">
                   {result.title}
                   {result.projectName && (
-                    <span style={{ opacity: 0.5, marginLeft: 8, fontSize: "0.85em" }}>
+                    <span className="cmd-item-meta">
                       {result.projectName}
                     </span>
                   )}
                   {result.snippet && (
-                    <span
-                      style={{
-                        display: "block",
-                        opacity: 0.4,
-                        fontSize: "0.8em",
-                        marginTop: 2,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
+                    <span className="cmd-item-snippet">
                       {result.snippet}
                     </span>
                   )}
                 </span>
-                <span className="cmd-item-shortcut" style={{ textTransform: "capitalize" }}>
+                <span className="cmd-item-shortcut cmd-item-type">
                   {result.type}
                 </span>
               </div>

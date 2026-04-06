@@ -3,7 +3,12 @@ use crate::models::*;
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-fn queue_pending_op(conn: &rusqlite::Connection, method: &str, path: &str, body: Option<&str>) {
+fn queue_pending_op(
+    conn: &rusqlite::Connection,
+    method: &str,
+    path: &str,
+    body: Option<&str>,
+) -> Result<(), String> {
     let enabled: String = conn
         .query_row(
             "SELECT value FROM settings WHERE key = 'sync_enabled'",
@@ -12,13 +17,15 @@ fn queue_pending_op(conn: &rusqlite::Connection, method: &str, path: &str, body:
         )
         .unwrap_or_default();
     if enabled != "true" {
-        return;
+        return Ok(());
     }
     let now = chrono::Utc::now().to_rfc3339();
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO pendingOps (method, path, body, createdAt, synced) VALUES (?1, ?2, ?3, ?4, 0)",
         rusqlite::params![method, path, body, now],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,7 +212,9 @@ fn query_all_task_tags(conn: &rusqlite::Connection) -> Result<Vec<TaskTag>, Stri
 
 fn query_all_checklist_items(conn: &rusqlite::Connection) -> Result<Vec<ChecklistItem>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, title, status, taskId, \"index\", createdAt, updatedAt FROM checklistItems")
+        .prepare(
+            "SELECT id, title, status, taskId, \"index\", createdAt, updatedAt FROM checklistItems",
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -224,6 +233,26 @@ fn query_all_checklist_items(conn: &rusqlite::Connection) -> Result<Vec<Checklis
         .map_err(|e| e.to_string())
 }
 
+fn query_all_activities(conn: &rusqlite::Connection) -> Result<Vec<Activity>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, taskId, actorId, actorType, type, content, createdAt FROM activities ORDER BY createdAt ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Activity {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                actor_id: row.get(2)?,
+                actor_type: row.get(3)?,
+                activity_type: row.get(4)?,
+                content: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, String> {
     Ok(AppState {
         tasks: query_all_tasks(conn)?,
@@ -233,6 +262,7 @@ pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, Str
         tags: query_all_tags(conn)?,
         task_tags: query_all_task_tags(conn)?,
         checklist_items: query_all_checklist_items(conn)?,
+        activities: query_all_activities(conn)?,
     })
 }
 
@@ -242,7 +272,10 @@ pub fn load_all(db: tauri::State<'_, Database>) -> Result<AppState, String> {
     load_all_impl(&conn)
 }
 
-pub(crate) fn create_task_impl(conn: &rusqlite::Connection, params: CreateTaskParams) -> Result<Task, String> {
+pub(crate) fn create_task_impl(
+    conn: &rusqlite::Connection,
+    params: CreateTaskParams,
+) -> Result<Task, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -287,7 +320,7 @@ pub fn create_task(
     let task = create_task_impl(&conn, params)?;
     // Send minimal JSON with id + title for the Go API
     let body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
-    queue_pending_op(&conn, "POST", "/tasks", Some(&body));
+    queue_pending_op(&conn, "POST", "/tasks", Some(&body))?;
     Ok(task)
 }
 
@@ -408,7 +441,7 @@ pub(crate) fn complete_task_impl(conn: &rusqlite::Connection, id: &str) -> Resul
 pub fn complete_task(db: tauri::State<'_, Database>, id: String) -> Result<Task, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = complete_task_impl(&conn, &id)?;
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/complete", id), None);
+    queue_pending_op(&conn, "POST", &format!("/tasks/{}/complete", id), None)?;
     Ok(task)
 }
 
@@ -428,7 +461,7 @@ pub(crate) fn cancel_task_impl(conn: &rusqlite::Connection, id: &str) -> Result<
 pub fn cancel_task(db: tauri::State<'_, Database>, id: String) -> Result<Task, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = cancel_task_impl(&conn, &id)?;
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/cancel", id), None);
+    queue_pending_op(&conn, "POST", &format!("/tasks/{}/cancel", id), None)?;
     Ok(task)
 }
 
@@ -448,7 +481,7 @@ pub(crate) fn reopen_task_impl(conn: &rusqlite::Connection, id: &str) -> Result<
 pub fn reopen_task(db: tauri::State<'_, Database>, id: String) -> Result<Task, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = reopen_task_impl(&conn, &id)?;
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/reopen", id), None);
+    queue_pending_op(&conn, "POST", &format!("/tasks/{}/reopen", id), None)?;
     Ok(task)
 }
 
@@ -561,7 +594,7 @@ pub fn update_task(
 
     let task = query_task(&conn, &params.id)?;
     let body = serde_json::to_string(&task).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/tasks/{}", task.id), Some(&body));
+    queue_pending_op(&conn, "PUT", &format!("/tasks/{}", task.id), Some(&body))?;
     Ok(task)
 }
 
@@ -617,7 +650,7 @@ pub fn duplicate_task(db: tauri::State<'_, Database>, id: String) -> Result<Task
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let task = duplicate_task_impl(&conn, &id)?;
     let body = serde_json::json!({"id": task.id, "title": task.title}).to_string();
-    queue_pending_op(&conn, "POST", "/tasks", Some(&body));
+    queue_pending_op(&conn, "POST", "/tasks", Some(&body))?;
     Ok(task)
 }
 
@@ -634,11 +667,8 @@ pub(crate) fn delete_task_impl(conn: &rusqlite::Connection, id: &str) -> Result<
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "DELETE FROM tasks WHERE id = ?1",
-        rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -647,7 +677,7 @@ pub(crate) fn delete_task_impl(conn: &rusqlite::Connection, id: &str) -> Result<
 pub fn delete_task(db: tauri::State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     delete_task_impl(&conn, &id)?;
-    queue_pending_op(&conn, "DELETE", &format!("/tasks/{}", id), None);
+    queue_pending_op(&conn, "DELETE", &format!("/tasks/{}", id), None)?;
     Ok(())
 }
 
@@ -671,7 +701,12 @@ pub fn reorder_tasks(
         )
         .map_err(|e| e.to_string())?;
         let index_json = serde_json::json!({"index": m.index}).to_string();
-        queue_pending_op(&conn, "PUT", &format!("/tasks/{}/reorder", m.id), Some(&index_json));
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/tasks/{}/reorder", m.id),
+            Some(&index_json),
+        )?;
     }
     Ok(())
 }
@@ -692,7 +727,12 @@ pub fn set_today_index(
     .map_err(|e| e.to_string())?;
 
     let index_json = serde_json::json!({"today_index": index}).to_string();
-    queue_pending_op(&conn, "PUT", &format!("/tasks/{}/today-index", id), Some(&index_json));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/tasks/{}/today-index", id),
+        Some(&index_json),
+    )?;
 
     query_task(&conn, &id)
 }
@@ -713,7 +753,12 @@ pub fn move_task_to_section(
     .map_err(|e| e.to_string())?;
 
     let section_json = serde_json::json!({"section_id": section_id}).to_string();
-    queue_pending_op(&conn, "PUT", &format!("/tasks/{}/section", task_id), Some(&section_json));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/tasks/{}/section", task_id),
+        Some(&section_json),
+    )?;
 
     query_task(&conn, &task_id)
 }
@@ -829,7 +874,10 @@ pub struct CreateProjectParams {
     pub area_id: Option<String>,
 }
 
-pub(crate) fn create_project_impl(conn: &rusqlite::Connection, params: CreateProjectParams) -> Result<Project, String> {
+pub(crate) fn create_project_impl(
+    conn: &rusqlite::Connection,
+    params: CreateProjectParams,
+) -> Result<Project, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let color = params.color.unwrap_or_default();
@@ -851,7 +899,7 @@ pub fn create_project(
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let project = create_project_impl(&conn, params)?;
     let body = serde_json::json!({"id": project.id, "title": project.title}).to_string();
-    queue_pending_op(&conn, "POST", "/projects", Some(&body));
+    queue_pending_op(&conn, "POST", "/projects", Some(&body))?;
     Ok(project)
 }
 
@@ -911,7 +959,12 @@ pub fn update_project(
 
     let project = read_project(&conn, &params.id)?;
     let body = serde_json::to_string(&project).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/projects/{}", project.id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/projects/{}", project.id),
+        Some(&body),
+    )?;
     Ok(project)
 }
 
@@ -926,7 +979,7 @@ pub fn complete_project(db: tauri::State<'_, Database>, id: String) -> Result<Pr
     )
     .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "POST", &format!("/projects/{}/complete", id), None);
+    queue_pending_op(&conn, "POST", &format!("/projects/{}/complete", id), None)?;
 
     read_project(&conn, &id)
 }
@@ -942,7 +995,7 @@ pub fn reopen_project(db: tauri::State<'_, Database>, id: String) -> Result<Proj
     )
     .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "POST", &format!("/projects/{}/reopen", id), None);
+    queue_pending_op(&conn, "POST", &format!("/projects/{}/reopen", id), None)?;
 
     read_project(&conn, &id)
 }
@@ -962,11 +1015,8 @@ pub(crate) fn delete_project_impl(conn: &rusqlite::Connection, id: &str) -> Resu
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "DELETE FROM projects WHERE id = ?1",
-        rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -975,7 +1025,7 @@ pub(crate) fn delete_project_impl(conn: &rusqlite::Connection, id: &str) -> Resu
 pub fn delete_project(db: tauri::State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     delete_project_impl(&conn, &id)?;
-    queue_pending_op(&conn, "DELETE", &format!("/projects/{}", id), None);
+    queue_pending_op(&conn, "DELETE", &format!("/projects/{}", id), None)?;
     Ok(())
 }
 
@@ -995,7 +1045,12 @@ pub fn move_project_to_area(
     .map_err(|e| e.to_string())?;
 
     let area_json = serde_json::json!({"area_id": area_id}).to_string();
-    queue_pending_op(&conn, "PUT", &format!("/projects/{}/area", project_id), Some(&area_json));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/projects/{}/area", project_id),
+        Some(&area_json),
+    )?;
 
     read_project(&conn, &project_id)
 }
@@ -1013,7 +1068,12 @@ pub fn reorder_projects(
         )
         .map_err(|e| e.to_string())?;
         let index_json = serde_json::json!({"index": m.index}).to_string();
-        queue_pending_op(&conn, "PUT", &format!("/projects/{}/reorder", m.id), Some(&index_json));
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/projects/{}/reorder", m.id),
+            Some(&index_json),
+        )?;
     }
     Ok(())
 }
@@ -1043,7 +1103,7 @@ pub fn create_area(
 
     let area = read_area(&conn, &id)?;
     let body = serde_json::json!({"id": area.id, "title": area.title}).to_string();
-    queue_pending_op(&conn, "POST", "/areas", Some(&body));
+    queue_pending_op(&conn, "POST", "/areas", Some(&body))?;
     Ok(area)
 }
 
@@ -1070,7 +1130,7 @@ pub fn update_area(
 
     let area = read_area(&conn, &params.id)?;
     let body = serde_json::to_string(&area).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/areas/{}", area.id), Some(&body));
+    queue_pending_op(&conn, "PUT", &format!("/areas/{}", area.id), Some(&body))?;
     Ok(area)
 }
 
@@ -1091,13 +1151,10 @@ pub fn delete_area(db: tauri::State<'_, Database>, id: String) -> Result<(), Str
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "DELETE FROM areas WHERE id = ?1",
-        rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM areas WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "DELETE", &format!("/areas/{}", id), None);
+    queue_pending_op(&conn, "DELETE", &format!("/areas/{}", id), None)?;
 
     Ok(())
 }
@@ -1114,8 +1171,12 @@ pub fn toggle_area_archived(db: tauri::State<'_, Database>, id: String) -> Resul
     .map_err(|e| e.to_string())?;
 
     let area = read_area(&conn, &id)?;
-    let action = if area.archived { "archive" } else { "unarchive" };
-    queue_pending_op(&conn, "POST", &format!("/areas/{}/{}", id, action), None);
+    let action = if area.archived {
+        "archive"
+    } else {
+        "unarchive"
+    };
+    queue_pending_op(&conn, "POST", &format!("/areas/{}/{}", id, action), None)?;
     Ok(area)
 }
 
@@ -1132,7 +1193,12 @@ pub fn reorder_areas(
         )
         .map_err(|e| e.to_string())?;
         let index_json = serde_json::json!({"index": m.index}).to_string();
-        queue_pending_op(&conn, "PUT", &format!("/areas/{}/reorder", m.id), Some(&index_json));
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/areas/{}/reorder", m.id),
+            Some(&index_json),
+        )?;
     }
     Ok(())
 }
@@ -1146,7 +1212,10 @@ pub struct CreateSectionParams {
     pub project_id: String,
 }
 
-pub(crate) fn create_section_impl(conn: &rusqlite::Connection, params: CreateSectionParams) -> Result<Section, String> {
+pub(crate) fn create_section_impl(
+    conn: &rusqlite::Connection,
+    params: CreateSectionParams,
+) -> Result<Section, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
@@ -1168,7 +1237,12 @@ pub fn create_section(
     let project_id = params.project_id.clone();
     let section = create_section_impl(&conn, params)?;
     let body = serde_json::to_string(&section).unwrap_or_default();
-    queue_pending_op(&conn, "POST", &format!("/projects/{}/sections", project_id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/projects/{}/sections", project_id),
+        Some(&body),
+    )?;
     Ok(section)
 }
 
@@ -1213,7 +1287,12 @@ pub fn update_section(
 
     let section = read_section(&conn, &params.id)?;
     let body = serde_json::to_string(&section).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/projects/{}/sections/{}", section.project_id, section.id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/projects/{}/sections/{}", section.project_id, section.id),
+        Some(&body),
+    )?;
     Ok(section)
 }
 
@@ -1231,18 +1310,23 @@ pub fn delete_section(db: tauri::State<'_, Database>, id: String) -> Result<(), 
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "DELETE FROM sections WHERE id = ?1",
-        rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM sections WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "DELETE", &format!("/projects/{}/sections/{}", section.project_id, id), None);
+    queue_pending_op(
+        &conn,
+        "DELETE",
+        &format!("/projects/{}/sections/{}", section.project_id, id),
+        None,
+    )?;
 
     Ok(())
 }
 
-pub(crate) fn toggle_section_collapsed_impl(conn: &rusqlite::Connection, id: &str) -> Result<Section, String> {
+pub(crate) fn toggle_section_collapsed_impl(
+    conn: &rusqlite::Connection,
+    id: &str,
+) -> Result<Section, String> {
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
@@ -1280,7 +1364,12 @@ pub fn toggle_section_archived(
 
     let section = read_section(&conn, &id)?;
     let body = serde_json::to_string(&section).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/projects/{}/sections/{}", section.project_id, section.id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/projects/{}/sections/{}", section.project_id, section.id),
+        Some(&body),
+    )?;
     Ok(section)
 }
 
@@ -1298,7 +1387,12 @@ pub fn reorder_sections(
         )
         .map_err(|e| e.to_string())?;
         let index_json = serde_json::json!({"index": m.index}).to_string();
-        queue_pending_op(&conn, "PUT", &format!("/projects/{}/sections/{}/reorder", project_id, m.id), Some(&index_json));
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/projects/{}/sections/{}/reorder", project_id, m.id),
+            Some(&index_json),
+        )?;
     }
     Ok(())
 }
@@ -1311,7 +1405,10 @@ pub struct CreateTagParams {
     pub title: String,
 }
 
-pub(crate) fn create_tag_impl(conn: &rusqlite::Connection, params: CreateTagParams) -> Result<Option<Tag>, String> {
+pub(crate) fn create_tag_impl(
+    conn: &rusqlite::Connection,
+    params: CreateTagParams,
+) -> Result<Option<Tag>, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
@@ -1340,7 +1437,7 @@ pub fn create_tag(
     let tag = create_tag_impl(&conn, params)?;
     if let Some(ref t) = tag {
         let body = serde_json::to_string(t).unwrap_or_default();
-        queue_pending_op(&conn, "POST", "/tags", Some(&body));
+        queue_pending_op(&conn, "POST", "/tags", Some(&body))?;
     }
     Ok(tag)
 }
@@ -1353,10 +1450,7 @@ pub struct UpdateTagParams {
 }
 
 #[tauri::command]
-pub fn update_tag(
-    db: tauri::State<'_, Database>,
-    params: UpdateTagParams,
-) -> Result<Tag, String> {
+pub fn update_tag(db: tauri::State<'_, Database>, params: UpdateTagParams) -> Result<Tag, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let now = Utc::now().to_rfc3339();
 
@@ -1368,7 +1462,7 @@ pub fn update_tag(
 
     let tag = read_tag(&conn, &params.id)?;
     let body = serde_json::to_string(&tag).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/tags/{}", tag.id), Some(&body));
+    queue_pending_op(&conn, "PUT", &format!("/tags/{}", tag.id), Some(&body))?;
     Ok(tag)
 }
 
@@ -1382,13 +1476,10 @@ pub fn delete_tag(db: tauri::State<'_, Database>, id: String) -> Result<(), Stri
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "DELETE FROM tags WHERE id = ?1",
-        rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tags WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "DELETE", &format!("/tags/{}", id), None);
+    queue_pending_op(&conn, "DELETE", &format!("/tags/{}", id), None)?;
 
     Ok(())
 }
@@ -1407,7 +1498,12 @@ pub fn add_tag_to_task(
     )
     .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/tags/{}", task_id, tag_id), None);
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/tasks/{}/tags/{}", task_id, tag_id),
+        None,
+    )?;
 
     Ok(())
 }
@@ -1426,7 +1522,12 @@ pub fn remove_tag_from_task(
     )
     .map_err(|e| e.to_string())?;
 
-    queue_pending_op(&conn, "DELETE", &format!("/tasks/{}/tags/{}", task_id, tag_id), None);
+    queue_pending_op(
+        &conn,
+        "DELETE",
+        &format!("/tasks/{}/tags/{}", task_id, tag_id),
+        None,
+    )?;
 
     Ok(())
 }
@@ -1440,7 +1541,10 @@ pub struct CreateChecklistItemParams {
     pub task_id: String,
 }
 
-pub(crate) fn create_checklist_item_impl(conn: &rusqlite::Connection, params: CreateChecklistItemParams) -> Result<ChecklistItem, String> {
+pub(crate) fn create_checklist_item_impl(
+    conn: &rusqlite::Connection,
+    params: CreateChecklistItemParams,
+) -> Result<ChecklistItem, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
@@ -1462,7 +1566,12 @@ pub fn create_checklist_item(
     let task_id = params.task_id.clone();
     let item = create_checklist_item_impl(&conn, params)?;
     let body = serde_json::to_string(&item).unwrap_or_default();
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/checklist", task_id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/tasks/{}/checklist", task_id),
+        Some(&body),
+    )?;
     Ok(item)
 }
 
@@ -1489,11 +1598,19 @@ pub fn update_checklist_item(
 
     let item = read_checklist_item(&conn, &params.id)?;
     let body = serde_json::to_string(&item).unwrap_or_default();
-    queue_pending_op(&conn, "PUT", &format!("/tasks/{}/checklist/{}", item.task_id, item.id), Some(&body));
+    queue_pending_op(
+        &conn,
+        "PUT",
+        &format!("/tasks/{}/checklist/{}", item.task_id, item.id),
+        Some(&body),
+    )?;
     Ok(item)
 }
 
-pub(crate) fn toggle_checklist_item_impl(conn: &rusqlite::Connection, id: &str) -> Result<ChecklistItem, String> {
+pub(crate) fn toggle_checklist_item_impl(
+    conn: &rusqlite::Connection,
+    id: &str,
+) -> Result<ChecklistItem, String> {
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
@@ -1512,12 +1629,24 @@ pub fn toggle_checklist_item(
 ) -> Result<ChecklistItem, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let item = toggle_checklist_item_impl(&conn, &id)?;
-    let action = if item.status == 1 { "complete" } else { "uncomplete" };
-    queue_pending_op(&conn, "POST", &format!("/tasks/{}/checklist/{}/{}", item.task_id, item.id, action), None);
+    let action = if item.status == 1 {
+        "complete"
+    } else {
+        "uncomplete"
+    };
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/tasks/{}/checklist/{}/{}", item.task_id, item.id, action),
+        None,
+    )?;
     Ok(item)
 }
 
-pub(crate) fn delete_checklist_item_impl(conn: &rusqlite::Connection, id: &str) -> Result<(), String> {
+pub(crate) fn delete_checklist_item_impl(
+    conn: &rusqlite::Connection,
+    id: &str,
+) -> Result<(), String> {
     conn.execute(
         "DELETE FROM checklistItems WHERE id = ?1",
         rusqlite::params![id],
@@ -1532,7 +1661,12 @@ pub fn delete_checklist_item(db: tauri::State<'_, Database>, id: String) -> Resu
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let item = read_checklist_item(&conn, &id)?;
     delete_checklist_item_impl(&conn, &id)?;
-    queue_pending_op(&conn, "DELETE", &format!("/tasks/{}/checklist/{}", item.task_id, item.id), None);
+    queue_pending_op(
+        &conn,
+        "DELETE",
+        &format!("/tasks/{}/checklist/{}", item.task_id, item.id),
+        None,
+    )?;
     Ok(())
 }
 
@@ -1550,7 +1684,12 @@ pub fn reorder_checklist_items(
         )
         .map_err(|e| e.to_string())?;
         let index_json = serde_json::json!({"index": m.index}).to_string();
-        queue_pending_op(&conn, "PUT", &format!("/tasks/{}/checklist/{}/reorder", task_id, m.id), Some(&index_json));
+        queue_pending_op(
+            &conn,
+            "PUT",
+            &format!("/tasks/{}/checklist/{}/reorder", task_id, m.id),
+            Some(&index_json),
+        )?;
     }
     Ok(())
 }
@@ -1577,29 +1716,43 @@ pub struct UpdateSettingsParams {
 pub fn get_settings(db: tauri::State<'_, Database>) -> Result<Settings, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    let server_url = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'server_url'",
-        [],
-        |row| row.get::<_, String>(0),
-    ).unwrap_or_default();
+    let server_url = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'server_url'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_default();
 
-    let api_key = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'api_key'",
-        [],
-        |row| row.get::<_, String>(0),
-    ).unwrap_or_default();
+    let api_key = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'api_key'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_default();
 
-    let sync_enabled = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'sync_enabled'",
-        [],
-        |row| row.get::<_, String>(0),
-    ).unwrap_or_else(|_| "false".to_string()) == "true";
+    let sync_enabled = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'sync_enabled'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "false".to_string())
+        == "true";
 
-    Ok(Settings { server_url, api_key, sync_enabled })
+    Ok(Settings {
+        server_url,
+        api_key,
+        sync_enabled,
+    })
 }
 
 #[tauri::command]
-pub fn update_settings(db: tauri::State<'_, Database>, params: UpdateSettingsParams) -> Result<Settings, String> {
+pub fn update_settings(
+    db: tauri::State<'_, Database>,
+    params: UpdateSettingsParams,
+) -> Result<Settings, String> {
     {
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
@@ -1627,4 +1780,80 @@ pub fn update_settings(db: tauri::State<'_, Database>, params: UpdateSettingsPar
     }
 
     get_settings(db)
+}
+
+#[tauri::command]
+pub fn get_task_activities(db: tauri::State<'_, Database>, task_id: String) -> Result<Vec<Activity>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, taskId, actorId, actorType, type, content, createdAt FROM activities WHERE taskId = ?1 ORDER BY createdAt ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([&task_id], |row| {
+            Ok(Activity {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                actor_id: row.get(2)?,
+                actor_type: row.get(3)?,
+                activity_type: row.get(4)?,
+                content: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_activity(
+    db: tauri::State<'_, Database>,
+    task_id: String,
+    actor_type: String,
+    activity_type: String,
+    content: String,
+) -> Result<Activity, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO activities (id, taskId, actorId, actorType, type, content, createdAt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![id, task_id, "local", actor_type, activity_type, content, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "actor_type": actor_type,
+        "type": activity_type,
+        "content": content,
+    })
+    .to_string();
+    queue_pending_op(&conn, "POST", &format!("/tasks/{}/activity", task_id), Some(&body))?;
+
+    Ok(Activity {
+        id,
+        task_id,
+        actor_id: Some("local".to_string()),
+        actor_type,
+        activity_type,
+        content,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "DELETE FROM activities;
+         DELETE FROM checklistItems;
+         DELETE FROM taskTags;
+         DELETE FROM tasks;
+         DELETE FROM sections;
+         DELETE FROM projects;
+         DELETE FROM areas;
+         DELETE FROM tags;
+         DELETE FROM pendingOps;"
+    )
+    .map_err(|e| e.to_string())
 }

@@ -1,28 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { updateTask } from '../store';
 import type { RepeatRule } from '../types';
+import { PopoverPanel } from '../ui';
 
 interface RepeatPickerProps {
   taskId: string;
   currentRepeatRule: string | null;
   onClose: () => void;
 }
-
-const popoverStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: '100%',
-  left: 0,
-  marginTop: 6,
-  background: 'var(--canvas-elevated)',
-  border: '1px solid var(--border-strong)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: 'var(--shadow-popover)',
-  minWidth: 220,
-  padding: 0,
-  zIndex: 50,
-  overflow: 'hidden',
-  userSelect: 'none',
-};
 
 interface QuickOption {
   label: string;
@@ -89,116 +74,44 @@ export default function RepeatPicker({ taskId, currentRepeatRule, onClose }: Rep
     );
   };
 
-  const hoverOn = (e: React.MouseEvent<HTMLElement>) => {
-    (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-hover)';
-  };
-  const hoverOff = (e: React.MouseEvent<HTMLElement>) => {
-    (e.currentTarget as HTMLElement).style.background = '';
-  };
-
   return (
-    <div style={popoverStyle} ref={popoverRef}>
-      {/* Header */}
-      <div
-        style={{
-          fontSize: 'var(--text-xs)',
-          fontWeight: 700,
-          color: 'var(--ink-tertiary)',
-          padding: 'var(--sp-3) var(--sp-4) var(--sp-2)',
-          textAlign: 'center',
-        }}
-      >
-        Repeat
-      </div>
-      <div style={{ height: 1, background: 'var(--separator)' }} />
-
-      {/* After Completion toggle */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px var(--sp-4)',
-          fontSize: 'var(--text-sm)',
-          color: 'var(--ink-secondary)',
-          cursor: 'pointer',
-        }}
+    <PopoverPanel title="Repeat" popoverRef={popoverRef}>
+      <button
+        type="button"
+        className="ui-picker-row ui-picker-row-between ui-picker-toggle-row"
         onClick={() => setAfterCompletion((v) => !v)}
-        onMouseEnter={hoverOn}
-        onMouseLeave={hoverOff}
       >
         <span>After Completion</span>
-        <span
-          style={{
-            width: 32,
-            height: 18,
-            borderRadius: 9,
-            background: afterCompletion ? 'var(--accent)' : 'var(--border-strong)',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 3px',
-            transition: 'background 0.15s',
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: '#fff',
-              marginLeft: afterCompletion ? 14 : 0,
-              transition: 'margin-left 0.15s',
-            }}
-          />
+        <span className={`ui-toggle${afterCompletion ? ' is-on' : ''}`}>
+          <span className="ui-toggle-thumb" />
         </span>
-      </div>
-      <div style={{ height: 1, background: 'var(--separator)' }} />
+      </button>
+      <div className="ui-popover-separator" />
 
-      {/* Quick options */}
       {quickOptions.map((opt) => {
         const selected = isSelected(opt);
         return (
-          <div
+          <button
             key={opt.label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '5px var(--sp-4)',
-              fontSize: 'var(--text-base)',
-              color: selected ? 'var(--accent)' : 'var(--ink-primary)',
-              cursor: 'pointer',
-              fontWeight: selected ? 600 : undefined,
-            }}
+            type="button"
+            className={`ui-picker-row ui-picker-row-between${selected ? ' is-selected' : ''}`}
             onClick={() => handleSelect(opt.rule)}
-            onMouseEnter={hoverOn}
-            onMouseLeave={hoverOff}
           >
-            <span>{opt.label}</span>
-            {selected && <span style={{ fontSize: 14 }}>✓</span>}
-          </div>
+            <span className="ui-picker-label">{opt.label}</span>
+            {selected && <span className="ui-picker-check">✓</span>}
+          </button>
         );
       })}
 
-      <div style={{ height: 1, background: 'var(--separator)' }} />
+      <div className="ui-popover-separator" />
 
-      {/* Clear */}
-      <div
-        style={{
-          textAlign: 'center',
-          padding: 'var(--sp-2)',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 700,
-          color: 'var(--ink-secondary)',
-          cursor: 'pointer',
-        }}
+      <button
+        type="button"
+        className="ui-picker-clear"
         onClick={handleClear}
-        onMouseEnter={hoverOn}
-        onMouseLeave={hoverOff}
       >
         Clear
-      </div>
-    </div>
+      </button>
+    </PopoverPanel>
   );
 }

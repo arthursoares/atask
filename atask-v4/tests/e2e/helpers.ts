@@ -9,6 +9,13 @@
 // App lifecycle
 // ---------------------------------------------------------------------------
 
+/** Reset the database to a clean state (deletes all user data) */
+export async function resetDatabase() {
+  await browser.execute(() =>
+    (window as any).__TAURI_INTERNALS__.invoke("reset_database"),
+  );
+}
+
 /** Wait for the app to be fully loaded */
 export async function waitForAppReady() {
   await browser.waitUntil(
@@ -113,6 +120,290 @@ export async function getTaskTitles(): Promise<string[]> {
     const items = document.querySelectorAll(".task-title");
     return Array.from(items).map((el) => el.textContent ?? "").filter(Boolean);
   });
+}
+
+export async function startPointerDragTaskByTitle(title: string) {
+  const started = await browser.execute((taskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === taskTitle;
+    }) as HTMLElement | undefined;
+    if (!source) {
+      return false;
+    }
+
+    const rect = source.getBoundingClientRect();
+    const clientX = Math.round(rect.left + 16);
+    const clientY = Math.round(rect.top + rect.height / 2);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY: clientY + 8,
+    }));
+
+    return true;
+  }, title);
+
+  if (!started) {
+    throw new Error(`Task "${title}" not found`);
+  }
+}
+
+export async function getNativeTaskDragPayload(title: string): Promise<{
+  draggable: boolean;
+  payload: string | null;
+  typeCalls: string[];
+  visibleDropZoneCount: number;
+}> {
+  const result = await browser.execute((taskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === taskTitle;
+    }) as HTMLElement | undefined;
+    if (!source) {
+      return null;
+    }
+
+    const payloadByType = new Map<string, string>();
+    const typeCalls: string[] = [];
+    const dataTransfer = {
+      setData(type: string, value: string) {
+        typeCalls.push(type);
+        payloadByType.set(type, value);
+      },
+      getData(type: string) {
+        return payloadByType.get(type) ?? "";
+      },
+      effectAllowed: "uninitialized",
+    };
+
+    source.dispatchEvent(new DragEvent("dragstart", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: dataTransfer as unknown as DataTransfer,
+    }));
+
+    return {
+      draggable: source.draggable,
+      payload: payloadByType.get("text/plain") ?? null,
+      typeCalls,
+      visibleDropZoneCount: document.querySelectorAll(".task-drop-zone").length,
+    };
+  }, title);
+
+  if (!result) {
+    throw new Error(`Task "${title}" not found`);
+  }
+
+  return result;
+}
+
+export async function finishPointerDrag() {
+  await browser.execute(() => {
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+    }));
+  });
+}
+
+export async function dragTaskByTitleToTaskByTitle(sourceTitle: string, targetTitle: string) {
+  const reordered = await browser.execute((sourceTaskTitle: string, targetTaskTitle: string) => {
+    const rows = Array.from(document.querySelectorAll(".task-item"));
+    const source = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === sourceTaskTitle;
+    }) as HTMLElement | undefined;
+    const target = rows.find((row) => {
+      const titleEl = row.querySelector(".task-title");
+      return titleEl?.textContent === targetTaskTitle;
+    }) as HTMLElement | undefined;
+    if (!source || !target) {
+      return false;
+    }
+
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 16);
+    const sourceY = Math.round(sourceRect.top + sourceRect.height / 2);
+    const targetY = Math.round(targetRect.top + 4);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: sourceY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    return true;
+  }, sourceTitle, targetTitle);
+
+  if (!reordered) {
+    throw new Error(`Unable to reorder "${sourceTitle}" to "${targetTitle}"`);
+  }
+}
+
+export async function blurWindow() {
+  await browser.execute(() => {
+    window.dispatchEvent(new Event("blur"));
+  });
+}
+
+export async function getSidebarAreaIds(): Promise<string[]> {
+  return browser.execute(() => {
+    return Array.from(document.querySelectorAll(".sidebar-group-label"))
+      .map((item) => item.textContent?.trim() ?? "")
+      .filter(Boolean);
+  });
+}
+
+export async function startSidebarAreaDrag(sourceIndex: number, targetIndex: number) {
+  const dragState = await browser.executeAsync((from: number, to: number, done: (result: Record<string, unknown>) => void) => {
+    const areaItems = Array.from(
+      document.querySelectorAll(".sidebar-group-label"),
+    ) as HTMLElement[];
+    const source = areaItems[from];
+    const target = areaItems[to];
+    if (!source || !target) {
+      done({ ok: false, reason: "missing-area-item" });
+      return;
+    }
+
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 24);
+    const sourceY = Math.round(sourceRect.top + sourceRect.height / 2);
+    const targetY = from > to
+      ? Math.round(targetRect.top + 6)
+      : Math.round(targetRect.bottom - 6);
+
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: sourceY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.setTimeout(() => {
+      const draggingItem = document.querySelector(".sidebar-group-label.sidebar-item-dragging");
+      done({
+        ok: true,
+        activeId: draggingItem?.textContent?.trim() ?? null,
+        hasDraggedClass: Boolean(draggingItem),
+        visibleSlotCount: document.querySelectorAll(".sidebar-drop-slot").length,
+      });
+    }, 60);
+  }, sourceIndex, targetIndex);
+
+  if (!dragState?.ok) {
+    throw new Error(`Unable to start sidebar area drag: ${JSON.stringify(dragState)}`);
+  }
+
+  return dragState as {
+    activeId: string | null;
+    hasDraggedClass: boolean;
+    visibleSlotCount: number;
+  };
+}
+
+export async function finishSidebarAreaDrag(sourceIndex: number, targetIndex: number) {
+  const finished = await browser.executeAsync((from: number, to: number, done: (result: boolean) => void) => {
+    const areaItems = Array.from(
+      document.querySelectorAll(".sidebar-group-label"),
+    ) as HTMLElement[];
+    const source = areaItems[from];
+    const target = areaItems[to];
+    if (!source || !target) {
+      done(false);
+      return;
+    }
+
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const sourceX = Math.round(sourceRect.left + 24);
+    const targetY = from > to
+      ? Math.round(targetRect.top + 6)
+      : Math.round(targetRect.bottom - 6);
+
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 0,
+      clientX: sourceX,
+      clientY: targetY,
+    }));
+
+    window.setTimeout(() => done(true), 60);
+  }, sourceIndex, targetIndex);
+
+  if (!finished) {
+    throw new Error(`Unable to finish sidebar area drag from ${sourceIndex} to ${targetIndex}`);
+  }
+}
+
+export async function dragSidebarArea(sourceIndex: number, targetIndex: number) {
+  await startSidebarAreaDrag(sourceIndex, targetIndex);
+  await finishSidebarAreaDrag(sourceIndex, targetIndex);
 }
 
 /** Click on a task row by its title */
@@ -912,6 +1203,42 @@ export async function setInlineEditorTitle(value: string) {
     }
   }, value);
   await browser.pause(200);
+}
+
+/** Get inline editor notes textarea value */
+export async function getInlineEditorNotes(): Promise<string> {
+  return browser.execute(() => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    return textarea?.value ?? "";
+  });
+}
+
+/** Set inline editor notes textarea value */
+export async function setInlineEditorNotes(value: string) {
+  await browser.execute((v: string) => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    if (textarea) {
+      const nativeSet = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (nativeSet) {
+        nativeSet.call(textarea, v);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  }, value);
+  await browser.pause(200);
+}
+
+/** Press Escape on the inline editor notes textarea */
+export async function escapeInlineEditorNotes() {
+  await browser.execute(() => {
+    const textarea = document.querySelector(".task-item.editing .task-inline-notes-input") as HTMLTextAreaElement;
+    if (textarea) {
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }),
+      );
+    }
+  });
+  await browser.pause(300);
 }
 
 // ---------------------------------------------------------------------------

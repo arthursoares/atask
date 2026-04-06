@@ -15,9 +15,6 @@ export function requestSync() {
   syncDebounceTimer = setTimeout(async () => {
     try {
       await triggerSync();
-      // After sync completes, reload to pick up any inbound changes.
-      // Only reload if triggerSync succeeded (sync is configured).
-      await loadAll();
     } catch {
       // Sync not configured or server unreachable — don't reload.
       // Local mutations already updated the store directly.

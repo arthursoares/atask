@@ -77,6 +77,16 @@ export interface ChecklistItem {
   updatedAt: string;
 }
 
+export interface Activity {
+  id: string;
+  taskId: string;
+  actorId: string | null;
+  actorType: 'human' | 'agent';
+  type: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface AppState {
   tasks: Task[];
   projects: Project[];
@@ -85,6 +95,7 @@ export interface AppState {
   tags: Tag[];
   taskTags: TaskTag[];
   checklistItems: ChecklistItem[];
+  activities: Activity[];
 }
 
 // Repeat rule (stored as JSON string in repeatRule field)

@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 
@@ -46,82 +47,164 @@ struct DeltaEvent {
     action: NullInt64, // 0=created, 1=modified, 2=deleted
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeltaDisposition {
+    Fetch,
+    Delete,
+}
+
 // --- Settings helpers ---
 
 pub(crate) fn read_sync_config(conn: &Connection) -> Option<SyncConfig> {
     let get = |key: &str| -> Option<String> {
-        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| row.get(0)).ok()
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+            row.get(0)
+        })
+        .ok()
     };
     if get("sync_enabled")? != "true" {
         return None;
     }
     let server_url = get("server_url").filter(|s| !s.is_empty())?;
     let api_key = get("api_key").filter(|s| !s.is_empty())?;
-    Some(SyncConfig { server_url, api_key })
+    Some(SyncConfig {
+        server_url,
+        api_key,
+    })
 }
 
 fn get_sync_cursor(conn: &Connection) -> i64 {
-    conn.query_row("SELECT value FROM settings WHERE key = 'sync_cursor'", [], |row| {
-        let s: String = row.get(0)?;
-        Ok(s.parse::<i64>().unwrap_or(0))
-    })
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'sync_cursor'",
+        [],
+        |row| {
+            let s: String = row.get(0)?;
+            Ok(s.parse::<i64>().unwrap_or(0))
+        },
+    )
     .unwrap_or(0)
 }
 
-fn set_sync_cursor(conn: &Connection, cursor: i64) {
-    let _ = conn.execute(
+fn set_sync_cursor(conn: &Connection, cursor: i64) -> Result<(), String> {
+    conn.execute(
         "INSERT INTO settings (key, value) VALUES ('sync_cursor', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
         [cursor.to_string()],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-fn set_last_sync_at(conn: &Connection) {
+fn set_last_sync_at(conn: &Connection) -> Result<(), String> {
     let now = chrono::Utc::now().to_rfc3339();
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO settings (key, value) VALUES ('last_sync_at', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
         [&now],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-fn set_last_sync_error(conn: &Connection, err: Option<&str>) {
+fn set_last_sync_error(conn: &Connection, err: Option<&str>) -> Result<(), String> {
     match err {
-        Some(msg) => {
-            let _ = conn.execute(
+        Some(msg) => conn.execute(
                 "INSERT INTO settings (key, value) VALUES ('last_sync_error', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
                 [msg],
-            );
-        }
-        None => {
-            let _ = conn.execute("DELETE FROM settings WHERE key = 'last_sync_error'", []);
-        }
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        None => conn.execute("DELETE FROM settings WHERE key = 'last_sync_error'", [])
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
     }
 }
 
 // --- Pending ops: outbound flush ---
 
-fn read_pending_ops(conn: &Connection, limit: i64) -> Vec<PendingOp> {
-    let mut stmt = match conn.prepare(
+fn read_pending_ops(conn: &Connection, limit: i64) -> Result<Vec<PendingOp>, String> {
+    let mut stmt = conn.prepare(
         "SELECT id, method, path, body FROM pendingOps WHERE synced = 0 ORDER BY id ASC LIMIT ?1",
-    ) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-    let rows = match stmt.query_map(rusqlite::params![limit], |row| {
-        Ok(PendingOp {
-            id: row.get(0)?,
-            method: row.get(1)?,
-            path: row.get(2)?,
-            body: row.get(3)?,
+    )
+    .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![limit], |row| {
+            Ok(PendingOp {
+                id: row.get(0)?,
+                method: row.get(1)?,
+                path: row.get(2)?,
+                body: row.get(3)?,
+            })
         })
-    }) {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-    rows.filter_map(|r| r.ok()).collect()
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
-fn mark_synced(conn: &Connection, id: i64) {
-    let _ = conn.execute("UPDATE pendingOps SET synced = 1 WHERE id = ?1", rusqlite::params![id]);
+fn mark_synced(conn: &Connection, id: i64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE pendingOps SET synced = 1 WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+fn plan_delta_applications(
+    deltas: &[DeltaEvent],
+    cursor: i64,
+) -> (i64, Vec<(String, String)>, Vec<(String, String)>) {
+    let mut max_cursor = cursor;
+    let mut latest_by_entity: HashMap<(String, String), DeltaDisposition> = HashMap::new();
+
+    for delta in deltas {
+        if delta.id > max_cursor {
+            max_cursor = delta.id;
+        }
+
+        let disposition = if delta.action.int64 == 2 {
+            DeltaDisposition::Delete
+        } else {
+            DeltaDisposition::Fetch
+        };
+
+        latest_by_entity.insert(
+            (
+                delta.entity_type.string.clone(),
+                delta.entity_id.string.clone(),
+            ),
+            disposition,
+        );
+    }
+
+    let mut to_fetch = Vec::new();
+    let mut to_delete = Vec::new();
+    for ((entity_type, entity_id), disposition) in latest_by_entity {
+        match disposition {
+            DeltaDisposition::Fetch => to_fetch.push((entity_type, entity_id)),
+            DeltaDisposition::Delete => to_delete.push((entity_type, entity_id)),
+        }
+    }
+
+    to_fetch.sort();
+    to_delete.sort();
+
+    (max_cursor, to_fetch, to_delete)
+}
+
+fn delete_entity(conn: &Connection, entity_type: &str, entity_id: &str) -> Result<(), String> {
+    let table = match entity_type {
+        "task" => "tasks",
+        "project" => "projects",
+        "area" => "areas",
+        "section" => "sections",
+        "tag" => "tags",
+        "checklist_item" => "checklistItems",
+        "activity" => "activities",
+        _ => return Ok(()),
+    };
+
+    conn.execute(&format!("DELETE FROM {} WHERE id = ?1", table), [entity_id])
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn flush_pending_ops_blocking(
@@ -131,7 +214,7 @@ fn flush_pending_ops_blocking(
 ) -> Result<usize, String> {
     let ops = {
         let c = conn.lock().map_err(|e| e.to_string())?;
-        read_pending_ops(&c, 50)
+        read_pending_ops(&c, 50)?
     };
 
     if ops.is_empty() {
@@ -152,7 +235,9 @@ fn flush_pending_ops_blocking(
         };
         req = req.header("Authorization", format!("ApiKey {}", config.api_key));
         if let Some(body) = &op.body {
-            req = req.header("Content-Type", "application/json").body(body.clone());
+            req = req
+                .header("Content-Type", "application/json")
+                .body(body.clone());
         }
 
         match req.send() {
@@ -161,7 +246,7 @@ fn flush_pending_ops_blocking(
                 let c = conn.lock().map_err(|e| e.to_string())?;
                 if (200..300).contains(&status) || (400..500).contains(&status) {
                     // Success or client error (conflict lost) — mark done
-                    mark_synced(&c, op.id);
+                    mark_synced(&c, op.id)?;
                     flushed += 1;
                     consecutive_failures = 0;
                 } else {
@@ -211,34 +296,7 @@ fn pull_deltas_blocking(
         return Ok(0);
     }
 
-    // Track max cursor and unique entities to fetch
-    let mut max_cursor = cursor;
-    let mut to_fetch: Vec<(String, String)> = Vec::new();
-    let mut to_delete: Vec<(String, String)> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    for delta in &deltas {
-        if delta.id > max_cursor {
-            max_cursor = delta.id;
-        }
-        let entity_type = &delta.entity_type.string;
-        let entity_id = &delta.entity_id.string;
-        let action = delta.action.int64;
-
-        let key = (entity_type.clone(), entity_id.clone());
-        if seen.contains(&key) {
-            continue;
-        }
-        seen.insert(key.clone());
-
-        if action == 2 {
-            // Deleted
-            to_delete.push((entity_type.clone(), entity_id.clone()));
-        } else {
-            // Created or modified — fetch full entity
-            to_fetch.push((entity_type.clone(), entity_id.clone()));
-        }
-    }
+    let (max_cursor, to_fetch, to_delete) = plan_delta_applications(&deltas, cursor);
 
     let applied = to_fetch.len() + to_delete.len();
 
@@ -246,16 +304,7 @@ fn pull_deltas_blocking(
     {
         let c = conn.lock().map_err(|e| e.to_string())?;
         for (entity_type, entity_id) in &to_delete {
-            let table = match entity_type.as_str() {
-                "task" => "tasks",
-                "project" => "projects",
-                "area" => "areas",
-                "section" => "sections",
-                "tag" => "tags",
-                "checklist_item" => "checklistItems",
-                _ => continue,
-            };
-            let _ = c.execute(&format!("DELETE FROM {} WHERE id = ?1", table), [entity_id]);
+            delete_entity(&c, entity_type, entity_id)?;
         }
     }
 
@@ -267,6 +316,7 @@ fn pull_deltas_blocking(
             "area" => "areas",
             "section" => "sections",
             "tag" => "tags",
+            "activity" => "activities",
             _ => continue,
         };
 
@@ -276,27 +326,34 @@ fn pull_deltas_blocking(
             .header("Authorization", format!("ApiKey {}", config.api_key))
             .send();
 
-        if let Ok(resp) = resp {
-            if resp.status().is_success() {
-                if let Ok(json) = resp.json::<serde_json::Value>() {
-                    let c = conn.lock().unwrap();
-                    match entity_type.as_str() {
-                        "task" => upsert_task(&c, &json),
-                        "project" => upsert_project(&c, &json),
-                        "area" => upsert_area(&c, &json),
-                        "section" => upsert_section(&c, &json),
-                        "tag" => upsert_tag(&c, &json),
-                        _ => {}
-                    }
-                }
-            }
+        let resp = resp.map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            eprintln!(
+                "entity fetch failed for {entity_type}/{entity_id}: {} — skipping",
+                resp.status()
+            );
+            continue;
+        }
+
+        let json = resp
+            .json::<serde_json::Value>()
+            .map_err(|e| e.to_string())?;
+        let c = conn.lock().map_err(|e| e.to_string())?;
+        match entity_type.as_str() {
+            "task" => upsert_task(&c, &json)?,
+            "project" => upsert_project(&c, &json)?,
+            "area" => upsert_area(&c, &json)?,
+            "section" => upsert_section(&c, &json)?,
+            "tag" => upsert_tag(&c, &json)?,
+            "activity" => upsert_activity(&c, &json)?,
+            _ => {}
         }
     }
 
     // Update cursor
     {
         let c = conn.lock().map_err(|e| e.to_string())?;
-        set_sync_cursor(&c, max_cursor);
+        set_sync_cursor(&c, max_cursor)?;
     }
 
     Ok(applied)
@@ -332,8 +389,8 @@ pub fn sync_now_blocking(
     // 3. Update timestamps
     {
         let c = conn.lock().map_err(|e| e.to_string())?;
-        set_last_sync_at(&c);
-        set_last_sync_error(&c, None);
+        set_last_sync_at(&c)?;
+        set_last_sync_error(&c, None)?;
     }
 
     // 4. Notify React if we pulled changes
@@ -354,8 +411,9 @@ pub fn spawn_sync_worker(conn: Arc<Mutex<Connection>>, app_handle: tauri::AppHan
         loop {
             std::thread::sleep(std::time::Duration::from_secs(300)); // 5 minutes
             if let Err(e) = sync_now_blocking(&conn, &app_handle) {
-                let c = conn.lock().unwrap();
-                set_last_sync_error(&c, Some(&e));
+                if let Ok(c) = conn.lock() {
+                    let _ = set_last_sync_error(&c, Some(&e));
+                }
                 eprintln!("[sync] background sync error: {}", e);
             }
         }
@@ -365,7 +423,7 @@ pub fn spawn_sync_worker(conn: Arc<Mutex<Connection>>, app_handle: tauri::AppHan
 // --- Upsert functions ---
 
 /// Upsert a task from server JSON (snake_case/PascalCase) into local DB (camelCase columns).
-pub fn upsert_task(conn: &Connection, j: &serde_json::Value) {
+pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     // Handle both snake_case and PascalCase field names from Go API
     let s = |key: &str, alt: &str| -> &str {
         j.get(key)
@@ -374,23 +432,39 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) {
             .unwrap_or_default()
     };
     let opt_s = |key: &str, alt: &str| -> Option<&str> {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| if v.is_null() { None } else { v.as_str() })
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_str() })
     };
     let i = |key: &str, alt: &str| -> i64 {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_i64()).unwrap_or(0)
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
     };
     let opt_i = |key: &str, alt: &str| -> Option<i64> {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| if v.is_null() { None } else { v.as_i64() })
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_i64() })
     };
 
     let id = s("id", "ID");
-    if id.is_empty() { return; }
+    if id.is_empty() {
+        return Ok(());
+    }
 
-    let repeat_rule = j.get("recurrence_rule").or_else(|| j.get("RecurrenceRule")).and_then(|v| {
-        if v.is_null() { None } else { Some(v.to_string()) }
-    });
+    let repeat_rule = j
+        .get("recurrence_rule")
+        .or_else(|| j.get("RecurrenceRule"))
+        .and_then(|v| {
+            if v.is_null() {
+                None
+            } else {
+                Some(v.to_string())
+            }
+        });
 
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO tasks (id, title, notes, status, schedule, startDate, deadline, completedAt, \"index\", todayIndex, timeSlot, projectId, sectionId, areaId, createdAt, updatedAt, syncStatus, repeatRule) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17) \
          ON CONFLICT(id) DO UPDATE SET \
@@ -414,24 +488,36 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) {
             s("updated_at", "UpdatedAt"),
             repeat_rule,
         ],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-pub fn upsert_project(conn: &Connection, j: &serde_json::Value) {
+pub fn upsert_project(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     let s = |key: &str, alt: &str| -> &str {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_str()).unwrap_or_default()
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
     };
     let opt_s = |key: &str, alt: &str| -> Option<&str> {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| if v.is_null() { None } else { v.as_str() })
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| if v.is_null() { None } else { v.as_str() })
     };
     let i = |key: &str, alt: &str| -> i64 {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_i64()).unwrap_or(0)
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
     };
 
     let id = s("id", "ID");
-    if id.is_empty() { return; }
+    if id.is_empty() {
+        return Ok(());
+    }
 
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO projects (id, title, notes, status, color, areaId, \"index\", completedAt, createdAt, updatedAt) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) \
          ON CONFLICT(id) DO UPDATE SET \
@@ -441,68 +527,250 @@ pub fn upsert_project(conn: &Connection, j: &serde_json::Value) {
             s("color", "Color"), opt_s("area_id", "AreaID"), i("index", "Index"),
             opt_s("completed_at", "CompletedAt"), s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt"),
         ],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-pub fn upsert_area(conn: &Connection, j: &serde_json::Value) {
+pub fn upsert_area(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     let s = |key: &str, alt: &str| -> &str {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_str()).unwrap_or_default()
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
     };
     let i = |key: &str, alt: &str| -> i64 {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_i64()).unwrap_or(0)
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
     };
 
     let id = s("id", "ID");
-    if id.is_empty() { return; }
-    let archived = if j.get("archived").or_else(|| j.get("Archived")).and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
+    if id.is_empty() {
+        return Ok(());
+    }
+    let archived = if j
+        .get("archived")
+        .or_else(|| j.get("Archived"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    };
 
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO areas (id, title, \"index\", archived, createdAt, updatedAt) \
          VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT(id) DO UPDATE SET \
          title=?2, \"index\"=?3, archived=?4, updatedAt=?6",
-        rusqlite::params![id, s("title", "Title"), i("index", "Index"), archived, s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt")],
-    );
+        rusqlite::params![
+            id,
+            s("title", "Title"),
+            i("index", "Index"),
+            archived,
+            s("created_at", "CreatedAt"),
+            s("updated_at", "UpdatedAt")
+        ],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-pub fn upsert_section(conn: &Connection, j: &serde_json::Value) {
+pub fn upsert_section(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     let s = |key: &str, alt: &str| -> &str {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_str()).unwrap_or_default()
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
     };
     let i = |key: &str, alt: &str| -> i64 {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_i64()).unwrap_or(0)
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
     };
 
     let id = s("id", "ID");
-    if id.is_empty() { return; }
-    let archived = if j.get("archived").or_else(|| j.get("Archived")).and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
-    let collapsed = if j.get("collapsed").or_else(|| j.get("Collapsed")).and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
+    if id.is_empty() {
+        return Ok(());
+    }
+    let archived = if j
+        .get("archived")
+        .or_else(|| j.get("Archived"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    };
+    let collapsed = if j
+        .get("collapsed")
+        .or_else(|| j.get("Collapsed"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    };
 
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO sections (id, title, projectId, \"index\", archived, collapsed, createdAt, updatedAt) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8) \
          ON CONFLICT(id) DO UPDATE SET \
          title=?2, projectId=?3, \"index\"=?4, archived=?5, collapsed=?6, updatedAt=?8",
         rusqlite::params![id, s("title", "Title"), s("project_id", "ProjectID"), i("index", "Index"), archived, collapsed, s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt")],
-    );
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
-pub fn upsert_tag(conn: &Connection, j: &serde_json::Value) {
+pub fn upsert_activity(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
     let s = |key: &str, alt: &str| -> &str {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_str()).unwrap_or_default()
-    };
-    let i = |key: &str, alt: &str| -> i64 {
-        j.get(key).or_else(|| j.get(alt)).and_then(|v| v.as_i64()).unwrap_or(0)
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
     };
 
     let id = s("id", "ID");
-    if id.is_empty() { return; }
+    if id.is_empty() {
+        return Ok(());
+    }
 
-    let _ = conn.execute(
+    conn.execute(
+        "INSERT INTO activities (id, taskId, actorId, actorType, type, content, createdAt) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7) \
+         ON CONFLICT(id) DO UPDATE SET \
+         taskId=?2, actorId=?3, actorType=?4, type=?5, content=?6, createdAt=?7",
+        rusqlite::params![
+            id,
+            s("task_id", "TaskID"),
+            s("actor_id", "ActorID"),
+            s("actor_type", "ActorType"),
+            s("type", "Type"),
+            s("content", "Content"),
+            s("created_at", "CreatedAt")
+        ],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+pub fn upsert_tag(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {
+    let s = |key: &str, alt: &str| -> &str {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+    };
+    let i = |key: &str, alt: &str| -> i64 {
+        j.get(key)
+            .or_else(|| j.get(alt))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
+    };
+
+    let id = s("id", "ID");
+    if id.is_empty() {
+        return Ok(());
+    }
+
+    conn.execute(
         "INSERT INTO tags (id, title, \"index\", createdAt, updatedAt) \
          VALUES (?1,?2,?3,?4,?5) \
          ON CONFLICT(id) DO UPDATE SET \
          title=?2, \"index\"=?3, updatedAt=?5",
-        rusqlite::params![id, s("title", "Title"), i("index", "Index"), s("created_at", "CreatedAt"), s("updated_at", "UpdatedAt")],
-    );
+        rusqlite::params![
+            id,
+            s("title", "Title"),
+            i("index", "Index"),
+            s("created_at", "CreatedAt"),
+            s("updated_at", "UpdatedAt")
+        ],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn setup_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(include_str!("migrations/001_schema.sql"))
+            .expect("schema migration");
+        conn.execute_batch(include_str!("migrations/002_settings.sql"))
+            .expect("settings migration");
+        conn.execute_batch(include_str!("migrations/003_activities.sql"))
+            .expect("activities migration");
+        conn
+    }
+
+    #[test]
+    fn latest_delta_wins_when_entity_changes_multiple_times() {
+        let deltas = vec![
+            DeltaEvent {
+                id: 10,
+                entity_type: NullString {
+                    string: "task".into(),
+                    valid: true,
+                },
+                entity_id: NullString {
+                    string: "task-1".into(),
+                    valid: true,
+                },
+                action: NullInt64 {
+                    int64: 1,
+                    valid: true,
+                },
+            },
+            DeltaEvent {
+                id: 11,
+                entity_type: NullString {
+                    string: "task".into(),
+                    valid: true,
+                },
+                entity_id: NullString {
+                    string: "task-1".into(),
+                    valid: true,
+                },
+                action: NullInt64 {
+                    int64: 2,
+                    valid: true,
+                },
+            },
+        ];
+
+        let (cursor, to_fetch, to_delete) = plan_delta_applications(&deltas, 5);
+
+        assert_eq!(cursor, 11);
+        assert!(to_fetch.is_empty());
+        assert_eq!(to_delete, vec![("task".into(), "task-1".into())]);
+    }
+
+    #[test]
+    fn pending_ops_can_be_read_and_marked_synced() {
+        let conn = setup_test_conn();
+        conn.execute(
+            "INSERT INTO pendingOps (method, path, body, createdAt, synced) VALUES (?1, ?2, ?3, ?4, 0)",
+            rusqlite::params!["POST", "/tasks", "{\"title\":\"Test\"}", "2026-01-01T00:00:00Z"],
+        )
+        .expect("insert pending op");
+
+        let ops = read_pending_ops(&conn, 10).expect("read pending ops");
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].path, "/tasks");
+
+        mark_synced(&conn, ops[0].id).expect("mark synced");
+
+        let ops = read_pending_ops(&conn, 10).expect("read pending ops after sync");
+        assert!(ops.is_empty());
+    }
 }

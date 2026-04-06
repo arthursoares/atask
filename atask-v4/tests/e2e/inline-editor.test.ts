@@ -1,5 +1,6 @@
 import {
   waitForAppReady,
+  resetDatabase,
   navigateTo,
   createTaskViaUI,
   doubleClickTask,
@@ -13,6 +14,11 @@ describe("Inline Editor", () => {
     await waitForAppReady();
     await navigateTo("Inbox");
     await createTaskViaUI("Editor Test");
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await waitForAppReady();
   });
 
   it("should open on double-click", async () => {

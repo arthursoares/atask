@@ -91,6 +91,19 @@ pub struct ChecklistItem {
     pub updated_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Activity {
+    pub id: String,
+    pub task_id: String,
+    pub actor_id: Option<String>,
+    pub actor_type: String,
+    #[serde(rename = "type")]
+    pub activity_type: String,
+    pub content: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
@@ -101,4 +114,5 @@ pub struct AppState {
     pub tags: Vec<Tag>,
     pub task_tags: Vec<TaskTag>,
     pub checklist_items: Vec<ChecklistItem>,
+    pub activities: Vec<Activity>,
 }
