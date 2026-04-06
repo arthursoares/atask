@@ -207,7 +207,20 @@ func (s *TaskService) hydrateTags(ctx context.Context, task *domain.Task) error 
 	return nil
 }
 
-// Get fetches a task by ID, including its tags.
+// hydrateLinks queries and populates the LinkedTaskIDs field on a task.
+func (s *TaskService) hydrateLinks(ctx context.Context, task *domain.Task) error {
+	links, err := s.queries.ListTaskLinks(ctx, task.ID)
+	if err != nil {
+		return err
+	}
+	task.LinkedTaskIDs = make([]string, len(links))
+	for i, l := range links {
+		task.LinkedTaskIDs[i] = l.RelatedTaskID
+	}
+	return nil
+}
+
+// Get fetches a task by ID, including its tags and links.
 func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) {
 	row, err := s.queries.GetTask(ctx, id)
 	if err != nil {
@@ -215,6 +228,9 @@ func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) 
 	}
 	task := taskFromRow(row)
 	if err := s.hydrateTags(ctx, task); err != nil {
+		return nil, err
+	}
+	if err := s.hydrateLinks(ctx, task); err != nil {
 		return nil, err
 	}
 	return task, nil

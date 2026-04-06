@@ -520,6 +520,26 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
         }
     }
 
+    // Sync task-link associations from server response.
+    // The Go API returns linkedTaskIds as an array of task ID strings.
+    if let Some(links) = j.get("linkedTaskIds").and_then(|v| v.as_array()) {
+        conn.execute(
+            "DELETE FROM taskLinks WHERE taskId = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        for link_val in links {
+            if let Some(linked_id) = link_val.as_str() {
+                conn.execute(
+                    "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
+                    rusqlite::params![id, linked_id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -559,7 +579,29 @@ pub fn upsert_project(conn: &Connection, j: &serde_json::Value) -> Result<(), St
         ],
     )
     .map(|_| ())
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // Sync project-tag associations from server response.
+    // The Go API returns tags as an array of tag ID strings.
+    if let Some(tags) = j.get("tags").and_then(|v| v.as_array()) {
+        conn.execute(
+            "DELETE FROM projectTags WHERE projectId = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        for tag_val in tags {
+            if let Some(tag_id) = tag_val.as_str() {
+                conn.execute(
+                    "INSERT OR IGNORE INTO projectTags (projectId, tagId) VALUES (?1, ?2)",
+                    rusqlite::params![id, tag_id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn upsert_area(conn: &Connection, j: &serde_json::Value) -> Result<(), String> {

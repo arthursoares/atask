@@ -26,6 +26,7 @@ type Task struct {
 	RecurrenceRule *RecurrenceRule `json:"repeatRule,omitempty"`
 	TimeSlot       *string         `json:"timeSlot,omitempty"`
 	Tags           []string        `json:"tags"`
+	LinkedTaskIDs  []string        `json:"linkedTaskIds"`
 	Timestamps
 	SoftDelete
 }
