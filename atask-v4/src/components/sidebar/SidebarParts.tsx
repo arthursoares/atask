@@ -141,9 +141,9 @@ export function NavItem({
   onClick: (view: ActiveView) => void;
   onTaskDrop?: (taskId: string) => void;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [nativeDragOver, setNativeDragOver] = useState(false);
   const taskDrag = useStore($taskPointerDrag);
-  const isDragTarget = isHovered && taskDrag.activeTaskId !== null;
+  const isDragTarget = nativeDragOver || (taskDrag.activeTaskId !== null && taskDrag.hoverTargetId === view);
 
   return (
     <SidebarRow
@@ -152,19 +152,17 @@ export function NavItem({
       dataSidebarItemId={view}
       dataSidebarItemKind="nav"
       onClick={() => onClick(view)}
-      onPointerEnter={() => setIsHovered(true)}
-      onPointerLeave={() => setIsHovered(false)}
       onDragOver={onTaskDrop ? (e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setIsHovered(true);
+        setNativeDragOver(true);
       } : undefined}
-      onDragLeave={onTaskDrop ? () => setIsHovered(false) : undefined}
+      onDragLeave={onTaskDrop ? () => setNativeDragOver(false) : undefined}
       onDrop={onTaskDrop ? (e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
-        setIsHovered(false);
+        setNativeDragOver(false);
         const taskId = e.dataTransfer.getData("text/plain");
         if (taskId) onTaskDrop(taskId);
       } : undefined}
@@ -211,9 +209,9 @@ export function ProjectItem({
   isReordering?: boolean;
 }) {
   const view: ActiveView = `project-${project.id}`;
-  const [isHovered, setIsHovered] = useState(false);
+  const [nativeDragOver, setNativeDragOver] = useState(false);
   const taskDrag = useStore($taskPointerDrag);
-  const isDragTarget = isHovered && taskDrag.activeTaskId !== null;
+  const isDragTarget = nativeDragOver || (taskDrag.activeTaskId !== null && taskDrag.hoverTargetId === project.id);
 
   return (
     <SidebarRow
@@ -227,19 +225,17 @@ export function ProjectItem({
       isReordering={isReordering}
       onClick={() => onClick(view)}
       onContextMenu={(e) => onContextMenu(e, project)}
-      onPointerEnter={() => setIsHovered(true)}
-      onPointerLeave={() => setIsHovered(false)}
       onDragOver={(e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setIsHovered(true);
+        setNativeDragOver(true);
       }}
-      onDragLeave={() => setIsHovered(false)}
+      onDragLeave={() => setNativeDragOver(false)}
       onDrop={(e) => {
         if (!isTaskTransfer(e)) return;
         e.preventDefault();
-        setIsHovered(false);
+        setNativeDragOver(false);
         const taskId = e.dataTransfer.getData("text/plain");
         if (taskId) onTaskDrop(taskId, project.id);
       }}

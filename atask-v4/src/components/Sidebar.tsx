@@ -466,7 +466,7 @@ export default function Sidebar() {
         const areaProjects = projectsByArea.get(area.id) ?? [];
         const areaReorderHandlers = areaReorder.getPointerHandlers(area.id);
         const isAreaReordering = areaReorder.reorderState.activeId === area.id;
-        const isAreaDropTarget = hoveredAreaId === area.id && isTaskDragActive;
+        const isAreaDropTarget = (hoveredAreaId === area.id || taskDrag.hoverTargetId === area.id) && isTaskDragActive;
 
         return (
           <Fragment key={area.id}>

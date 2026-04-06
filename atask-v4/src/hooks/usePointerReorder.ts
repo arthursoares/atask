@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { setTaskPointerHoverTarget } from '../store/ui';
 
 type ReorderableItem = { id: string };
 
@@ -177,6 +178,13 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorX: event.clientX,
       cursorY: event.clientY,
     });
+
+    // Update sidebar hover target using elementFromPoint (pointer capture blocks pointerenter)
+    if (onDragStartRef.current) {
+      const el = document.elementFromPoint(event.clientX, event.clientY);
+      const sidebarItem = el?.closest('[data-sidebar-item-id]');
+      setTaskPointerHoverTarget(sidebarItem?.getAttribute('data-sidebar-item-id') ?? null);
+    }
   }, [getDropIndex, setReorderStateSync]);
 
   const commitReorder = useCallback(async (event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
