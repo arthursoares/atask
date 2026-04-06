@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { updateTask } from '../../store';
+import { updateTask, createMutationActivity } from '../../store';
 
 interface UseTaskDraftOptions {
   taskId: string;
@@ -40,6 +40,9 @@ export default function useTaskDraft({
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
     titleTimerRef.current = setTimeout(() => {
       updateTask({ id: taskId, title: value });
+      if (value !== title) {
+        createMutationActivity(taskId, 'Title updated');
+      }
     }, debounceMs);
   };
 
@@ -48,6 +51,9 @@ export default function useTaskDraft({
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     notesTimerRef.current = setTimeout(() => {
       updateTask({ id: taskId, notes: value });
+      if (value !== notes) {
+        createMutationActivity(taskId, 'Notes updated');
+      }
     }, debounceMs);
   };
 
