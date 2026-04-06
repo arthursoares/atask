@@ -9,10 +9,10 @@ import (
 
 // Area represents a broad category or responsibility under which projects and tasks can be grouped.
 type Area struct {
-	ID       string
-	Title    string
-	Index    int
-	Archived bool
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Index    int    `json:"index"`
+	Archived bool   `json:"archived"`
 	Timestamps
 	SoftDelete
 }

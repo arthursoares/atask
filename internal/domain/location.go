@@ -9,12 +9,12 @@ import (
 
 // Location represents a geographic location that can be associated with a task.
 type Location struct {
-	ID        string
-	Name      string
-	Latitude  *float64
-	Longitude *float64
-	Radius    *int
-	Address   *string
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Latitude  *float64 `json:"latitude,omitempty"`
+	Longitude *float64 `json:"longitude,omitempty"`
+	Radius    *int     `json:"radius,omitempty"`
+	Address   *string  `json:"address,omitempty"`
 	Timestamps
 	SoftDelete
 }

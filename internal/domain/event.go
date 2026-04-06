@@ -30,15 +30,15 @@ func (d DeltaAction) String() string {
 
 // DeltaEvent records a fine-grained change to a single field of an entity.
 type DeltaEvent struct {
-	ID         int64
-	EntityType string
-	EntityID   string
-	Action     DeltaAction
-	Field      *string
-	OldValue   json.RawMessage
-	NewValue   json.RawMessage
-	ActorID    string
-	Timestamp  time.Time
+	ID         int64           `json:"id"`
+	EntityType string          `json:"entityType"`
+	EntityID   string          `json:"entityId"`
+	Action     DeltaAction     `json:"action"`
+	Field      *string         `json:"field,omitempty"`
+	OldValue   json.RawMessage `json:"oldValue,omitempty"`
+	NewValue   json.RawMessage `json:"newValue,omitempty"`
+	ActorID    string          `json:"actorId"`
+	Timestamp  time.Time       `json:"timestamp"`
 }
 
 // EventType identifies the kind of domain event that occurred.
@@ -142,13 +142,13 @@ const (
 
 // DomainEvent represents a high-level business event that occurred in the system.
 type DomainEvent struct {
-	ID         int64
-	Type       EventType
-	EntityType string
-	EntityID   string
-	ActorID    string
-	Payload    map[string]any
-	Timestamp  time.Time
+	ID         int64          `json:"id"`
+	Type       EventType      `json:"type"`
+	EntityType string         `json:"entityType"`
+	EntityID   string         `json:"entityId"`
+	ActorID    string         `json:"actorId"`
+	Payload    map[string]any `json:"payload,omitempty"`
+	Timestamp  time.Time      `json:"timestamp"`
 }
 
 // NewDomainEvent constructs a DomainEvent with the current timestamp.

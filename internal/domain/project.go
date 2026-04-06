@@ -9,19 +9,19 @@ import (
 
 // Project represents a collection of tasks grouped under a common goal.
 type Project struct {
-	ID           string
-	Title        string
-	Notes        string
-	Status       Status
-	Schedule     Schedule
-	StartDate    *time.Time
-	Deadline     *time.Time
-	CompletedAt  *time.Time
-	Index        int
-	AreaID       *string
-	Tags         []string
-	AutoComplete bool
-	Color        string
+	ID           string     `json:"id"`
+	Title        string     `json:"title"`
+	Notes        string     `json:"notes"`
+	Status       Status     `json:"status"`
+	Schedule     Schedule   `json:"schedule"`
+	StartDate    *time.Time `json:"startDate,omitempty"`
+	Deadline     *time.Time `json:"deadline,omitempty"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+	Index        int        `json:"index"`
+	AreaID       *string    `json:"areaId,omitempty"`
+	Tags         []string   `json:"tags"`
+	AutoComplete bool       `json:"autoComplete"`
+	Color        string     `json:"color"`
 	Timestamps
 	SoftDelete
 }

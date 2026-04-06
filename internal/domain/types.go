@@ -121,12 +121,12 @@ const (
 
 // Timestamps holds standard creation and update timestamps.
 type Timestamps struct {
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // SoftDelete holds soft-deletion state for an entity.
 type SoftDelete struct {
-	Deleted   bool
-	DeletedAt *time.Time
+	Deleted   bool       `json:"deleted,omitempty"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }

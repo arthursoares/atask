@@ -9,22 +9,22 @@ import (
 
 // Task represents a single actionable item in the system.
 type Task struct {
-	ID             string
-	Title          string
-	Notes          string
-	Status         Status
-	Schedule       Schedule
-	StartDate      *time.Time
-	Deadline       *time.Time
-	CompletedAt    *time.Time
-	Index          int
-	TodayIndex     *int
-	ProjectID      *string
-	SectionID      *string
-	AreaID         *string
-	LocationID     *string
-	RecurrenceRule *RecurrenceRule
-	Tags           []string
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	Notes          string          `json:"notes"`
+	Status         Status          `json:"status"`
+	Schedule       Schedule        `json:"schedule"`
+	StartDate      *time.Time      `json:"startDate,omitempty"`
+	Deadline       *time.Time      `json:"deadline,omitempty"`
+	CompletedAt    *time.Time      `json:"completedAt,omitempty"`
+	Index          int             `json:"index"`
+	TodayIndex     *int            `json:"todayIndex,omitempty"`
+	ProjectID      *string         `json:"projectId,omitempty"`
+	SectionID      *string         `json:"sectionId,omitempty"`
+	AreaID         *string         `json:"areaId,omitempty"`
+	LocationID     *string         `json:"locationId,omitempty"`
+	RecurrenceRule *RecurrenceRule `json:"repeatRule,omitempty"`
+	Tags           []string        `json:"tags"`
 	Timestamps
 	SoftDelete
 }

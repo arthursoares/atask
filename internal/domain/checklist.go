@@ -9,11 +9,11 @@ import (
 
 // ChecklistItem represents a sub-task within a task's checklist.
 type ChecklistItem struct {
-	ID     string
-	Title  string
-	Status ChecklistStatus
-	TaskID string
-	Index  int
+	ID     string          `json:"id"`
+	Title  string          `json:"title"`
+	Status ChecklistStatus `json:"status"`
+	TaskID string          `json:"taskId"`
+	Index  int             `json:"index"`
 	Timestamps
 	SoftDelete
 }

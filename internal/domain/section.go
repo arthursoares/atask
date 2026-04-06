@@ -9,10 +9,10 @@ import (
 
 // Section represents a named grouping of tasks within a project.
 type Section struct {
-	ID        string
-	Title     string
-	ProjectID string
-	Index     int
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	ProjectID string `json:"projectId"`
+	Index     int    `json:"index"`
 	Timestamps
 	SoftDelete
 }

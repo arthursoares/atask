@@ -9,11 +9,11 @@ import (
 
 // Tag represents a label that can be applied to tasks and projects.
 type Tag struct {
-	ID       string
-	Title    string
-	ParentID *string
-	Shortcut *string
-	Index    int
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	ParentID *string `json:"parentId,omitempty"`
+	Shortcut *string `json:"shortcut,omitempty"`
+	Index    int     `json:"index"`
 	Timestamps
 	SoftDelete
 }

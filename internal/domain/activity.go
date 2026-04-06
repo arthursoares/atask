@@ -10,13 +10,13 @@ import (
 
 // Activity records an action taken on a task by a human or agent actor.
 type Activity struct {
-	ID        string
-	TaskID    string
-	ActorID   string
-	ActorType ActorType
-	Type      ActivityType
-	Content   string
-	CreatedAt time.Time
+	ID        string       `json:"id"`
+	TaskID    string       `json:"taskId"`
+	ActorID   string       `json:"actorId"`
+	ActorType ActorType    `json:"actorType"`
+	Type      ActivityType `json:"type"`
+	Content   string       `json:"content"`
+	CreatedAt time.Time    `json:"createdAt"`
 }
 
 // NewActivity creates a new Activity for the given task and actor.
