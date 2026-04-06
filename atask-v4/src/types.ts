@@ -68,6 +68,11 @@ export interface TaskTag {
   tagId: string;
 }
 
+export interface TaskLink {
+  taskId: string;
+  linkedTaskId: string;
+}
+
 export interface ProjectTag {
   projectId: string;
   tagId: string;
@@ -111,6 +116,7 @@ export interface AppState {
   sections: Section[];
   tags: Tag[];
   taskTags: TaskTag[];
+  taskLinks: TaskLink[];
   projectTags: ProjectTag[];
   checklistItems: ChecklistItem[];
   activities: Activity[];

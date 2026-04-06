@@ -212,6 +212,22 @@ fn query_all_task_tags(conn: &rusqlite::Connection) -> Result<Vec<TaskTag>, Stri
         .map_err(|e| e.to_string())
 }
 
+fn query_all_task_links(conn: &rusqlite::Connection) -> Result<Vec<TaskLink>, String> {
+    let mut stmt = conn
+        .prepare("SELECT taskId, linkedTaskId FROM taskLinks")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(TaskLink {
+                task_id: row.get(0)?,
+                linked_task_id: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
 fn query_all_project_tags(conn: &rusqlite::Connection) -> Result<Vec<ProjectTag>, String> {
     let mut stmt = conn
         .prepare("SELECT projectId, tagId FROM projectTags")
@@ -321,6 +337,7 @@ pub(crate) fn load_all_impl(conn: &rusqlite::Connection) -> Result<AppState, Str
         sections: query_all_sections(conn)?,
         tags: query_all_tags(conn)?,
         task_tags: query_all_task_tags(conn)?,
+        task_links: query_all_task_links(conn)?,
         project_tags: query_all_project_tags(conn)?,
         checklist_items: query_all_checklist_items(conn)?,
         activities: query_all_activities(conn)?,
@@ -1638,6 +1655,54 @@ pub fn remove_tag_from_task(
 }
 
 #[tauri::command]
+pub fn add_task_link(
+    db: tauri::State<'_, Database>,
+    task_id: String,
+    linked_task_id: String,
+) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
+        rusqlite::params![task_id, linked_task_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    queue_pending_op(
+        &conn,
+        "POST",
+        &format!("/tasks/{}/links/{}", task_id, linked_task_id),
+        None,
+    )?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_task_link(
+    db: tauri::State<'_, Database>,
+    task_id: String,
+    linked_task_id: String,
+) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "DELETE FROM taskLinks WHERE taskId = ?1 AND linkedTaskId = ?2",
+        rusqlite::params![task_id, linked_task_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    queue_pending_op(
+        &conn,
+        "DELETE",
+        &format!("/tasks/{}/links/{}", task_id, linked_task_id),
+        None,
+    )?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn add_tag_to_project(
     db: tauri::State<'_, Database>,
     project_id: String,
@@ -2102,6 +2167,7 @@ pub fn reset_database(db: tauri::State<'_, Database>) -> Result<(), String> {
         "DELETE FROM activities;
          DELETE FROM checklistItems;
          DELETE FROM taskTags;
+         DELETE FROM taskLinks;
          DELETE FROM projectTags;
          DELETE FROM tasks;
          DELETE FROM sections;

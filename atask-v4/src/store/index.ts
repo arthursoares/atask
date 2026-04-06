@@ -7,6 +7,7 @@ export { $tags, useTagsForTask } from './tags';
 export { $checklistItems, useChecklistForTask } from './checklist';
 export { $activities, useActivitiesForTask } from './activities';
 export { $locations } from './locations';
+export { $taskLinks, $linksByTaskId } from './taskLinks';
 
 // UI atoms
 export {
@@ -103,6 +104,8 @@ export {
   reorderChecklistItems,
   createActivity,
   createMutationActivity,
+  addTaskLink,
+  removeTaskLink,
   createLocation,
   updateLocation,
   deleteLocation,

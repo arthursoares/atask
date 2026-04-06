@@ -116,6 +116,8 @@ pub fn run() {
             commands::delete_tag,
             commands::add_tag_to_task,
             commands::remove_tag_from_task,
+            commands::add_task_link,
+            commands::remove_task_link,
             commands::add_tag_to_project,
             commands::remove_tag_from_project,
             // Checklist commands

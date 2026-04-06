@@ -208,6 +208,16 @@ export function removeTagFromProject(
   return invoke<void>("remove_tag_from_project", { projectId, tagId });
 }
 
+// --- Task link commands ---
+
+export function addTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
+  return invoke<void>("add_task_link", { taskId, linkedTaskId });
+}
+
+export function removeTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
+  return invoke<void>("remove_task_link", { taskId, linkedTaskId });
+}
+
 // --- Location commands ---
 
 export function createLocation(params: CreateLocationParams): Promise<Location> {

@@ -36,6 +36,7 @@ impl Database {
         // Add locationId column to tasks if it doesn't exist yet
         Self::add_column_if_missing(&conn, "tasks", "locationId", "TEXT REFERENCES locations(id)")?;
         conn.execute_batch(include_str!("migrations/005_project_tags.sql"))?;
+        conn.execute_batch(include_str!("migrations/006_task_links.sql"))?;
         Ok(())
     }
 

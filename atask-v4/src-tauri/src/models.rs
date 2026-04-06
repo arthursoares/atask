@@ -89,6 +89,13 @@ pub struct ProjectTag {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskLink {
+    pub task_id: String,
+    pub linked_task_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ChecklistItem {
     pub id: String,
     pub title: String,
@@ -134,6 +141,7 @@ pub struct AppState {
     pub sections: Vec<Section>,
     pub tags: Vec<Tag>,
     pub task_tags: Vec<TaskTag>,
+    pub task_links: Vec<TaskLink>,
     pub project_tags: Vec<ProjectTag>,
     pub checklist_items: Vec<ChecklistItem>,
     pub activities: Vec<Activity>,

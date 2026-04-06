@@ -14,6 +14,7 @@ import { $tags } from './tags';
 import { $checklistItems } from './checklist';
 import { $activities } from './activities';
 import { $locations } from './locations';
+import { $taskLinks } from './taskLinks';
 import {
   $activeView,
   $selectedTaskId,
@@ -124,6 +125,7 @@ export async function loadAll(): Promise<void> {
   $sections.set(data.sections);
   $tags.set(data.tags);
   $taskTags.set(data.taskTags);
+  $taskLinks.set(data.taskLinks);
   $projectTags.set(data.projectTags);
   $checklistItems.set(data.checklistItems);
   $activities.set(data.activities);
@@ -369,6 +371,22 @@ export async function removeTagFromProject(projectId: string, tagId: string): Pr
   await tauri.removeTagFromProject(projectId, tagId);
   $projectTags.set(
     $projectTags.get().filter((pt) => !(pt.projectId === projectId && pt.tagId === tagId)),
+  );
+  notifySync();
+}
+
+// --- Task link actions ---
+
+export async function addTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
+  await tauri.addTaskLink(taskId, linkedTaskId);
+  $taskLinks.set(appendItem($taskLinks.get(), { taskId, linkedTaskId }));
+  notifySync();
+}
+
+export async function removeTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
+  await tauri.removeTaskLink(taskId, linkedTaskId);
+  $taskLinks.set(
+    $taskLinks.get().filter((tl) => !(tl.taskId === taskId && tl.linkedTaskId === linkedTaskId)),
   );
   notifySync();
 }
