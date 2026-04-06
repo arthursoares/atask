@@ -28,6 +28,7 @@ func (h *AreaHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /areas/{id}", h.Delete)
 	mux.HandleFunc("POST /areas/{id}/archive", h.Archive)
 	mux.HandleFunc("POST /areas/{id}/unarchive", h.Unarchive)
+	mux.HandleFunc("PATCH /areas/{id}", h.Patch)
 }
 
 func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -146,4 +147,31 @@ func (h *AreaHandler) Unarchive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.AreaUnarchived), map[string]string{"id": id})
+}
+
+func (h *AreaHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Title *string `json:"title"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondDecodeError(w, err)
+		return
+	}
+
+	actor := actorFromRequest(r)
+
+	if body.Title != nil {
+		if err := h.areas.Rename(r.Context(), id, *body.Title, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+
+	area, err := h.areas.Get(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "area not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, area)
 }

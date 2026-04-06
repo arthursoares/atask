@@ -35,6 +35,7 @@ func (h *ProjectHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /projects/{id}/color", h.UpdateColor)
 	mux.HandleFunc("POST /projects/{id}/tags/{tagId}", h.AddTag)
 	mux.HandleFunc("DELETE /projects/{id}/tags/{tagId}", h.RemoveTag)
+	mux.HandleFunc("PATCH /projects/{id}", h.Patch)
 }
 
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -301,4 +302,72 @@ func (h *ProjectHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.ProjectTagRemoved), map[string]string{"id": id, "tag_id": tagID})
+}
+
+func (h *ProjectHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Title    *string `json:"title"`
+		Notes    *string `json:"notes"`
+		Deadline *string `json:"deadline"`
+		AreaID   *string `json:"areaId"`
+		Color    *string `json:"color"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondDecodeError(w, err)
+		return
+	}
+
+	actor := actorFromRequest(r)
+
+	if body.Title != nil {
+		if err := h.projects.UpdateTitle(r.Context(), id, *body.Title, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Notes != nil {
+		if err := h.projects.UpdateNotes(r.Context(), id, *body.Notes, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Deadline != nil {
+		var date *time.Time
+		if *body.Deadline != "" {
+			t, err := time.Parse("2006-01-02", *body.Deadline)
+			if err != nil {
+				RespondError(w, http.StatusBadRequest, "invalid deadline format")
+				return
+			}
+			date = &t
+		}
+		if err := h.projects.SetDeadline(r.Context(), id, date, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.AreaID != nil {
+		aid := body.AreaID
+		if *aid == "" {
+			aid = nil
+		}
+		if err := h.projects.MoveToArea(r.Context(), id, aid, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Color != nil {
+		if err := h.projects.UpdateColor(r.Context(), id, *body.Color, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+
+	project, err := h.projects.Get(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, project)
 }

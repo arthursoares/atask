@@ -45,6 +45,7 @@ func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /tasks/{id}/reorder", h.Reorder)
 	mux.HandleFunc("PUT /tasks/{id}/today-index", h.SetTodayIndex)
 	mux.HandleFunc("POST /tasks/{id}/reopen", h.Reopen)
+	mux.HandleFunc("PATCH /tasks/{id}", h.Patch)
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -552,4 +553,110 @@ func (h *TaskHandler) Reopen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondEvent(w, http.StatusOK, string(domain.TaskReopened), map[string]string{"id": id})
+}
+
+func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Title     *string `json:"title"`
+		Notes     *string `json:"notes"`
+		Schedule  *int    `json:"schedule"`
+		StartDate *string `json:"startDate"`
+		Deadline  *string `json:"deadline"`
+		ProjectID *string `json:"projectId"`
+		SectionID *string `json:"sectionId"`
+		AreaID    *string `json:"areaId"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		RespondDecodeError(w, err)
+		return
+	}
+
+	actor := actorFromRequest(r)
+
+	if body.Title != nil {
+		if err := h.tasks.UpdateTitle(r.Context(), id, *body.Title, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Notes != nil {
+		if err := h.tasks.UpdateNotes(r.Context(), id, *body.Notes, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Schedule != nil {
+		if err := h.tasks.UpdateSchedule(r.Context(), id, domain.Schedule(*body.Schedule), actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.StartDate != nil {
+		var date *time.Time
+		if *body.StartDate != "" {
+			t, err := time.Parse("2006-01-02", *body.StartDate)
+			if err != nil {
+				RespondError(w, http.StatusBadRequest, "invalid startDate format")
+				return
+			}
+			date = &t
+		}
+		if err := h.tasks.SetStartDate(r.Context(), id, date, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.Deadline != nil {
+		var date *time.Time
+		if *body.Deadline != "" {
+			t, err := time.Parse("2006-01-02", *body.Deadline)
+			if err != nil {
+				RespondError(w, http.StatusBadRequest, "invalid deadline format")
+				return
+			}
+			date = &t
+		}
+		if err := h.tasks.SetDeadline(r.Context(), id, date, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.ProjectID != nil {
+		pid := body.ProjectID
+		if *pid == "" {
+			pid = nil
+		}
+		if err := h.tasks.MoveToProject(r.Context(), id, pid, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.SectionID != nil {
+		sid := body.SectionID
+		if *sid == "" {
+			sid = nil
+		}
+		if err := h.tasks.MoveToSection(r.Context(), id, sid, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	if body.AreaID != nil {
+		aid := body.AreaID
+		if *aid == "" {
+			aid = nil
+		}
+		if err := h.tasks.MoveToArea(r.Context(), id, aid, actor); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+
+	task, err := h.tasks.Get(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, task)
 }
