@@ -37,7 +37,8 @@ interface PointerDragSession {
   inputType: 'pointer' | 'mouse';
 }
 
-const POINTER_DRAG_THRESHOLD = 4;
+const POINTER_DRAG_THRESHOLD = 8;
+const POINTER_DRAG_HOLD_MS = 150;
 
 export interface PointerReorderReturn {
   reorderState: PointerReorderState;
@@ -67,6 +68,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
   });
   const reorderStateRef = useRef(reorderState);
   const sessionRef = useRef<PointerDragSession | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
   const onDragStartRef = useRef(onDragStart);
   const onDragEndRef = useRef(onDragEnd);
@@ -91,6 +93,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
   }, []);
 
   const cancelReorder = useCallback(() => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     const prevId = sessionRef.current?.id ?? null;
     sessionRef.current = null;
     setReorderStateSync({
@@ -137,14 +140,18 @@ export default function usePointerReorder<T extends ReorderableItem>({
       inputType: args.inputType,
     };
 
-    setReorderStateSync({
-      activeId: args.id,
-      dropIndex: null,
-      isPointerDragging: false,
-      cursorX: args.clientX,
-      cursorY: args.clientY,
-    });
-    onDragStartRef.current?.(args.id);
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      if (!sessionRef.current || sessionRef.current.id !== args.id) return;
+      setReorderStateSync({
+        activeId: args.id,
+        dropIndex: null,
+        isPointerDragging: false,
+        cursorX: args.clientX,
+        cursorY: args.clientY,
+      });
+      onDragStartRef.current?.(args.id);
+    }, POINTER_DRAG_HOLD_MS);
   }, [setReorderStateSync]);
 
   const updateReorder = useCallback((event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
@@ -155,6 +162,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
     const movedEnough = Math.abs(event.clientX - session.startX) >= POINTER_DRAG_THRESHOLD
       || Math.abs(event.clientY - session.startY) >= POINTER_DRAG_THRESHOLD;
     if (!movedEnough && !reorderStateRef.current.isPointerDragging) return;
+
+    // If movement threshold reached before hold timer, activate immediately
+    if (!reorderStateRef.current.activeId) {
+      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      onDragStartRef.current?.(session.id);
+    }
 
     const dropIndex = getDropIndex(event.clientY);
     setReorderStateSync({

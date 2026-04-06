@@ -270,14 +270,12 @@ html, body {
     flex-shrink: 0;
     user-select: none;
     -webkit-user-select: none;
-    padding-top: env(titlebar-area-height, 0px);
 }
 
 .sidebar-toolbar {
     height: var(--toolbar-height);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--sp-4);
+    min-height: var(--toolbar-height);
+    flex-shrink: 0;
     -webkit-app-region: drag;
 }
 
