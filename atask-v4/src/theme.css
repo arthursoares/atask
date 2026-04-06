@@ -2769,7 +2769,7 @@ textarea:focus-visible {
 }
 
 .activity-mutation-text {
-    color: var(--text-tertiary);
+    color: var(--ink-tertiary);
     font-size: 12px;
     font-style: italic;
 }
@@ -2783,8 +2783,8 @@ textarea:focus-visible {
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--surface);
-    color: var(--text-primary);
+    background: var(--canvas-elevated);
+    color: var(--ink-primary);
     font-size: 13px;
     outline: none;
 }

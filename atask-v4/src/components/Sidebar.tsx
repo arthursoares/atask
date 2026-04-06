@@ -287,7 +287,7 @@ export default function Sidebar() {
     setRenamingProjectId(null);
   }, []);
 
-  const inboxCount = tasks.filter((task) => task.schedule === 0 && task.status === 0).length;
+  const inboxCount = tasks.filter((task) => task.schedule === 0 && task.status === 0 && task.projectId === null).length;
   const todayCount = tasks.filter((task) => task.schedule === 1 && task.status === 0).length;
 
   const projectTaskCounts = new Map<string, number>();
@@ -419,7 +419,7 @@ export default function Sidebar() {
           badge={inboxCount}
           activeView={activeView}
           onClick={setActiveView}
-          onTaskDrop={(taskId) => updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null })}
+          onTaskDrop={(taskId) => updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null, projectId: null, areaId: null, sectionId: null })}
         />
         <NavItem
           view="today"
@@ -430,7 +430,7 @@ export default function Sidebar() {
           onClick={setActiveView}
           onTaskDrop={(taskId) => {
             const today = todayLocal();
-            updateTask({ id: taskId, schedule: 1, startDate: today });
+            updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null, sectionId: null });
           }}
         />
         <NavItem
@@ -440,7 +440,7 @@ export default function Sidebar() {
           activeView={activeView}
           onClick={setActiveView}
           onTaskDrop={(taskId) => {
-            updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal() });
+            updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null, sectionId: null });
           }}
         />
         <NavItem
@@ -449,7 +449,7 @@ export default function Sidebar() {
           icon={<SomedayIcon />}
           activeView={activeView}
           onClick={setActiveView}
-          onTaskDrop={(taskId) => updateTask({ id: taskId, schedule: 2 })}
+          onTaskDrop={(taskId) => updateTask({ id: taskId, schedule: 2, projectId: null, areaId: null, sectionId: null })}
         />
         <NavItem
           view="logbook"

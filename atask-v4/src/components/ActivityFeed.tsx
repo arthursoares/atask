@@ -62,8 +62,13 @@ export default function ActivityFeed({ taskId }: ActivityFeedProps) {
   const handleSubmit = async () => {
     const text = comment.trim();
     if (!text) return;
+    const draft = comment;
     setComment('');
-    await createActivity(taskId, text);
+    try {
+      await createActivity(taskId, text);
+    } catch {
+      setComment(draft);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

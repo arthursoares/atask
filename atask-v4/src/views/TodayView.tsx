@@ -69,12 +69,12 @@ export default function TodayView() {
     if (sidebarItemKind === 'project' && sidebarItemId) {
       const allProjects = $projects.get();
       const project = allProjects.find((p) => p.id === sidebarItemId);
-      updateTask({ id: taskId, projectId: sidebarItemId, areaId: project?.areaId ?? null, schedule: 0, startDate: null, timeSlot: null });
+      updateTask({ id: taskId, projectId: sidebarItemId, areaId: project?.areaId ?? null, sectionId: null, schedule: 0, startDate: null, timeSlot: null });
       return true;
     }
 
     if (sidebarItemKind === 'area' && sidebarItemId) {
-      updateTask({ id: taskId, areaId: sidebarItemId, projectId: null, schedule: 0, startDate: null, timeSlot: null });
+      updateTask({ id: taskId, areaId: sidebarItemId, projectId: null, sectionId: null, schedule: 0, startDate: null, timeSlot: null });
       return true;
     }
 
@@ -82,20 +82,20 @@ export default function TodayView() {
     if (closestNavItem) {
       const view = closestNavItem.getAttribute('data-sidebar-item-id');
       if (view === 'inbox') {
-        updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null, projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null, projectId: null, areaId: null, sectionId: null });
         return true;
       }
       if (view === 'today') {
         const today = todayLocal();
-        updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null, sectionId: null });
         return true;
       }
       if (view === 'upcoming') {
-        updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null, sectionId: null });
         return true;
       }
       if (view === 'someday') {
-        updateTask({ id: taskId, schedule: 2, projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 2, projectId: null, areaId: null, sectionId: null });
         return true;
       }
     }
