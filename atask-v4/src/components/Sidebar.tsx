@@ -21,6 +21,7 @@ import {
   reorderAreas,
 } from "../store/index";
 import type { ActiveView, Area, Project } from "../types";
+import { todayLocal, tomorrowLocal } from "../lib/dates";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import { Button } from "../ui";
 import { LogbookIcon, InboxIcon, SomedayIcon, TodayIcon, UpcomingIcon } from "./sidebar/SidebarIcons";
@@ -428,7 +429,7 @@ export default function Sidebar() {
           activeView={activeView}
           onClick={setActiveView}
           onTaskDrop={(taskId) => {
-            const today = new Date().toISOString().slice(0, 10);
+            const today = todayLocal();
             updateTask({ id: taskId, schedule: 1, startDate: today });
           }}
         />
@@ -438,6 +439,9 @@ export default function Sidebar() {
           icon={<UpcomingIcon />}
           activeView={activeView}
           onClick={setActiveView}
+          onTaskDrop={(taskId) => {
+            updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal() });
+          }}
         />
         <NavItem
           view="someday"

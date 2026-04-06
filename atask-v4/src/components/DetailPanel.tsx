@@ -48,8 +48,6 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!task) return null;
-
   const {
     titleValue,
     notesValue,
@@ -57,8 +55,8 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
     setNotesValue,
   } = useTaskDraft({
     taskId,
-    title: task.title,
-    notes: task.notes ?? '',
+    title: task?.title ?? '',
+    notes: task?.notes ?? '',
   });
   const {
     showWhenPicker,
@@ -68,6 +66,8 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
     showProjectPicker,
     setShowProjectPicker,
   } = useTaskPickers();
+
+  if (!task) return null;
 
   return (
     <div className="detail-panel">

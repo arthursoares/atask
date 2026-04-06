@@ -177,6 +177,11 @@ export default function usePointerReorder<T extends ReorderableItem>({
       return;
     }
 
+    if (!currentState.isPointerDragging) {
+      cancelReorder();
+      return;
+    }
+
     const cursorX = event.clientX;
     const cursorY = event.clientY;
     const dropTarget = document.elementFromPoint(cursorX, cursorY);
@@ -188,11 +193,6 @@ export default function usePointerReorder<T extends ReorderableItem>({
         cancelReorder();
         return;
       }
-    }
-
-    if (!currentState.isPointerDragging) {
-      cancelReorder();
-      return;
     }
 
     if (currentState.dropIndex == null) {
@@ -261,7 +261,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       }
     };
     const handleWindowBlur = () => {
-      cancelMouseSession();
+      cancelReorder();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') {

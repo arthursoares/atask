@@ -6,7 +6,7 @@ import DragOverlay from '../../components/DragOverlay';
 import usePointerReorder from '../../hooks/usePointerReorder';
 import type { ReorderMove, Task } from '../../types';
 import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects } from '../../store/index';
-import { todayLocal } from '../../lib/dates';
+import { todayLocal, tomorrowLocal } from '../../lib/dates';
 
 interface AreaTaskListProps {
   tasks: Task[];
@@ -59,7 +59,7 @@ export default function AreaTaskList({
         return true;
       }
       if (view === 'upcoming') {
-        updateTask({ id: taskId, schedule: 3, projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null });
         return true;
       }
       if (view === 'someday') {

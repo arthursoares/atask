@@ -42,8 +42,12 @@ export default function ContextMenu({ items, position, onClose }: ContextMenuPro
         onClose();
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', handler, true);
+    document.addEventListener('click', handler, true);
+    return () => {
+      document.removeEventListener('mousedown', handler, true);
+      document.removeEventListener('click', handler, true);
+    };
   }, [onClose]);
 
   // Keyboard navigation

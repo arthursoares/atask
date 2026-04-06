@@ -270,6 +270,7 @@ html, body {
     flex-shrink: 0;
     user-select: none;
     -webkit-user-select: none;
+    padding-top: env(titlebar-area-height, 0px);
 }
 
 .sidebar-toolbar {
@@ -2565,7 +2566,7 @@ textarea:focus-visible {
 
 .context-menu-shell {
     position: fixed;
-    z-index: 200;
+    z-index: 9999;
     background: var(--canvas-elevated);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);

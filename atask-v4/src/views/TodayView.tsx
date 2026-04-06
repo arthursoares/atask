@@ -23,6 +23,7 @@ import SectionHeader from '../components/SectionHeader';
 import EmptyState from '../components/EmptyState';
 import DropSlot from '../components/task-row/DropSlot';
 import DragOverlay from '../components/DragOverlay';
+import { todayLocal, tomorrowLocal } from '../lib/dates';
 import usePointerReorder, { type PointerReorderReturn, type PointerReorderState } from '../hooks/usePointerReorder';
 
 const StarIcon = (
@@ -85,12 +86,12 @@ export default function TodayView() {
         return true;
       }
       if (view === 'today') {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayLocal();
         updateTask({ id: taskId, schedule: 1, startDate: today, projectId: null, areaId: null });
         return true;
       }
       if (view === 'upcoming') {
-        updateTask({ id: taskId, schedule: 3, projectId: null, areaId: null });
+        updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null });
         return true;
       }
       if (view === 'someday') {

@@ -9,7 +9,7 @@ import type { ReorderMove, Task } from '../../types';
 import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects } from '../../store/index';
 import { useStore } from '@nanostores/react';
 import { $taskPointerDrag } from '../../store/ui';
-import { todayLocal } from '../../lib/dates';
+import { todayLocal, tomorrowLocal } from '../../lib/dates';
 
 interface ProjectTaskListProps {
   tasks: Task[];
@@ -79,7 +79,7 @@ export default function ProjectTaskList({
         return true;
       }
       if (view === 'upcoming') {
-        updateTask({ id: taskId, schedule: 3, projectId: null, areaId: null, sectionId: null });
+        updateTask({ id: taskId, schedule: 3, startDate: tomorrowLocal(), projectId: null, areaId: null, sectionId: null });
         return true;
       }
       if (view === 'someday') {
