@@ -2765,5 +2765,34 @@ textarea:focus-visible {
 }
 
 
+.activity-mutation {
+    padding: 2px 0;
+}
+
+.activity-mutation-text {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.activity-comment-input {
+    margin-top: 8px;
+}
+
+.activity-comment-field {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+}
+
+.activity-comment-field:focus {
+    border-color: var(--accent);
+}
+
 /* No animations. All state changes are instant.
    Only allowed transitions: hover background-color 80ms ease-out on interactive elements. */
