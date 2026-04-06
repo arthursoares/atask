@@ -148,24 +148,43 @@ export async function completeTask(id: string): Promise<void> {
   const task = await tauri.completeTask(id);
   $tasks.set(replaceItem($tasks.get(), task));
   notifySync();
+  createMutationActivity(id, 'Completed');
 }
 
 export async function cancelTask(id: string): Promise<void> {
   const task = await tauri.cancelTask(id);
   $tasks.set(replaceItem($tasks.get(), task));
   notifySync();
+  createMutationActivity(id, 'Cancelled');
 }
 
 export async function reopenTask(id: string): Promise<void> {
   const task = await tauri.reopenTask(id);
   $tasks.set(replaceItem($tasks.get(), task));
   notifySync();
+  createMutationActivity(id, 'Reopened');
 }
 
 export async function updateTask(params: UpdateTaskParams): Promise<void> {
+  const oldTask = $tasks.get().find((t) => t.id === params.id);
   const task = await tauri.updateTask(params);
   $tasks.set(replaceItem($tasks.get(), task));
   notifySync();
+
+  if (oldTask) {
+    if (params.schedule !== undefined && params.schedule !== oldTask.schedule) {
+      const labels: Record<number, string> = { 0: 'Inbox', 1: 'Today', 2: 'Someday', 3: 'Upcoming' };
+      createMutationActivity(params.id, `Moved to ${labels[params.schedule] ?? 'unknown'}`);
+    }
+    if (params.projectId !== undefined && params.projectId !== oldTask.projectId) {
+      if (params.projectId) {
+        const project = $projects.get().find((p) => p.id === params.projectId);
+        createMutationActivity(params.id, `Moved to ${project?.title ?? 'project'}`);
+      } else {
+        createMutationActivity(params.id, 'Removed from project');
+      }
+    }
+  }
 }
 
 export async function duplicateTask(id: string): Promise<void> {
