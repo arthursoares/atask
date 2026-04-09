@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod models;
+mod patch_body;
 mod sync;
 mod sync_commands;
 #[cfg(test)]
