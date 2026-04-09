@@ -203,6 +203,19 @@ fn delete_entity(conn: &Connection, entity_type: &str, entity_id: &str) -> Resul
         _ => return Ok(()),
     };
 
+    // Some parent-delete deltas do not carry the child updates that the
+    // server cascaded (e.g. locations: the server clears task.locationId but
+    // only emits a location delta). Replicate the cascade locally BEFORE
+    // deleting the parent so we don't leave dangling references / violate
+    // local FK constraints.
+    if entity_type == "location" {
+        conn.execute(
+            "UPDATE tasks SET locationId = NULL WHERE locationId = ?1",
+            [entity_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
     conn.execute(&format!("DELETE FROM {} WHERE id = ?1", table), [entity_id])
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -244,13 +257,41 @@ fn flush_pending_ops_blocking(
         match req.send() {
             Ok(resp) => {
                 let status = resp.status().as_u16();
+                // Capture response body for 4xx logging before we take the lock.
+                let body_preview = if (400..500).contains(&status) {
+                    resp.text().unwrap_or_default()
+                } else {
+                    String::new()
+                };
                 let c = conn.lock().map_err(|e| e.to_string())?;
-                if (200..300).contains(&status) || (400..500).contains(&status) {
-                    // Success or client error (conflict lost) — mark done
+                if (200..300).contains(&status) || status == 404 || status == 409 {
+                    // 2xx: success. 404: entity already gone (idempotent
+                    // delete/patch). 409: conflict, server wins — delta pull
+                    // will reconcile. All "desired state already reached".
+                    mark_synced(&c, op.id)?;
+                    flushed += 1;
+                    consecutive_failures = 0;
+                } else if (400..500).contains(&status) {
+                    // Other 4xx (400/401/403/422/...) mean the op's body
+                    // violates the server contract. Marking it synced avoids
+                    // an infinite retry loop, but we MUST surface the drift
+                    // or the user will never know their change was dropped.
+                    eprintln!(
+                        "sync: dropping pending op #{} ({} {}) — server returned {}: {}",
+                        op.id, op.method, op.path, status, body_preview
+                    );
+                    let _ = set_last_sync_error(
+                        &c,
+                        Some(&format!(
+                            "server rejected {} {} with {}: {}",
+                            op.method, op.path, status, body_preview
+                        )),
+                    );
                     mark_synced(&c, op.id)?;
                     flushed += 1;
                     consecutive_failures = 0;
                 } else {
+                    // 5xx / unexpected — retry on the next tick.
                     consecutive_failures += 1;
                     if consecutive_failures >= 3 {
                         break;
