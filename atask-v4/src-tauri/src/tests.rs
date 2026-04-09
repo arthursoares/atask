@@ -7,6 +7,56 @@ mod tests {
         Database::new_in_memory().expect("in-memory db")
     }
 
+    // ── with_tx: atomicity between local writes and pending-op enqueue ───────
+
+    #[test]
+    fn with_tx_commits_on_ok() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let task = with_tx(&conn, |tx| create_task_impl(tx, make_task("Atomic"))).unwrap();
+        let state = load_all_impl(&conn).unwrap();
+        assert_eq!(state.tasks.len(), 1);
+        assert_eq!(state.tasks[0].id, task.id);
+    }
+
+    #[test]
+    fn with_tx_rolls_back_on_err() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+
+        // Closure INSERTs a task then simulates a follow-up failure (e.g. a
+        // pending-op enqueue hitting a constraint). The whole transaction
+        // must roll back so the task row never becomes visible.
+        let result: Result<(), String> = with_tx(&conn, |tx| {
+            create_task_impl(tx, make_task("Doomed"))?;
+            Err("simulated pending-op failure".to_string())
+        });
+        assert!(result.is_err());
+
+        let state = load_all_impl(&conn).unwrap();
+        assert!(
+            state.tasks.is_empty(),
+            "task row must be rolled back when the closure errors (got {:?})",
+            state.tasks
+        );
+    }
+
+    #[test]
+    fn with_tx_rolls_back_all_writes_on_err() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+
+        let result: Result<(), String> = with_tx(&conn, |tx| {
+            create_tag_impl(tx, CreateTagParams { title: "a".into() })?;
+            create_tag_impl(tx, CreateTagParams { title: "b".into() })?;
+            Err("abort".to_string())
+        });
+        assert!(result.is_err());
+
+        let state = load_all_impl(&conn).unwrap();
+        assert!(state.tags.is_empty(), "all tags must be rolled back");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     fn make_task(title: &str) -> CreateTaskParams {
