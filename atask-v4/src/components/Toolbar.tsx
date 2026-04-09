@@ -1,5 +1,5 @@
 import { useStore } from "@nanostores/react";
-import { $activeView, $projects, $areas, $showPalette, createTask } from "../store/index";
+import { $activeView, $projects, $areas, $showPalette, $showSearch, createTask } from "../store/index";
 import SyncStatusIndicator from "./SyncStatusIndicator";
 
 // --- Icon components matching the active view ---
@@ -163,24 +163,27 @@ export default function Toolbar() {
         <SyncStatusIndicator />
         <button
           className="toolbar-btn"
-          title="Search"
-          onClick={() => setShowPalette(true)}
+          title="Search (⌘F)"
+          aria-label="Search tasks"
+          onClick={() => $showSearch.set(true)}
         >
-          <SearchIcon />
+          <SearchIcon aria-hidden="true" />
         </button>
         <button
           className="toolbar-btn"
-          title="New Task"
+          title="New Task (⌘N)"
+          aria-label="Create new task"
           onClick={() => createTask("")}
         >
-          <NewTaskIcon />
+          <NewTaskIcon aria-hidden="true" />
         </button>
         <button
           className="toolbar-btn"
-          title="Command Palette"
+          title="Command Palette (⌘⇧P)"
+          aria-label="Open command palette"
           onClick={() => setShowPalette(true)}
         >
-          <CommandPaletteIcon />
+          <CommandPaletteIcon aria-hidden="true" />
         </button>
       </div>
     </div>
