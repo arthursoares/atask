@@ -242,7 +242,7 @@ export default function TodayView() {
       )}
 
       {morning.length === 0 && evening.length === 0 && (
-        <EmptyState icon={StarIcon} text="What will you do today?" />
+        <EmptyState icon={StarIcon} text="What will you do today?" hint={<>Press <kbd>⌘N</kbd> to add a task, or drag one in from Inbox.</>} />
       )}
 
       <NewTaskRow onCreate={createTask} />

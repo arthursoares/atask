@@ -154,7 +154,7 @@ export default function InboxView() {
   return (
     <div>
       {tasks.length === 0 ? (
-        <EmptyState icon={InboxIcon} text="Inbox is empty" />
+        <EmptyState icon={InboxIcon} text="Inbox is empty" hint={<>Press <kbd>⌘N</kbd> to capture a new task.</>} />
       ) : (
         <>
           {tasks.map((task, index) => (

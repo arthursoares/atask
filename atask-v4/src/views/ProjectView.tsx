@@ -212,7 +212,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
 
       {/* Empty state: only show if truly empty */}
       {sectionlessTasks.length === 0 && sections.length === 0 && (
-        <EmptyState icon={ProjectIcon} text="No tasks in this project" />
+        <EmptyState icon={ProjectIcon} text="No tasks in this project" hint={<>Press <kbd>⌘N</kbd> to add one.</>} />
       )}
     </div>
   );

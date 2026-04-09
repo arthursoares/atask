@@ -89,7 +89,7 @@ export default function LogbookView() {
   return (
     <div>
       {groups.length === 0 ? (
-        <EmptyState icon={LogbookIcon} text="No completed tasks" />
+        <EmptyState icon={LogbookIcon} text="No completed tasks" hint="Completed tasks across every view show up here." />
       ) : (
         groups.map((group) => (
           <div className="date-group" key={group.date}>

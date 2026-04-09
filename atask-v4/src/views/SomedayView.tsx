@@ -140,7 +140,7 @@ export default function SomedayView() {
   return (
     <div>
       {tasks.length === 0 ? (
-        <EmptyState icon={ClockIcon} text="Nothing for someday" />
+        <EmptyState icon={ClockIcon} text="Nothing for someday" hint="Set a task to Someday to park it without a date." />
       ) : (
         <>
           {tasks.map((task, index) => (

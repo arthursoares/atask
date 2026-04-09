@@ -80,7 +80,7 @@ export default function AreaView({ areaId }: AreaViewProps) {
       />
 
       {areaProjects.length === 0 && areaTasks.length === 0 && (
-        <EmptyState icon={AreaIcon} text="No projects or tasks in this area" />
+        <EmptyState icon={AreaIcon} text="No projects or tasks in this area" hint="Drag a project into this area from the sidebar, or add a new one." />
       )}
     </div>
   );

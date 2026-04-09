@@ -58,7 +58,7 @@ export default function UpcomingView() {
   return (
     <div>
       {groups.length === 0 ? (
-        <EmptyState icon={CalendarIcon} text="Nothing scheduled" />
+        <EmptyState icon={CalendarIcon} text="Nothing scheduled" hint="Schedule a task from Inbox or set a future start date to see it here." />
       ) : (
         groups.map((group) => (
           <div className="date-group" key={group.date}>
