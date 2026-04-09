@@ -1323,6 +1323,42 @@ html, body {
     padding: var(--sp-2) var(--sp-3);
 }
 
+.when-cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 0 6px;
+    gap: var(--sp-2);
+}
+
+.when-cal-nav-btn {
+    background: none;
+    border: none;
+    color: var(--ink-secondary);
+    cursor: pointer;
+    font-size: var(--text-lg);
+    line-height: 1;
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+}
+
+.when-cal-nav-btn:hover:not(:disabled) {
+    background: var(--sidebar-hover);
+}
+
+.when-cal-nav-btn:disabled {
+    color: var(--ink-quaternary);
+    cursor: default;
+}
+
+.when-cal-title {
+    flex: 1;
+    text-align: center;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-primary);
+}
+
 .when-cal-header {
     display: flex;
     gap: 0;
@@ -1363,6 +1399,15 @@ html, body {
 
 .when-cal-day.empty {
     visibility: hidden;
+}
+
+.when-cal-day.past {
+    color: var(--ink-quaternary);
+    cursor: default;
+}
+
+.when-cal-day.past:hover {
+    background: transparent;
 }
 
 .when-cal-day.selected-day {

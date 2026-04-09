@@ -1,13 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { updateTask } from '../store';
 import { PopoverPanel } from '../ui';
+import { todayLocal } from '../lib/dates';
 
 interface WhenPickerProps {
   taskId: string;
   currentSchedule: number;
   currentTimeSlot: string | null;
   currentStartDate: string | null;
-  anchorRef: React.RefObject<HTMLElement | null>;
+  anchorRef?: React.RefObject<HTMLElement | null>;
   onClose: () => void;
 }
 
@@ -25,6 +26,11 @@ function toDateString(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 export default function WhenPicker({
   taskId,
   currentSchedule,
@@ -32,9 +38,26 @@ export default function WhenPicker({
   currentStartDate,
   onClose,
 }: WhenPickerProps) {
-  // updateTask imported directly from store
-
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Navigable month state. Initial view opens on the current start date's
+  // month if the task already has one (so editing an Upcoming task shows
+  // where it lives), otherwise the current system month.
+  const now = new Date();
+  const [viewYear, setViewYear] = useState<number>(() => {
+    if (currentStartDate) {
+      const y = Number(currentStartDate.slice(0, 4));
+      return Number.isFinite(y) ? y : now.getFullYear();
+    }
+    return now.getFullYear();
+  });
+  const [viewMonth, setViewMonth] = useState<number>(() => {
+    if (currentStartDate) {
+      const m = Number(currentStartDate.slice(5, 7)) - 1;
+      return Number.isFinite(m) ? m : now.getMonth();
+    }
+    return now.getMonth();
+  });
 
   // Click-outside to close
   useEffect(() => {
@@ -47,15 +70,27 @@ export default function WhenPicker({
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [onClose]);
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const todayDay = now.getDate();
+  // Escape-to-close at the picker level so pressing Esc dismisses the
+  // picker without closing a containing DetailPanel. Stops propagation to
+  // shield the panel's global Esc listener.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
 
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstOffset = getFirstDayOfMonth(year, month);
+  const todayStr = todayLocal();
+  const [systemTodayY, systemTodayM, systemTodayD] = todayStr.split('-').map(Number);
+  const isViewingSystemMonth = viewYear === systemTodayY && viewMonth === systemTodayM - 1;
 
-  // Build calendar grid rows (7 cols, Monday start)
+  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+  const firstOffset = getFirstDayOfMonth(viewYear, viewMonth);
+
   const totalCells = Math.ceil((firstOffset + daysInMonth) / 7) * 7;
   const cells: (number | null)[] = [];
   for (let i = 0; i < totalCells; i++) {
@@ -67,8 +102,6 @@ export default function WhenPicker({
   for (let r = 0; r < cells.length / 7; r++) {
     rows.push(cells.slice(r * 7, r * 7 + 7));
   }
-
-  const todayStr = toDateString(year, month, todayDay);
 
   const handleToday = async () => {
     await updateTask({ id: taskId, schedule: 1, timeSlot: null, startDate: todayStr });
@@ -86,7 +119,13 @@ export default function WhenPicker({
   };
 
   const handleDay = async (day: number) => {
-    const dateStr = toDateString(year, month, day);
+    const dateStr = toDateString(viewYear, viewMonth, day);
+    // Guard: past dates are almost always accidental. No-op — the user can
+    // still explicitly pick Today via the "Today" button above.
+    if (dateStr < todayStr) return;
+    // Always set schedule: 1 (scheduled). scheduleLabel derives the display
+    // bucket ("Today" vs a formatted future date) from startDate, and the
+    // Upcoming selector picks up anything with startDate > today.
     await updateTask({ id: taskId, schedule: 1, startDate: dateStr });
     onClose();
   };
@@ -95,6 +134,29 @@ export default function WhenPicker({
     await updateTask({ id: taskId, schedule: 0, startDate: null, timeSlot: null });
     onClose();
   };
+
+  const handlePrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewYear((y) => y - 1);
+      setViewMonth(11);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewYear((y) => y + 1);
+      setViewMonth(0);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
+  // Prev-month button is disabled when viewing the system month or earlier
+  // because picking a past date is a no-op (guarded in handleDay).
+  const canGoPrev =
+    viewYear > systemTodayY || (viewYear === systemTodayY && viewMonth > systemTodayM - 1);
 
   const isToday = currentSchedule === 1 && currentTimeSlot !== 'evening';
   const isEvening = currentSchedule === 1 && currentTimeSlot === 'evening';
@@ -126,6 +188,28 @@ export default function WhenPicker({
 
       {/* Mini Calendar */}
       <div className="when-cal">
+        <div className="when-cal-nav">
+          <button
+            type="button"
+            className="when-cal-nav-btn"
+            onClick={handlePrevMonth}
+            disabled={!canGoPrev}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <span className="when-cal-title">
+            {MONTH_NAMES[viewMonth]} {viewYear}
+          </span>
+          <button
+            type="button"
+            className="when-cal-nav-btn"
+            onClick={handleNextMonth}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
         <div className="when-cal-header">
           {dayLabels.map((d) => (
             <span key={d}>{d}</span>
@@ -137,14 +221,21 @@ export default function WhenPicker({
               if (day === null) {
                 return <div key={ci} className="when-cal-day empty" />;
               }
-              const dateStr = toDateString(year, month, day);
+              const dateStr = toDateString(viewYear, viewMonth, day);
               const isSelected = currentStartDate === dateStr;
-              const isTodayCell = day === todayDay;
+              const isTodayCell = isViewingSystemMonth && day === systemTodayD;
+              const isPast = dateStr < todayStr;
               let cls = 'when-cal-day';
               if (isTodayCell) cls += ' today-cal';
               if (isSelected) cls += ' selected-day';
+              if (isPast) cls += ' past';
               return (
-                <div key={ci} className={cls} onClick={() => handleDay(day)}>
+                <div
+                  key={ci}
+                  className={cls}
+                  onClick={() => handleDay(day)}
+                  aria-disabled={isPast ? true : undefined}
+                >
                   {day}
                 </div>
               );
