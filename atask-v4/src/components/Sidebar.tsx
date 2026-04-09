@@ -54,6 +54,7 @@ type SidebarProjectGroupProps = {
   onTaskDrop: (taskId: string, projectId: string) => void;
   onProjectContextMenu: (e: React.MouseEvent, project: Project) => void;
   onProjectReorder: (areaId: string | null, orderedIds: string[]) => Promise<void>;
+  onProjectCrossAreaDrop: (projectId: string, targetAreaId: string | null) => void;
   setActiveView: (view: ActiveView) => void;
 };
 
@@ -70,6 +71,7 @@ function SidebarProjectGroup({
   onTaskDrop,
   onProjectContextMenu,
   onProjectReorder,
+  onProjectCrossAreaDrop,
   setActiveView,
 }: SidebarProjectGroupProps) {
   const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
@@ -79,6 +81,21 @@ function SidebarProjectGroup({
       await onProjectReorder(areaId, orderedIds);
     },
     shouldHandlePointerDown: (event) => shouldHandleSidebarRowPointerDown(event.target),
+    onCrossListDrop: (projectId, target) => {
+      // Project-to-area drag: when the pointer releases over an area
+      // label (or a descendant), move the project to that area via
+      // moveProjectToArea. Same-area drops fall through to the normal
+      // reorder path inside usePointerReorder.
+      const areaElement = target.closest('[data-sidebar-item-kind="area"]');
+      if (areaElement) {
+        const targetAreaId = areaElement.getAttribute('data-sidebar-item-id');
+        if (targetAreaId && targetAreaId !== areaId) {
+          onProjectCrossAreaDrop(projectId, targetAreaId);
+          return true;
+        }
+      }
+      return false;
+    },
   });
 
   const draggedProjectIndex = reorderState.activeId
@@ -542,6 +559,7 @@ export default function Sidebar() {
                 onRenameCancel={cancelProjectRename}
                 onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
                 onProjectContextMenu={handleProjectContextMenu}
+                onProjectCrossAreaDrop={(projectId, targetAreaId) => moveProjectToArea(projectId, targetAreaId)}
                 onProjectReorder={async (nextAreaId, orderedIds) => {
                   const nextMoves = buildProjectMoves(nextAreaId, orderedIds);
                   if (nextMoves) {
@@ -574,6 +592,7 @@ export default function Sidebar() {
               onRenameCancel={cancelProjectRename}
               onTaskDrop={(taskId, projectId) => updateTask({ id: taskId, projectId })}
               onProjectContextMenu={handleProjectContextMenu}
+              onProjectCrossAreaDrop={(projectId, targetAreaId) => moveProjectToArea(projectId, targetAreaId)}
               onProjectReorder={async (nextAreaId, orderedIds) => {
                 const nextMoves = buildProjectMoves(nextAreaId, orderedIds);
                 if (nextMoves) {
