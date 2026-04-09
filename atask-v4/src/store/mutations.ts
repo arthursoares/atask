@@ -380,14 +380,28 @@ export async function removeTagFromProject(projectId: string, tagId: string): Pr
 
 export async function addTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
   await tauri.addTaskLink(taskId, linkedTaskId);
-  $taskLinks.set(appendItem($taskLinks.get(), { taskId, linkedTaskId }));
+  // Optimistically mirror the server's bidirectional storage: add both
+  // (taskId -> linkedTaskId) and (linkedTaskId -> taskId). $linksByTaskId
+  // dedupes via Set so double-insertion is harmless.
+  const current = $taskLinks.get();
+  $taskLinks.set([
+    ...current,
+    { taskId, linkedTaskId },
+    { taskId: linkedTaskId, linkedTaskId: taskId },
+  ]);
   notifySync();
 }
 
 export async function removeTaskLink(taskId: string, linkedTaskId: string): Promise<void> {
   await tauri.removeTaskLink(taskId, linkedTaskId);
+  // Filter both directions so lingering reverse rows don't keep the link
+  // visible in $linksByTaskId until the next full reload.
   $taskLinks.set(
-    $taskLinks.get().filter((tl) => !(tl.taskId === taskId && tl.linkedTaskId === linkedTaskId)),
+    $taskLinks.get().filter(
+      (tl) =>
+        !(tl.taskId === taskId && tl.linkedTaskId === linkedTaskId) &&
+        !(tl.taskId === linkedTaskId && tl.linkedTaskId === taskId),
+    ),
   );
   notifySync();
 }
