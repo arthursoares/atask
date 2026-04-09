@@ -109,11 +109,6 @@ export default function TaskRow({
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', task.id);
-  };
-
   const contextMenuItems = buildTaskContextMenuItems(task, isCompleted, isCancelled);
 
   return (
@@ -122,11 +117,9 @@ export default function TaskRow({
         ref={reorderRef}
         className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}${isReordering ? ' task-item-dragging' : ''}`}
         style={{ position: 'relative' }}
-        draggable
         onClick={handleClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={handleContextMenu}
-        onDragStart={handleDragStart}
         {...reorderHandlers}
       >
         <div data-reorder-ignore>
