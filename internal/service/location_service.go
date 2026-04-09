@@ -111,13 +111,22 @@ func (s *LocationService) publishLocationEvent(
 }
 
 // Create validates, persists, emits events, then publishes to the bus.
-func (s *LocationService) Create(ctx context.Context, name, actorID string) (*domain.Location, error) {
+// The variadic opts accepts a single optional client-provided ID (matches the
+// pattern used by TaskService.Create / ProjectService.Create / AreaService.Create).
+// Offline clients rely on the server preserving their UUID so that subsequent
+// references (e.g. PUT /tasks/{id}/location with the client id) resolve correctly.
+func (s *LocationService) Create(ctx context.Context, name, actorID string, opts ...string) (*domain.Location, error) {
 	if name == "" {
 		return nil, errors.New("location name must not be empty")
 	}
 
 	now := timeNow()
-	id := uuid.New().String()
+	id := ""
+	if len(opts) > 0 && opts[0] != "" {
+		id = opts[0] // Client-provided ID for sync
+	} else {
+		id = uuid.New().String()
+	}
 
 	row, err := s.queries.CreateLocation(ctx, sqlc.CreateLocationParams{
 		ID:        id,

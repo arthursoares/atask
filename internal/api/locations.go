@@ -32,6 +32,7 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
 		Name  string `json:"name"`
+		ID    string `json:"id,omitempty"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondDecodeError(w, err)
@@ -42,7 +43,7 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		name = body.Title
 	}
 
-	loc, err := h.locations.Create(r.Context(), name, actorFromRequest(r))
+	loc, err := h.locations.Create(r.Context(), name, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

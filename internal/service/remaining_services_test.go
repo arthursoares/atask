@@ -578,6 +578,49 @@ func TestLocationService_Create_EmptyName(t *testing.T) {
 	}
 }
 
+// Locations must honor client-provided IDs, matching the contract used by
+// Task/Project/Area Create. The desktop app generates a UUID for an offline
+// location and then references it from tasks — if the server renames the id
+// on create, the task references dangle forever. Regression guard for the
+// silent sync break that would otherwise happen.
+func TestLocationService_Create_PreservesClientID(t *testing.T) {
+	svc, _ := newTestLocationService(t)
+	ctx := context.Background()
+
+	const clientID = "client-generated-uuid-1234"
+	loc, err := svc.Create(ctx, "Office", "user-1", clientID)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if loc.ID != clientID {
+		t.Errorf("expected ID %q, got %q", clientID, loc.ID)
+	}
+
+	// Verify retrieval round-trips the client id.
+	got, err := svc.Get(ctx, clientID)
+	if err != nil {
+		t.Fatalf("Get by client id: %v", err)
+	}
+	if got.ID != clientID {
+		t.Errorf("Get returned ID %q, want %q", got.ID, clientID)
+	}
+}
+
+// Passing an empty id (or no id at all) must still generate a server-side
+// UUID, preserving the existing behavior for API-only callers.
+func TestLocationService_Create_EmptyIDGeneratesUUID(t *testing.T) {
+	svc, _ := newTestLocationService(t)
+	ctx := context.Background()
+
+	loc, err := svc.Create(ctx, "Home", "user-1", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if loc.ID == "" {
+		t.Error("expected server-generated ID, got empty")
+	}
+}
+
 func TestLocationService_Delete(t *testing.T) {
 	svc, db := newTestLocationService(t)
 	ctx := context.Background()
