@@ -79,7 +79,17 @@ export default function ProjectSectionBlock({
   };
 
   return (
-    <div>
+    <div
+      // Wrap the whole section block (header + task list) as the section
+      // drop target so dropping a task anywhere inside this block — header
+      // OR tasks area — resolves to this section.id via the hook's
+      // closest-ancestor walk. Previously only the header wrapper had
+      // these attributes, so releasing over the task list of another
+      // section fell through to a null target and the cross-list drop
+      // never fired.
+      data-sidebar-item-kind="section"
+      data-sidebar-item-id={section.id}
+    >
       {isRenaming ? (
         <div className="project-section-rename">
           <Field

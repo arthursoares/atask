@@ -6,7 +6,7 @@ import DropSlot from '../../components/task-row/DropSlot';
 import DragOverlay from '../../components/DragOverlay';
 import usePointerReorder from '../../hooks/usePointerReorder';
 import type { ReorderMove, Task } from '../../types';
-import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects, $selectedTaskIds } from '../../store/index';
+import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $tasks, $projects, $selectedTaskIds } from '../../store/index';
 import { useStore } from '@nanostores/react';
 import { $taskPointerDrag } from '../../store/ui';
 import { todayLocal, tomorrowLocal } from '../../lib/dates';
@@ -57,6 +57,13 @@ export default function ProjectTaskList({
     }
 
     if (sidebarItemKind === 'section' && sidebarItemId) {
+      // Same-section drops fall through to within-list reorder (return
+      // false) so the normal drop-index splice runs. Only cross-section
+      // moves actually update the sectionId.
+      const draggedTask = $tasks.get().find((t) => t.id === taskId);
+      if (draggedTask && draggedTask.sectionId === sidebarItemId) {
+        return false;
+      }
       updateTask({ id: taskId, sectionId: sidebarItemId });
       return true;
     }
