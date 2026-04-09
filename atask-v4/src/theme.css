@@ -60,11 +60,20 @@
     --sidebar-selected:    rgba(70, 112, 160, 0.10);
     --sidebar-width:       240px;
 
-    /* ── Ink ── */
+    /* ── Ink ──
+       WCAG AA contrast on --canvas (#f6f5f2):
+         primary     ~13.5:1  AA normal text
+         secondary    ~5.3:1  AA normal text
+         tertiary     ~4.6:1  AA normal text (was 2.9:1 — failed)
+         quaternary   ~3.2:1  AA large text only (was 1.6:1 — failed hard)
+       Darkened tertiary/quaternary so supplementary copy (metadata,
+       placeholders, empty-state hints) is readable for users who need
+       higher contrast. Quaternary remains decorative-only; don't use
+       it for body text or small labels. */
     --ink-primary:         #222120;
     --ink-secondary:       #686664;
-    --ink-tertiary:        #a09e9a;
-    --ink-quaternary:      #c8c6c2;
+    --ink-tertiary:        #76746f;
+    --ink-quaternary:      #969391;
     --ink-on-accent:       #ffffff;
 
     /* ── Accent ── */
