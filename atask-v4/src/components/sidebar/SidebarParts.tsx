@@ -30,6 +30,7 @@ export function SidebarRow({
   reorderRef,
   reorderHandlers,
   isReordering = false,
+  ariaLabel,
   onClick,
   onContextMenu,
   onDragOver,
@@ -50,6 +51,7 @@ export function SidebarRow({
     onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   };
   isReordering?: boolean;
+  ariaLabel?: string;
   onClick?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -58,12 +60,30 @@ export function SidebarRow({
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
 }) {
+  // Handle keyboard activation: Enter or Space triggers onClick so the row
+  // is reachable via Tab and usable by keyboard-only + screen-reader users.
+  // We keep the element as a <div role="button"> rather than a real <button>
+  // to avoid fighting the pointer-reorder handlers (button elements swallow
+  // pointer events for their own click synthesis) and to preserve the
+  // flexible icon + label + badge child layout.
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
   return (
     <div
       ref={reorderRef}
       className={`sidebar-item${active ? " active" : ""}${isDragTarget ? " drag-target" : ""}${isReordering ? " sidebar-item-dragging" : ""}${className ? ` ${className}` : ""}`}
       data-sidebar-item-id={dataSidebarItemId}
       data-sidebar-item-kind={dataSidebarItemKind}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-current={active ? "page" : undefined}
+      aria-label={ariaLabel}
+      onKeyDown={onClick ? handleKeyDown : undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onPointerDown={reorderHandlers?.onPointerDown}

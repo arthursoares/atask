@@ -492,6 +492,16 @@ export default function Sidebar() {
                   className={`sidebar-group-label${activeView === `area-${area.id}` ? " active" : ""}${isAreaReordering ? " sidebar-item-dragging" : ""}${isAreaDropTarget ? " drag-target" : ""}`}
                   data-sidebar-item-id={area.id}
                   data-sidebar-item-kind="area"
+                  role="button"
+                  tabIndex={0}
+                  aria-current={activeView === `area-${area.id}` ? "page" : undefined}
+                  aria-label={`Area: ${area.title}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setActiveView(`area-${area.id}`);
+                    }
+                  }}
                   onClick={() => setActiveView(`area-${area.id}`)}
                   onContextMenu={(event) => handleAreaContextMenu(event, area)}
                   onPointerDown={areaReorderHandlers.onPointerDown}

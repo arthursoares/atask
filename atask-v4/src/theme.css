@@ -2533,6 +2533,16 @@ textarea:focus-visible {
     box-shadow: inset 0 0 0 2px var(--accent-ring);
 }
 
+/* Sidebar rows (nav items, project items, area labels) gain a keyboard
+   focus ring so Tab navigation is visible. Mouse clicks skip the ring
+   via :focus-visible. */
+.sidebar-item:focus-visible,
+.sidebar-group-label:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+}
+
 
 /* ═══════════════════════════════════════════
    Bulk Action Bar buttons
