@@ -809,6 +809,11 @@ html, body {
 
 .task-item.selected {
     background: var(--sidebar-selected);
+    /* Keyboard-first: a subtle background tint alone (10% accent on beige
+       canvas) is easy to miss. Add a 3px inset accent stripe on the left
+       so the selected row is visible at a glance during arrow-key
+       navigation regardless of the tint. */
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .task-item-dragging {

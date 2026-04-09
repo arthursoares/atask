@@ -4,6 +4,8 @@ import { todayLocal } from '../lib/dates';
 import {
   $activeView, $selectedTaskId, $selectedTaskIds, $expandedTaskId,
   $showPalette, $showQuickMove, $showSearch, $showSidebar, $showShortcuts, $tasks,
+  $activeTagFilters, $tagsByTaskId,
+  $inbox, $today, $upcoming, $someday, $logbook,
   setActiveView, selectTask, clearSelectedTask, closeTaskEditor,
 } from '../store';
 import {
@@ -240,28 +242,54 @@ export default function useKeyboard() {
     };
 
     function getViewTasks() {
-      const today = todayLocal();
+      // Read directly from the computed selector atoms so keyboard arrow
+      // navigation cycles through exactly what the view renders — including
+      // tag filters, completed-today inclusion, and the correct ordering.
+      // Previously this function re-implemented the filters and drifted:
+      // under an active tag filter it would iterate over "hidden" tasks the
+      // view was hiding.
       const view = $activeView.get();
-      const tasks = $tasks.get();
-
-      let filtered: typeof tasks;
-      if (view === 'inbox') {
-        filtered = tasks.filter(t => t.schedule === 0 && t.status === 0);
-      } else if (view === 'today') {
-        filtered = tasks.filter(t => t.schedule === 1 && t.status === 0 && (t.todayIndex != null || (t.startDate && t.startDate.slice(0, 10) <= today)));
-      } else if (view === 'someday') {
-        filtered = tasks.filter(t => t.schedule === 2 && t.status === 0);
-      } else if (view === 'logbook') {
-        filtered = tasks.filter(t => t.status === 1 || t.status === 2);
-      } else if (view.startsWith('project-')) {
-        const projectId = view.slice('project-'.length);
-        filtered = tasks.filter(t => t.projectId === projectId && t.status === 0);
-      } else {
-        filtered = tasks.filter(t => t.status === 0);
+      if (view === 'inbox') return $inbox.get();
+      if (view === 'today') return $today.get();
+      if (view === 'someday') return $someday.get();
+      if (view === 'logbook') return $logbook.get();
+      if (view === 'upcoming') {
+        // $upcoming returns grouped date buckets; flatten to a single list
+        // in render order for arrow navigation.
+        return $upcoming.get().flatMap((group) => group.tasks);
       }
 
-      filtered.sort((a, b) => a.index - b.index);
-      return filtered;
+      // Project / area views: replicate the same tag-filtered, status-
+      // aware filter inline since those are exposed as hooks, not atoms.
+      const tasks = $tasks.get();
+      const filters = $activeTagFilters.get();
+      const tagMap = $tagsByTaskId.get();
+      const passesTagFilter = (taskId: string): boolean => {
+        if (filters.size === 0) return true;
+        const taskTagIds = tagMap.get(taskId);
+        if (!taskTagIds) return false;
+        for (const tagId of filters) {
+          if (taskTagIds.has(tagId)) return true;
+        }
+        return false;
+      };
+
+      if (view.startsWith('project-')) {
+        const projectId = view.slice('project-'.length);
+        return tasks
+          .filter((t) => t.projectId === projectId && t.status === 0 && passesTagFilter(t.id))
+          .sort((a, b) => a.index - b.index);
+      }
+
+      if (view.startsWith('area-')) {
+        const areaId = view.slice('area-'.length);
+        return tasks
+          .filter((t) => t.areaId === areaId && t.projectId == null && t.status === 0 && passesTagFilter(t.id))
+          .sort((a, b) => a.index - b.index);
+      }
+
+      // Fallback: all active tasks.
+      return tasks.filter((t) => t.status === 0 && passesTagFilter(t.id)).sort((a, b) => a.index - b.index);
     }
 
     function navigateTasks(direction: number) {
@@ -269,14 +297,33 @@ export default function useKeyboard() {
       if (tasks.length === 0) return;
 
       const currentId = $selectedTaskId.get();
+      let nextId: string;
       if (!currentId) {
-        selectTask(tasks[0].id);
-        return;
+        nextId = tasks[0].id;
+      } else {
+        const currentIndex = tasks.findIndex(t => t.id === currentId);
+        if (currentIndex < 0) {
+          // Current selection is outside the visible list (view changed,
+          // selection points at a task that no longer passes the filter).
+          // Jump to the first/last visible task by direction.
+          nextId = direction > 0 ? tasks[0].id : tasks[tasks.length - 1].id;
+        } else {
+          const nextIndex = Math.max(0, Math.min(tasks.length - 1, currentIndex + direction));
+          nextId = tasks[nextIndex].id;
+        }
       }
+      selectTask(nextId);
 
-      const currentIndex = tasks.findIndex(t => t.id === currentId);
-      const nextIndex = Math.max(0, Math.min(tasks.length - 1, currentIndex + direction));
-      selectTask(tasks[nextIndex].id);
+      // Scroll the newly-selected task into view so keyboard navigation
+      // follows the eye. Uses a requestAnimationFrame because the DOM
+      // isn't guaranteed to have applied the `selected` class by the
+      // time selectTask() returns (nanostores schedules updates).
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`[data-task-id="${nextId}"]`);
+        if (row instanceof HTMLElement) {
+          row.scrollIntoView({ block: 'nearest' });
+        }
+      });
     }
 
     function extendSelection(direction: number) {

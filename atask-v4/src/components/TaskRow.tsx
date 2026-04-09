@@ -117,6 +117,7 @@ export default function TaskRow({
         ref={reorderRef}
         className={`task-item${isSelected ? ' selected' : ''}${isMultiSelected ? ' selected' : ''}${isReordering ? ' task-item-dragging' : ''}`}
         style={{ position: 'relative' }}
+        data-task-id={task.id}
         onClick={handleClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={handleContextMenu}
