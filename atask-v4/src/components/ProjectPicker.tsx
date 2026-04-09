@@ -23,6 +23,19 @@ export default function ProjectPicker({ taskId, onClose }: ProjectPickerProps) {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [onClose]);
 
+  // Capture-phase Esc so the picker swallows the key before a containing
+  // DetailPanel's Esc handler closes the whole panel.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
+
   const handleSelect = (projectId: string | null) => {
     updateTask({ id: taskId, projectId });
     onClose();

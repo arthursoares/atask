@@ -28,6 +28,20 @@ export default function TagPicker({ taskId, onClose }: TagPickerProps) {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [onClose]);
 
+  // Layered Escape: capture-phase listener that handles Esc before any
+  // surrounding DetailPanel-level handler sees it. Stops propagation so
+  // dismissing the picker does not also close the whole panel.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
+
   const handleToggle = (tagId: string) => {
     if (taskTagIds.has(tagId)) {
       removeTagFromTask(taskId, tagId);

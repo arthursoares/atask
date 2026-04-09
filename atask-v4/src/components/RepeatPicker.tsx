@@ -49,6 +49,19 @@ export default function RepeatPicker({ taskId, currentRepeatRule, onClose }: Rep
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [onClose]);
 
+  // Capture-phase Esc prevents the key from reaching DetailPanel's
+  // close-on-Esc handler when the picker is open inside the panel.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
+
   const handleSelect = (baseRule: RepeatRule) => {
     const rule: RepeatRule = {
       ...baseRule,
