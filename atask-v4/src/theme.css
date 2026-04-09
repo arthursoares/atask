@@ -872,6 +872,21 @@ html, body {
     font-weight: 700;
 }
 
+/* Inline checklist count badge (e.g. "2/5"). Muted by default, shifts to
+   the success color when all items are done. */
+.task-checklist-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--ink-tertiary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.task-checklist-count.done {
+    color: var(--success);
+}
+
 /* v2 name (preferred over v1 .task-agent-indicator) */
 .task-agent {
     color: var(--agent-tint);

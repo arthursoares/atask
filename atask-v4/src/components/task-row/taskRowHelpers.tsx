@@ -88,11 +88,13 @@ export function TaskMeta({
   task,
   project,
   taskTags,
+  checklistCount,
   hideProjectPill,
 }: {
   task: Task;
   project: Project | null;
   taskTags: Tag[];
+  checklistCount?: { done: number; total: number };
   hideProjectPill?: boolean;
 }) {
   const metaItems: React.ReactNode[] = [];
@@ -116,6 +118,39 @@ export function TaskMeta({
     metaItems.push(
       <span key="deadline" className="task-deadline">
         {formatDeadline(task.deadline)}
+      </span>,
+    );
+  }
+
+  // Checklist count badge — per design spec (2026-03-29-v4-tauri-react-
+  // design.md line 310). Rendered as a small count "2/5" with a check
+  // glyph so users can see progress inline without opening the editor.
+  // Tasks without checklist items get nothing (no count badge = no noise).
+  if (checklistCount && checklistCount.total > 0) {
+    if (metaItems.length > 0) {
+      metaItems.push(<span key="sep-checklist" className="task-meta-sep">·</span>);
+    }
+    const allDone = checklistCount.done === checklistCount.total;
+    metaItems.push(
+      <span
+        key="checklist"
+        className={`task-checklist-count${allDone ? " done" : ""}`}
+        aria-label={`Checklist: ${checklistCount.done} of ${checklistCount.total} complete`}
+      >
+        <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          {allDone && (
+            <polyline
+              points="3 6.2 5 8.2 9 4.2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+        </svg>
+        <span>{checklistCount.done}/{checklistCount.total}</span>
       </span>,
     );
   }

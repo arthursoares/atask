@@ -4,7 +4,7 @@ export { $projects, $projectTags, $tagsByProjectId, $activeProjects, useActivePr
 export { $areas, $activeAreas, useActiveAreas } from './areas';
 export { $sections, useSectionsForProject } from './sections';
 export { $tags, useTagsForTask } from './tags';
-export { $checklistItems, useChecklistForTask } from './checklist';
+export { $checklistItems, useChecklistForTask, $checklistCountsByTaskId } from './checklist';
 export { $activities, useActivitiesForTask } from './activities';
 export { $locations } from './locations';
 export { $taskLinks, $linksByTaskId } from './taskLinks';

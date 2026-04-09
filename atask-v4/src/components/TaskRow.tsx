@@ -6,6 +6,7 @@ import {
   $tags,
   $tagsByTaskId,
   $selectedTaskIds,
+  $checklistCountsByTaskId,
   completeTask,
   reopenTask,
   selectTask,
@@ -63,12 +64,14 @@ export default function TaskRow({
   const projects = useStore($projects);
   const tags = useStore($tags);
   const tagsByTaskId = useStore($tagsByTaskId);
+  const checklistCounts = useStore($checklistCountsByTaskId);
 
   const project = task.projectId ? (projects.find((p) => p.id === task.projectId) ?? null) : null;
   const taskTagIds = tagsByTaskId.get(task.id);
   const taskTags = taskTagIds && taskTagIds.size > 0
     ? tags.filter((t) => taskTagIds.has(t.id))
     : [];
+  const checklistCount = checklistCounts.get(task.id);
 
   const isCompleted = task.status === 1;
   const isCancelled = task.status === 2;
@@ -141,6 +144,7 @@ export default function TaskRow({
             task={task}
             project={project}
             taskTags={taskTags}
+            checklistCount={checklistCount}
             hideProjectPill={hideProjectPill}
           />
         </div>
