@@ -578,7 +578,8 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	actor := actorFromRequest(r)
 
 	// --- Pre-validate: task exists ---
-	if _, err := h.tasks.Get(r.Context(), id); err != nil {
+	current, err := h.tasks.Get(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -637,6 +638,47 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+	}
+
+	// --- Pre-validate: merged post-patch state is valid ---
+	// Apply every patched field onto a copy of the current task and run
+	// domain validation, so cross-field invariants (like "section requires
+	// project") are enforced before any mutation lands. Without this we
+	// apply one field at a time and only catch per-field errors.
+	merged := *current
+	if body.Title != nil {
+		merged.Title = *body.Title
+	}
+	if body.Notes != nil {
+		merged.Notes = *body.Notes
+	}
+	if body.ProjectID != nil {
+		if *body.ProjectID == "" {
+			merged.ProjectID = nil
+		} else {
+			pid := *body.ProjectID
+			merged.ProjectID = &pid
+		}
+	}
+	if body.SectionID != nil {
+		if *body.SectionID == "" {
+			merged.SectionID = nil
+		} else {
+			sid := *body.SectionID
+			merged.SectionID = &sid
+		}
+	}
+	if body.AreaID != nil {
+		if *body.AreaID == "" {
+			merged.AreaID = nil
+		} else {
+			aid := *body.AreaID
+			merged.AreaID = &aid
+		}
+	}
+	if err := merged.Validate(); err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
 	}
 
 	// --- Apply mutations (all pre-validations passed) ---

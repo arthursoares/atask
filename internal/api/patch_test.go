@@ -38,7 +38,30 @@ func setupPatchTestServer(t *testing.T) *http.ServeMux {
 	api.NewTaskHandler(taskSvc, projectSvc, sectionSvc, areaSvc).RegisterRoutes(mux)
 	api.NewProjectHandler(projectSvc, areaSvc).RegisterRoutes(mux)
 	api.NewAreaHandler(areaSvc).RegisterRoutes(mux)
+	api.NewSectionHandler(sectionSvc).RegisterRoutes(mux)
 	return mux
+}
+
+// createSection is a helper that POSTs a section under the given project and returns its ID.
+func createSection(t *testing.T, mux *http.ServeMux, projectID, title string) string {
+	t.Helper()
+	body := bytes.NewBufferString(`{"title":"` + title + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/projects/"+projectID+"/sections", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create section %q: expected 201, got %d: %s", title, w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode create section response: %v", err)
+	}
+	return resp.Data.ID
 }
 
 // createTask is a helper that POSTs a task and returns its ID.
@@ -334,5 +357,55 @@ func TestPatchArea_Title(t *testing.T) {
 	}
 	if area.Title != "New Area" {
 		t.Errorf("expected title %q, got %q", "New Area", area.Title)
+	}
+}
+
+// TestPatchTask_SectionWithoutProject asserts that setting a sectionId on a
+// task that has no projectId is rejected with 422 (merged-state validation).
+// Without this check, the handler validates each patch field in isolation
+// and happily applies the section move, leaving the task in an invalid state
+// that domain.Task.Validate() explicitly forbids.
+func TestPatchTask_SectionWithoutProject(t *testing.T) {
+	mux := setupPatchTestServer(t)
+
+	// Create a task with no project assigned.
+	taskID := createTask(t, mux, "Homeless task")
+
+	// Create a project + section so the section ID is real (passes existence
+	// check) but the task itself has no project.
+	projectID := createProject(t, mux, "Some project")
+	sectionID := createSection(t, mux, projectID, "Some section")
+
+	// PATCH only sectionId — must be rejected because the merged task would
+	// have sectionId without projectId.
+	body := bytes.NewBufferString(`{"sectionId":"` + sectionID + `"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/"+taskID, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("PATCH setting sectionId on projectless task: expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestPatchTask_SectionWithProject_Succeeds asserts the happy path: setting
+// both projectId and sectionId in the same PATCH is valid as long as the
+// section belongs to the project.
+func TestPatchTask_SectionWithProject_Succeeds(t *testing.T) {
+	mux := setupPatchTestServer(t)
+
+	taskID := createTask(t, mux, "Task")
+	projectID := createProject(t, mux, "Project")
+	sectionID := createSection(t, mux, projectID, "Section")
+
+	body := bytes.NewBufferString(`{"projectId":"` + projectID + `","sectionId":"` + sectionID + `"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/"+taskID, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("PATCH with projectId+sectionId: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
