@@ -646,10 +646,19 @@ func (s *TaskService) RemoveTag(ctx context.Context, id, tagID, actorID string) 
 	return s.publishEvent(ctx, domain.TaskTagRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
 }
 
-// AddLink adds a link between two tasks and emits task.link_added.
+// AddLink adds a bidirectional link between two tasks and emits
+// task.link_added for both tasks so clients viewing either task receive the
+// delta. The link is stored as two mirrored rows in task_links so that
+// hydrateLinks (which reads only outgoing) works symmetrically.
 func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID string) error {
+	if id == relatedTaskID {
+		return errors.New("task cannot link to itself")
+	}
+
 	now := timeNow()
 
+	// Insert both directions. task_links uses INSERT OR IGNORE so re-adds are
+	// idempotent, which is required because clients may retry pending ops.
 	if err := s.queries.AddTaskLink(ctx, sqlc.AddTaskLinkParams{
 		TaskID:           id,
 		RelatedTaskID:    relatedTaskID,
@@ -658,12 +667,26 @@ func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID st
 	}); err != nil {
 		return err
 	}
+	if err := s.queries.AddTaskLink(ctx, sqlc.AddTaskLinkParams{
+		TaskID:           relatedTaskID,
+		RelatedTaskID:    id,
+		RelationshipType: "related",
+		CreatedAt:        sql.NullTime{Time: now, Valid: true},
+	}); err != nil {
+		return err
+	}
 
 	payload := map[string]any{"related_task_id": relatedTaskID}
-	return s.publishEvent(ctx, domain.TaskLinkAdded, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil)
+	if err := s.publishEvent(ctx, domain.TaskLinkAdded, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
+		return err
+	}
+	// Mirror delta for the peer so a client viewing the peer also refreshes.
+	peerPayload := map[string]any{"related_task_id": id}
+	return s.publishEvent(ctx, domain.TaskLinkAdded, relatedTaskID, actorID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
 }
 
-// RemoveLink removes a link between two tasks and emits task.link_removed.
+// RemoveLink removes both directions of a link between two tasks and emits
+// task.link_removed for both peers.
 func (s *TaskService) RemoveLink(ctx context.Context, id, relatedTaskID, actorID string) error {
 	now := timeNow()
 
@@ -673,9 +696,19 @@ func (s *TaskService) RemoveLink(ctx context.Context, id, relatedTaskID, actorID
 	}); err != nil {
 		return err
 	}
+	if err := s.queries.RemoveTaskLink(ctx, sqlc.RemoveTaskLinkParams{
+		TaskID:        relatedTaskID,
+		RelatedTaskID: id,
+	}); err != nil {
+		return err
+	}
 
 	payload := map[string]any{"related_task_id": relatedTaskID}
-	return s.publishEvent(ctx, domain.TaskLinkRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil)
+	if err := s.publishEvent(ctx, domain.TaskLinkRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
+		return err
+	}
+	peerPayload := map[string]any{"related_task_id": id}
+	return s.publishEvent(ctx, domain.TaskLinkRemoved, relatedTaskID, actorID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
 }
 
 // Reorder sets the task index and emits task.reordered.

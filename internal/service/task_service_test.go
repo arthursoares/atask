@@ -426,3 +426,101 @@ func TestTaskService_Reorder(t *testing.T) {
 		t.Errorf("expected index=5, got %d", got.Index)
 	}
 }
+
+// --- TaskLink tests ---
+
+// Links must be symmetric: if A links to B, then B also sees the link to A.
+// The bug was storing a single directed row and only hydrating the outgoing
+// side, so task B never surfaced the link from its own GET.
+func TestTaskService_AddLink_IsBidirectional(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	a, err := svc.Create(ctx, "A", "user-1")
+	if err != nil {
+		t.Fatalf("Create A: %v", err)
+	}
+	b, err := svc.Create(ctx, "B", "user-1")
+	if err != nil {
+		t.Fatalf("Create B: %v", err)
+	}
+
+	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+		t.Fatalf("AddLink: %v", err)
+	}
+
+	gotA, err := svc.Get(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("Get A: %v", err)
+	}
+	gotB, err := svc.Get(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("Get B: %v", err)
+	}
+
+	if len(gotA.LinkedTaskIDs) != 1 || gotA.LinkedTaskIDs[0] != b.ID {
+		t.Errorf("A.LinkedTaskIDs = %v, want [%q]", gotA.LinkedTaskIDs, b.ID)
+	}
+	if len(gotB.LinkedTaskIDs) != 1 || gotB.LinkedTaskIDs[0] != a.ID {
+		t.Errorf("B.LinkedTaskIDs = %v, want [%q]", gotB.LinkedTaskIDs, a.ID)
+	}
+}
+
+// RemoveLink must clean up both directions.
+func TestTaskService_RemoveLink_RemovesBothDirections(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	a, _ := svc.Create(ctx, "A", "user-1")
+	b, _ := svc.Create(ctx, "B", "user-1")
+
+	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+		t.Fatalf("AddLink: %v", err)
+	}
+	if err := svc.RemoveLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+		t.Fatalf("RemoveLink: %v", err)
+	}
+
+	gotA, _ := svc.Get(ctx, a.ID)
+	gotB, _ := svc.Get(ctx, b.ID)
+
+	if len(gotA.LinkedTaskIDs) != 0 {
+		t.Errorf("A.LinkedTaskIDs = %v, want []", gotA.LinkedTaskIDs)
+	}
+	if len(gotB.LinkedTaskIDs) != 0 {
+		t.Errorf("B.LinkedTaskIDs = %v, want []", gotB.LinkedTaskIDs)
+	}
+}
+
+// Linking a task to itself makes no semantic sense and caused the task to
+// appear in its own linkedTaskIds. Must be rejected.
+func TestTaskService_AddLink_RejectsSelfLink(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	a, _ := svc.Create(ctx, "A", "user-1")
+	if err := svc.AddLink(ctx, a.ID, a.ID, "user-1"); err == nil {
+		t.Fatal("expected error when linking task to itself, got nil")
+	}
+}
+
+// Adding the same link twice is idempotent (INSERT OR IGNORE).
+func TestTaskService_AddLink_Idempotent(t *testing.T) {
+	svc := newTestTaskService(t)
+	ctx := context.Background()
+
+	a, _ := svc.Create(ctx, "A", "user-1")
+	b, _ := svc.Create(ctx, "B", "user-1")
+
+	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+		t.Fatalf("AddLink 1: %v", err)
+	}
+	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+		t.Fatalf("AddLink 2: %v", err)
+	}
+
+	gotA, _ := svc.Get(ctx, a.ID)
+	if len(gotA.LinkedTaskIDs) != 1 {
+		t.Errorf("expected exactly 1 link after 2 adds, got %v", gotA.LinkedTaskIDs)
+	}
+}
