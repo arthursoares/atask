@@ -20,6 +20,13 @@ interface PointerReorderOptions<T extends ReorderableItem> {
   onDragStart?: (id: string) => void;
   onDragEnd?: (id: string) => void;
   onCrossListDrop?: (id: string, dropTarget: Element) => boolean;
+  /**
+   * Optional callback returning the current multi-selection set. If the
+   * dragged item is in the set, commitReorder moves the whole selection
+   * as a block; otherwise it falls back to single-item reorder.
+   * Callers typically pass `() => $selectedTaskIds.get()`.
+   */
+  getSelectedIds?: () => Set<string>;
 }
 
 interface PointerStartArgs {
@@ -59,6 +66,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
   onDragStart,
   onDragEnd,
   onCrossListDrop,
+  getSelectedIds,
 }: PointerReorderOptions<T>): PointerReorderReturn {
   const [reorderState, setReorderState] = useState<PointerReorderState>({
     activeId: null,
@@ -75,9 +83,11 @@ export default function usePointerReorder<T extends ReorderableItem>({
   const onDragEndRef = useRef(onDragEnd);
   const onCrossListDropRef = useRef(onCrossListDrop);
 
+  const getSelectedIdsRef = useRef(getSelectedIds);
   onDragStartRef.current = onDragStart;
   onDragEndRef.current = onDragEnd;
   onCrossListDropRef.current = onCrossListDrop;
+  getSelectedIdsRef.current = getSelectedIds;
 
   const setReorderStateSync = useCallback((nextState: PointerReorderState) => {
     reorderStateRef.current = nextState;
@@ -221,29 +231,48 @@ export default function usePointerReorder<T extends ReorderableItem>({
       return;
     }
 
-    const sourceIndex = items.findIndex((item) => item.id === currentState.activeId);
-    if (sourceIndex === -1) {
+    // Multi-select group move: if the dragged item is inside the current
+    // selection set, move the entire selection as a contiguous block rather
+    // than only the dragged row.
+    const selection = getSelectedIdsRef.current?.();
+    const isGroupMove =
+      selection != null && selection.size > 1 && selection.has(currentState.activeId);
+
+    // The set of ids to extract (in list order) for the move.
+    const movingIds: string[] = isGroupMove
+      ? items.filter((item) => selection!.has(item.id)).map((item) => item.id)
+      : [currentState.activeId];
+    const movingSet = new Set(movingIds);
+
+    // Remaining items after removing the moving set, preserving order.
+    const remaining = items.filter((item) => !movingSet.has(item.id));
+
+    // Translate dropIndex (an index in the ORIGINAL items list) to the
+    // equivalent insertion point in the `remaining` list by subtracting
+    // moving items that preceded the drop point.
+    let targetIndex = currentState.dropIndex;
+    for (const item of items.slice(0, currentState.dropIndex)) {
+      if (movingSet.has(item.id)) targetIndex -= 1;
+    }
+    targetIndex = Math.max(0, Math.min(targetIndex, remaining.length));
+
+    // Extract moved items in original order.
+    const movedItems: T[] = [];
+    for (const id of movingIds) {
+      const item = items.find((it) => it.id === id);
+      if (item) movedItems.push(item);
+    }
+
+    const reordered = [...remaining.slice(0, targetIndex), ...movedItems, ...remaining.slice(targetIndex)];
+
+    // Bail if the order is unchanged (drop point lands on same spot).
+    const unchanged =
+      reordered.length === items.length &&
+      reordered.every((item, i) => item.id === items[i].id);
+    if (unchanged) {
       cancelReorder();
       return;
     }
-
-    const reordered = [...items];
-    const [moved] = reordered.splice(sourceIndex, 1);
-    if (!moved) {
-      cancelReorder();
-      return;
-    }
-
-    const targetIndex = currentState.dropIndex > sourceIndex
-      ? currentState.dropIndex - 1
-      : currentState.dropIndex;
-
-    if (targetIndex === sourceIndex) {
-      cancelReorder();
-      return;
-    }
-
-    reordered.splice(targetIndex, 0, moved);
 
     try {
       await onReorder(reordered.map((item, index) => ({ id: item.id, index })));

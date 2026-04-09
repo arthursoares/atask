@@ -80,6 +80,7 @@ export default function SomedayView() {
   };
 
   const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
+      getSelectedIds: () => $selectedTaskIds.get(),
     items: tasks,
     onReorder: reorderTasks,
     shouldHandlePointerDown: (event) => shouldHandleTaskRowPointerDown(event.target),

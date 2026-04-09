@@ -110,6 +110,7 @@ export default function TodayView() {
     onDragStart: startTaskPointerDrag,
     onDragEnd: endTaskPointerDrag,
     onCrossListDrop: handleCrossListDrop,
+    getSelectedIds: () => $selectedTaskIds.get(),
   });
 
   const eveningReorder = usePointerReorder({
@@ -119,6 +120,7 @@ export default function TodayView() {
     onDragStart: startTaskPointerDrag,
     onDragEnd: endTaskPointerDrag,
     onCrossListDrop: handleCrossListDrop,
+    getSelectedIds: () => $selectedTaskIds.get(),
   });
 
   const renderTaskList = (

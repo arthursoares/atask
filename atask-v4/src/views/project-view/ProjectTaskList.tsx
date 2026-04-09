@@ -6,7 +6,7 @@ import DropSlot from '../../components/task-row/DropSlot';
 import DragOverlay from '../../components/DragOverlay';
 import usePointerReorder from '../../hooks/usePointerReorder';
 import type { ReorderMove, Task } from '../../types';
-import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects } from '../../store/index';
+import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects, $selectedTaskIds } from '../../store/index';
 import { useStore } from '@nanostores/react';
 import { $taskPointerDrag } from '../../store/ui';
 import { todayLocal, tomorrowLocal } from '../../lib/dates';
@@ -92,6 +92,7 @@ export default function ProjectTaskList({
   };
 
   const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
+    getSelectedIds: () => $selectedTaskIds.get(),
     items: tasks,
     onReorder: onReorderTasks,
     shouldHandlePointerDown: (event) => shouldHandleTaskRowPointerDown(event.target),
