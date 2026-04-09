@@ -81,17 +81,41 @@ function SidebarProjectGroup({
       await onProjectReorder(areaId, orderedIds);
     },
     shouldHandlePointerDown: (event) => shouldHandleSidebarRowPointerDown(event.target),
+    // Intentionally NOT wiring onDragStart to startTaskPointerDrag here:
+    // that atom represents a TASK drag and other sidebar items (project
+    // rows, area labels) branch on `taskDrag.activeTaskId !== null` to
+    // render themselves as task drop targets. Setting it during a
+    // project drag made projects in other areas light up with the
+    // "task dragging over me" style, which confused users. The drop
+    // still works via onCrossListDrop below; visual feedback for
+    // project drags is provided by DragOverlay's floating clone.
     onCrossListDrop: (projectId, target) => {
-      // Project-to-area drag: when the pointer releases over an area
-      // label (or a descendant), move the project to that area via
-      // moveProjectToArea. Same-area drops fall through to the normal
-      // reorder path inside usePointerReorder.
-      const areaElement = target.closest('[data-sidebar-item-kind="area"]');
-      if (areaElement) {
-        const targetAreaId = areaElement.getAttribute('data-sidebar-item-id');
+      // Project-to-area drag: `target` is the closest ancestor with
+      // data-sidebar-item-id that the pointer released over. Because
+      // project rows and area labels are SIBLINGS (both live under
+      // .sidebar-group), we can't use .closest("area") — projects have
+      // no area ancestor in the DOM tree. Check both cases explicitly:
+      //   - drop on area label -> move to that area
+      //   - drop on a project in another area -> move to that project's area
+      const kind = target.getAttribute('data-sidebar-item-kind');
+      if (kind === 'area') {
+        const targetAreaId = target.getAttribute('data-sidebar-item-id');
         if (targetAreaId && targetAreaId !== areaId) {
           onProjectCrossAreaDrop(projectId, targetAreaId);
           return true;
+        }
+      }
+      if (kind === 'project') {
+        const targetProjectId = target.getAttribute('data-sidebar-item-id');
+        if (targetProjectId && targetProjectId !== projectId) {
+          const targetProject = $projects.get().find((p) => p.id === targetProjectId);
+          if (targetProject) {
+            const targetAreaId = targetProject.areaId ?? null;
+            if (targetAreaId !== areaId) {
+              onProjectCrossAreaDrop(projectId, targetAreaId);
+              return true;
+            }
+          }
         }
       }
       return false;
