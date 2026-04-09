@@ -408,7 +408,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="sidebar">
+    <nav className="sidebar" aria-label="Main navigation">
       <div className="sidebar-toolbar" data-tauri-drag-region />
 
       <div className="sidebar-group">
@@ -632,6 +632,6 @@ export default function Sidebar() {
         itemWidth={areaItemWidth}
         renderClone={renderAreaDragClone}
       />
-    </div>
+    </nav>
   );
 }
