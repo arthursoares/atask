@@ -1,9 +1,24 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    atask — Design Tokens & Component Styles
 
-   Single source of truth for all visual tokens and component CSS.
-   Merged from: theme.css (v1) + atask-screens-validation.html (v2).
-   Where names differ, v2 names take precedence.
+   This file is the source of truth for the visual design tokens (colors,
+   typography, spacing, radii, shadows) at the top of the :root block,
+   PLUS the legacy per-component CSS for view-level elements (sidebar,
+   task rows, detail panel, pickers, etc).
+
+   ── Design system split (tracked by T3.7 audit) ──────────────────────
+   New reusable primitives live in atask-v4/src/ui/*.tsx and get their
+   styles from atask-v4/src/ui/styles.css under the `.ui-*` prefix. That
+   layer is the authoritative design system going forward (Button, Field,
+   MenuList, PopoverPanel, ProgressBar, SectionHeader, TagPill, EmptyState,
+   Surface). All new components SHOULD be composed from those primitives.
+
+   The per-component rules below this header (lines ~800+: `.task-item`,
+   `.sidebar-item`, `.cmd-input`, `.detail-*`, `.when-*`, etc.) are
+   legacy view-level styles that predate the primitive layer. They will
+   be migrated into the `.ui-*` vocabulary incrementally as components
+   are rewritten to consume the primitives. Do not add new parallel
+   component classes here — extend src/ui/styles.css instead.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 

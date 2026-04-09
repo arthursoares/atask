@@ -1,3 +1,16 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   atask design system primitives — `.ui-*` layer
+
+   Source of truth for reusable primitive CSS (Button, Field, MenuList,
+   PopoverPanel, ProgressBar, Surface, TagPill, EmptyState, SectionHeader).
+   All new components should compose from these classes or introduce new
+   `.ui-*` rules here. Do NOT add view-level or per-entity styles here —
+   those still live in atask-v4/src/theme.css until the migration from
+   legacy classes to primitives is complete (tracked by T3.7 audit).
+
+   Tokens (colors, spacing, type, radii) come from :root in theme.css.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .ui-surface {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
