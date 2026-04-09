@@ -760,3 +760,91 @@ func TestActivityService_ListByTask_Empty(t *testing.T) {
 		t.Errorf("expected 0 activities, got %d", len(activities))
 	}
 }
+
+// Project tag inbound sync depends on ProjectService.Get() returning a
+// fully populated Tags array. If the hydration is missing, the Rust client's
+// upsert_project sees tags as absent and never reconciles projectTags, so
+// project tags silently never sync. This regression test locks in that the
+// Get path always hydrates tags (as [] when empty, not nil).
+func TestProjectService_Get_HydratesTags(t *testing.T) {
+	svc, db := newTestProjectService(t)
+	ctx := context.Background()
+
+	// Seed a project and a tag directly so this test does not depend on a
+	// tag service constructor.
+	q := sqlc.New(db.DB)
+	now := time.Now().UTC()
+	projectID := uuid.New().String()
+	_, err := q.CreateProject(ctx, sqlc.CreateProjectParams{
+		ID:        projectID,
+		Title:     sql.NullString{String: "Proj", Valid: true},
+		Notes:     "",
+		Status:    int64(domain.StatusPending),
+		Schedule:  int64(domain.ScheduleInbox),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	tagID := uuid.New().String()
+	_, err = q.CreateTag(ctx, sqlc.CreateTagParams{
+		ID:        tagID,
+		Title:     sql.NullString{String: "urgent", Valid: true},
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if err := q.AddProjectTag(ctx, sqlc.AddProjectTagParams{
+		ProjectID: projectID,
+		TagID:     tagID,
+	}); err != nil {
+		t.Fatalf("AddProjectTag: %v", err)
+	}
+
+	got, err := svc.Get(ctx, projectID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Tags) != 1 || got.Tags[0] != tagID {
+		t.Errorf("expected Tags = [%q], got %v", tagID, got.Tags)
+	}
+}
+
+// Even when the project has no tags, Tags must be a non-nil empty slice so
+// the JSON wire format emits "tags": [] (not "tags": null). The Rust client
+// inspects tags.as_array() before rewriting projectTags; a null tags field
+// silently disables the sync path.
+func TestProjectService_Get_EmptyTagsIsNotNil(t *testing.T) {
+	svc, db := newTestProjectService(t)
+	ctx := context.Background()
+
+	q := sqlc.New(db.DB)
+	now := time.Now().UTC()
+	projectID := uuid.New().String()
+	_, err := q.CreateProject(ctx, sqlc.CreateProjectParams{
+		ID:        projectID,
+		Title:     sql.NullString{String: "No tags", Valid: true},
+		Notes:     "",
+		Status:    int64(domain.StatusPending),
+		Schedule:  int64(domain.ScheduleInbox),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	got, err := svc.Get(ctx, projectID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Tags == nil {
+		t.Error("expected Tags to be non-nil empty slice, got nil")
+	}
+	if len(got.Tags) != 0 {
+		t.Errorf("expected 0 tags, got %d", len(got.Tags))
+	}
+}

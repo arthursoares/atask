@@ -165,13 +165,33 @@ func (s *ProjectService) Create(ctx context.Context, title, actorID string, opts
 	return project, nil
 }
 
-// Get fetches a project by ID.
+// hydrateTags queries and populates the Tags field on a project. Always sets
+// Tags to a non-nil slice so the JSON wire format emits "tags": [] (never
+// null), which the Rust client uses as the signal to reconcile local
+// projectTags against the server's authoritative list.
+func (s *ProjectService) hydrateTags(ctx context.Context, project *domain.Project) error {
+	tags, err := s.queries.ListProjectTags(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	project.Tags = make([]string, len(tags))
+	for i, t := range tags {
+		project.Tags[i] = t.ID
+	}
+	return nil
+}
+
+// Get fetches a project by ID, including its tags.
 func (s *ProjectService) Get(ctx context.Context, id string) (*domain.Project, error) {
 	row, err := s.queries.GetProject(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return projectFromRow(row), nil
+	project := projectFromRow(row)
+	if err := s.hydrateTags(ctx, project); err != nil {
+		return nil, err
+	}
+	return project, nil
 }
 
 // List returns all non-deleted projects.
