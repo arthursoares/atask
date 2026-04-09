@@ -54,6 +54,12 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Capture whether the task had a title at mount time. An empty-title close
+  // should only DELETE the task if the task was empty when we opened it
+  // (i.e. the "cancel new task creation" flow). If the task already had a
+  // title, closing with an accidentally-empty field must revert to the
+  // original — never silently destroy user work.
+  const initialTitleRef = useRef(task.title);
 
   const projects = useStore($projects);
   const tags = useStore($tags);
@@ -87,7 +93,17 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
     clearPendingDraft();
     const trimmed = titleValue.trim();
     if (!trimmed) {
-      deleteTask(task.id);
+      if (initialTitleRef.current.trim() === '') {
+        // New empty task created via ⌘N then dismissed without typing — the
+        // original creation is implicitly cancelled by deleting the row.
+        deleteTask(task.id);
+      } else {
+        // User cleared the title of an existing task. Treat this as a
+        // cancellation of the edit, not a delete: revert to the original
+        // title and drop the in-flight draft. The notes draft is also
+        // discarded (clearPendingDraft already cancelled any timers).
+        updateTask({ id: task.id, title: initialTitleRef.current });
+      }
     } else {
       flushDraft();
     }
