@@ -5,6 +5,8 @@ export default function useTaskPickers() {
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
 
   return {
     showWhenPicker,
@@ -15,5 +17,9 @@ export default function useTaskPickers() {
     setShowRepeatPicker,
     showProjectPicker,
     setShowProjectPicker,
+    showLocationPicker,
+    setShowLocationPicker,
+    showLinkPicker,
+    setShowLinkPicker,
   };
 }

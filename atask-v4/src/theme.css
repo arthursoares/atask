@@ -1688,6 +1688,56 @@ html, body {
     cursor: pointer;
 }
 
+/* Tag + linked-task chips with remove affordance. The chip groups the pill
+   + × button so the button sits flush with the pill border. */
+.task-edit-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.task-edit-tag-remove {
+    background: none;
+    border: none;
+    color: var(--ink-tertiary);
+    cursor: pointer;
+    font-size: var(--text-base);
+    line-height: 1;
+    padding: 0 4px;
+    border-radius: var(--radius-xs);
+}
+
+.task-edit-tag-remove:hover {
+    color: var(--deadline-red);
+    background: var(--sidebar-hover);
+}
+
+.task-edit-inline-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+}
+
+.task-edit-link-pill {
+    display: inline-block;
+    padding: 2px var(--sp-2);
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.location-empty-hint {
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-xs);
+    color: var(--ink-tertiary);
+    font-style: italic;
+}
+
 .task-edit-notes-input {
     background: transparent;
     border: none;
