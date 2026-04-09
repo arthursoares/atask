@@ -7,6 +7,7 @@ import {
   setActiveView,
   selectTask,
 } from '../store/index';
+import { todayLocal } from '../lib/dates';
 import type { Task, Project } from '../types';
 
 interface SearchResult {
@@ -148,7 +149,16 @@ export default function SearchOverlay() {
         } else if (task.schedule === 0) {
           setActiveView('inbox');
         } else if (task.schedule === 1) {
-          setActiveView('today');
+          // schedule === 1 is "scheduled" — bucket by startDate to match
+          // the selectors in store/selectors.ts: future startDate = Upcoming,
+          // today/past/null = Today.
+          const today = todayLocal();
+          const date = task.startDate ? task.startDate.slice(0, 10) : null;
+          if (date && date > today) {
+            setActiveView('upcoming');
+          } else {
+            setActiveView('today');
+          }
         } else if (task.schedule === 2) {
           setActiveView('someday');
         }

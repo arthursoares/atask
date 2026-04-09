@@ -100,7 +100,7 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
         />
 
         <TaskEditScheduleField
-          value={scheduleLabel(task.schedule, task.timeSlot)}
+          value={scheduleLabel(task.schedule, task.timeSlot ?? null, task.startDate ?? null) ?? 'Inbox'}
           onTogglePicker={() => setShowWhenPicker((value) => !value)}
           showPicker={showWhenPicker}
           picker={(

@@ -19,6 +19,7 @@ import EditorAttributeBar from './task-inline-editor/EditorAttributeBar';
 import EditorNotesField from './task-inline-editor/EditorNotesField';
 import useTaskDraft from './task-edit/useTaskDraft';
 import useTaskPickers from './task-edit/useTaskPickers';
+import scheduleLabel from './task-edit/scheduleLabel';
 import type { Task } from '../types';
 
 interface TaskInlineEditorProps {
@@ -159,11 +160,7 @@ export default function TaskInlineEditor({ task, isToday, onClose }: TaskInlineE
     }
   };
 
-  const schedulePillLabel = task.schedule === 1
-    ? task.timeSlot === 'evening' ? 'This Evening' : 'Today'
-    : task.schedule === 2
-      ? 'Someday'
-      : null;
+  const schedulePillLabel = scheduleLabel(task.schedule, task.timeSlot ?? null, task.startDate ?? null);
 
   const handleRemoveSchedule = () => {
     updateTask({ id: task.id, schedule: 0 });
