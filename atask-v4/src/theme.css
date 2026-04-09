@@ -2543,6 +2543,14 @@ textarea:focus-visible {
     border-radius: var(--radius-sm);
 }
 
+/* Task completion + checklist item checkboxes (rendered as role=checkbox
+   divs) get a visible focus ring for keyboard activation. */
+.checkbox:focus-visible,
+.cl-check:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 2px;
+}
+
 
 /* ═══════════════════════════════════════════
    Bulk Action Bar buttons
