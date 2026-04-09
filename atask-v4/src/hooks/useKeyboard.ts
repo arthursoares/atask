@@ -168,8 +168,15 @@ export default function useKeyboard() {
         return;
       }
 
-      // Space: Create new task below selection (contextual ⌘N)
-      if (key === ' ' && !meta && !shift) {
+      // Space: Create a new task below the currently-selected task.
+      //
+      // Gated on having a task actually selected so Space retains its
+      // universal "activate focused button" semantics everywhere else in
+      // the app (sidebar nav items, toolbar buttons, checkboxes, etc.).
+      // Without the gate, tabbing to any interactive element and pressing
+      // Space would silently create a ghost empty task instead of firing
+      // the button.
+      if (key === ' ' && !meta && !shift && selectedTaskId) {
         e.preventDefault();
         createTask('');
         return;
