@@ -1,7 +1,25 @@
 import { atom } from 'nanostores';
 import type { ActiveView, Task } from '../types';
 
+/**
+ * Sync phase state machine. Replaces the previous implicit "if no error and
+ * zero pending ops, render green idle dot" logic, which displayed a
+ * successful-looking state before the app had ever fetched its first status
+ * or confirmed the server was reachable.
+ *
+ *   unknown      - initial value, before any fetch completes. Don't claim
+ *                  anything about sync status.
+ *   checking     - actively fetching status from the backend (or sync is
+ *                  in progress).
+ *   unconfigured - sync is disabled in settings (no server / API key).
+ *                  Render a subtle hint instead of a success state.
+ *   synced       - last fetch succeeded, sync is enabled, zero errors.
+ *   error        - last sync returned an error; show the error indicator.
+ */
+export type SyncPhase = 'unknown' | 'checking' | 'unconfigured' | 'synced' | 'error';
+
 export interface SyncStatusState {
+  phase: SyncPhase;
   isSyncing: boolean;
   lastSyncAt: string | null;
   lastError: string | null;
@@ -9,6 +27,7 @@ export interface SyncStatusState {
 }
 
 export const $syncStatus = atom<SyncStatusState>({
+  phase: 'unknown',
   isSyncing: false,
   lastSyncAt: null,
   lastError: null,

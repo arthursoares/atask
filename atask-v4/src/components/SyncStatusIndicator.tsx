@@ -1,13 +1,27 @@
 import { useStore } from '@nanostores/react';
 import { $syncStatus } from '../store';
 
+/**
+ * Sync status indicator. Reads the phase-based atom and renders one of
+ * five visual states so users never see a false "all good" signal before
+ * the app knows it's actually synced.
+ *
+ *   unknown       muted "?" — no confirmed sync yet
+ *   checking      spinner dot — status fetch in flight
+ *   unconfigured  muted dash — sync is disabled; points to Settings
+ *   synced        green dot — successful last sync
+ *   error         red warning
+ *   (pending)     upload arrow + count (any phase can have pending ops)
+ */
 export default function SyncStatusIndicator() {
   const sync = useStore($syncStatus);
 
-  if (sync.lastError) {
+  // Error takes precedence over everything else so users immediately see
+  // when something is actively wrong.
+  if (sync.phase === 'error' || sync.lastError) {
     return (
       <span
-        title={`Sync error: ${sync.lastError}`}
+        title={`Sync error: ${sync.lastError ?? 'unknown'}`}
         className="sync-status sync-status-error"
       >
         <svg viewBox="0 0 16 16" className="sync-status-icon sync-status-icon-error" fill="var(--deadline-red)" stroke="none">
@@ -18,6 +32,8 @@ export default function SyncStatusIndicator() {
     );
   }
 
+  // Pending ops override the idle/unknown indicators because they
+  // represent concrete work that hasn't been flushed yet.
   if (sync.pendingOpsCount > 0) {
     return (
       <span
@@ -33,6 +49,31 @@ export default function SyncStatusIndicator() {
     );
   }
 
+  if (sync.phase === 'unconfigured') {
+    return (
+      <span title="Sync not configured — enable in Settings" className="sync-status sync-status-unconfigured">
+        <span className="sync-status-dot sync-status-dot-unconfigured" aria-hidden="true">—</span>
+      </span>
+    );
+  }
+
+  if (sync.phase === 'unknown') {
+    return (
+      <span title="Checking sync status…" className="sync-status sync-status-unknown">
+        <span className="sync-status-dot sync-status-dot-unknown" aria-hidden="true">?</span>
+      </span>
+    );
+  }
+
+  if (sync.phase === 'checking' || sync.isSyncing) {
+    return (
+      <span title="Syncing…" className="sync-status sync-status-checking">
+        <span className="sync-status-dot sync-status-dot-checking" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  // phase === 'synced'
   return (
     <span
       title={sync.lastSyncAt ? `Last synced ${new Date(sync.lastSyncAt).toLocaleTimeString()}` : 'Sync up to date'}
