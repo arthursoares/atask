@@ -2811,5 +2811,19 @@ textarea:focus-visible {
     border-color: var(--accent);
 }
 
-/* No animations. All state changes are instant.
-   Only allowed transitions: hover background-color 80ms ease-out on interactive elements. */
+/* Minimal motion policy. Hover/focus transitions and small state
+   changes only. No scroll-driven, parallax, or auto-playing animation.
+   Users who have set prefers-reduced-motion get everything turned off
+   below (including the drag overlay's position transitions). */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
