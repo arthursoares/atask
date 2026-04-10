@@ -129,6 +129,15 @@ function SidebarProjectGroup({
     },
   });
 
+  // Parallel ref map so the foreign-drop computation can read item rects
+  // without poking into usePointerReorder's private itemElementsRef.
+  // MUST be declared BEFORE useForeignDropIndex — that hook calls
+  // getItemElements() during render when a foreign drag is active, and
+  // the closure reads `projectItemRefs`. JavaScript const/let TDZ rules
+  // mean the closure throws if the ref is declared further down the
+  // function body.
+  const projectItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   // Foreign drop indicator: when a project drag from ANOTHER area's group
   // is hovering this group, compute where it would land in our list.
   const foreignDrop = useForeignDropIndex({
@@ -150,10 +159,6 @@ function SidebarProjectGroup({
     : -1;
 
   const itemWidth = reorderState.activeId ? getItemRect(reorderState.activeId)?.width ?? null : null;
-
-  // Parallel ref map so the foreign-drop computation can read item rects
-  // without poking into usePointerReorder's private itemElementsRef.
-  const projectItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Cache the per-id ref callback so React sees a stable function across
   // re-renders. Without this, every render of SidebarProjectGroup (which
