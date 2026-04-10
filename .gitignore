@@ -40,3 +40,9 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Playwright (frontend UI tests)
+atask-v4/playwright-report/
+atask-v4/test-results/
+atask-v4/blob-report/
+atask-v4/.playwright/
