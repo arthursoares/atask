@@ -55,6 +55,65 @@ export const $taskPointerDrag = atom<TaskPointerDragState>({
   hoverTargetId: null,
 });
 
+/**
+ * Shared cross-list drag cursor state. Published by the source
+ * usePointerReorder instance on drag start / move / end, consumed by
+ * OTHER list instances so they can show a drop-slot indicator at the
+ * exact position the dragged item would land if released over them.
+ *
+ * Without this, each list is an island — only the source list knows a
+ * drag is happening and draws its own drop slot. When the user drags a
+ * project onto another area (or a task onto another section), the
+ * target list needs to be aware of the live cursor position to compute
+ * its own insertion index and render feedback.
+ *
+ * The `kind` field filters which targets react — project drags only
+ * light up project-holding lists, task drags only task-holding lists.
+ * `sourceListId` lets a target exclude itself (the source draws its
+ * own indicator via the hook's internal dropIndex).
+ */
+export interface PointerDragCursorState {
+  activeId: string | null;
+  kind: 'task' | 'project' | null;
+  sourceListId: string | null;
+  cursorX: number | null;
+  cursorY: number | null;
+}
+
+export const $pointerDragCursor = atom<PointerDragCursorState>({
+  activeId: null,
+  kind: null,
+  sourceListId: null,
+  cursorX: null,
+  cursorY: null,
+});
+
+export function startPointerDragCursor(
+  activeId: string,
+  kind: 'task' | 'project',
+  sourceListId: string,
+  cursorX: number,
+  cursorY: number,
+) {
+  $pointerDragCursor.set({ activeId, kind, sourceListId, cursorX, cursorY });
+}
+
+export function updatePointerDragCursor(cursorX: number, cursorY: number) {
+  const current = $pointerDragCursor.get();
+  if (!current.activeId) return;
+  $pointerDragCursor.set({ ...current, cursorX, cursorY });
+}
+
+export function endPointerDragCursor() {
+  $pointerDragCursor.set({
+    activeId: null,
+    kind: null,
+    sourceListId: null,
+    cursorX: null,
+    cursorY: null,
+  });
+}
+
 export function startTaskPointerDrag(taskId: string) {
   $taskPointerDrag.set({ activeTaskId: taskId, hoverTargetId: null });
 }

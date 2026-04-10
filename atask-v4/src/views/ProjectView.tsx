@@ -155,6 +155,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
       <ProjectTaskList
         tasks={sectionlessTasks}
         projectId={project.id}
+        listId={`task-sectionless:${project.id}`}
         expandedTaskId={expandedTaskId}
         selectedTaskId={selectedTaskId}
         selectedTaskIds={selectedTaskIds}

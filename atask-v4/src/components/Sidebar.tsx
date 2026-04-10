@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $activeView,
@@ -25,6 +25,7 @@ import { todayLocal, tomorrowLocal } from "../lib/dates";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import { Button } from "../ui";
 import { LogbookIcon, InboxIcon, SomedayIcon, TodayIcon, UpcomingIcon } from "./sidebar/SidebarIcons";
+import useForeignDropIndex from '../hooks/useForeignDropIndex';
 import {
   NavItem,
   ProjectItem,
@@ -74,8 +75,14 @@ function SidebarProjectGroup({
   onProjectCrossAreaDrop,
   setActiveView,
 }: SidebarProjectGroupProps) {
+  // Each project group is its own list — use the area id (or "root") so
+  // foreign drag detection can tell groups apart and exclude the source.
+  const projectListId = `projects:${areaId ?? 'root'}`;
+  const projectListRef = useRef<HTMLDivElement | null>(null);
   const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
     items: projects,
+    listId: projectListId,
+    kind: 'project',
     onReorder: async (moves) => {
       const orderedIds = [...moves].sort((left, right) => left.index - right.index).map((move) => move.id);
       await onProjectReorder(areaId, orderedIds);
@@ -122,11 +129,39 @@ function SidebarProjectGroup({
     },
   });
 
+  // Foreign drop indicator: when a project drag from ANOTHER area's group
+  // is hovering this group, compute where it would land in our list.
+  const foreignDrop = useForeignDropIndex({
+    listId: projectListId,
+    kind: 'project',
+    containerRef: projectListRef,
+    getItemElements: () => {
+      const elements: HTMLElement[] = [];
+      for (const project of projects) {
+        const el = projectItemRefs.current.get(project.id);
+        if (el) elements.push(el);
+      }
+      return elements;
+    },
+  });
+
   const draggedProjectIndex = reorderState.activeId
     ? projects.findIndex((project) => project.id === reorderState.activeId)
     : -1;
 
   const itemWidth = reorderState.activeId ? getItemRect(reorderState.activeId)?.width ?? null : null;
+
+  // Parallel ref map so the foreign-drop computation can read item rects
+  // without poking into usePointerReorder's private itemElementsRef.
+  const projectItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const registerProjectItem = useCallback((id: string) => {
+    const hookRegister = registerItem(id);
+    return (node: HTMLDivElement | null) => {
+      if (node) projectItemRefs.current.set(id, node);
+      else projectItemRefs.current.delete(id);
+      hookRegister(node);
+    };
+  }, [registerItem]);
 
   const renderDragClone = (id: string) => {
     const project = projects.find((p) => p.id === id);
@@ -148,13 +183,22 @@ function SidebarProjectGroup({
   };
 
   const renderDropZone = (index: number) => {
-    if (!reorderState.isPointerDragging) return null;
+    // Native within-list drop indicator.
+    const localVisible =
+      reorderState.isPointerDragging &&
+      reorderState.dropIndex === index &&
+      index !== draggedProjectIndex &&
+      index !== draggedProjectIndex + 1;
 
-    const isVisible = reorderState.dropIndex === index
-      && index !== draggedProjectIndex
-      && index !== draggedProjectIndex + 1;
+    // Foreign drop indicator: another area's project is being dragged
+    // over our list. We don't have a native drag of our own, so just
+    // mirror the foreign dropIndex into a slot at this position.
+    const foreignVisible =
+      !reorderState.isPointerDragging &&
+      foreignDrop.isForeignHovering &&
+      foreignDrop.dropIndex === index;
 
-    if (!isVisible) return null;
+    if (!localVisible && !foreignVisible) return null;
 
     return (
       <div
@@ -167,7 +211,7 @@ function SidebarProjectGroup({
   };
 
   return (
-    <>
+    <div ref={projectListRef} className="sidebar-project-list">
       {projects.map((project, projectIndex) => (
         <Fragment key={project.id}>
           {renderDropZone(projectIndex)}
@@ -183,7 +227,7 @@ function SidebarProjectGroup({
             onRenameCommit={onRenameCommit}
             onRenameCancel={onRenameCancel}
             onTaskDrop={onTaskDrop}
-            reorderRef={registerItem(project.id)}
+            reorderRef={registerProjectItem(project.id)}
             reorderHandlers={getPointerHandlers(project.id)}
             isReordering={reorderState.activeId === project.id}
           />
@@ -197,7 +241,7 @@ function SidebarProjectGroup({
         itemWidth={itemWidth}
         renderClone={renderDragClone}
       />
-    </>
+    </div>
   );
 }
 

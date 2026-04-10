@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { setTaskPointerHoverTarget } from '../store/ui';
+import {
+  setTaskPointerHoverTarget,
+  startPointerDragCursor,
+  updatePointerDragCursor,
+  endPointerDragCursor,
+} from '../store/ui';
 
 type ReorderableItem = { id: string };
 
@@ -27,6 +32,14 @@ interface PointerReorderOptions<T extends ReorderableItem> {
    * Callers typically pass `() => $selectedTaskIds.get()`.
    */
   getSelectedIds?: () => Set<string>;
+  /**
+   * Optional list identifier + kind used to publish cross-list drag
+   * cursor state via $pointerDragCursor. Set both to make other list
+   * instances render an insertion indicator when this list's drag
+   * hovers over them (see useForeignDropIndex).
+   */
+  listId?: string;
+  kind?: 'task' | 'project';
 }
 
 interface PointerStartArgs {
@@ -67,6 +80,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
   onDragEnd,
   onCrossListDrop,
   getSelectedIds,
+  listId,
+  kind,
 }: PointerReorderOptions<T>): PointerReorderReturn {
   const [reorderState, setReorderState] = useState<PointerReorderState>({
     activeId: null,
@@ -114,10 +129,13 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorX: null,
       cursorY: null,
     });
+    if (listId && kind) {
+      endPointerDragCursor();
+    }
     if (prevId) {
       onDragEndRef.current?.(prevId);
     }
-  }, [setReorderStateSync]);
+  }, [setReorderStateSync, listId, kind]);
 
   const getOrderedItems = useCallback(() => {
     return items
@@ -161,9 +179,12 @@ export default function usePointerReorder<T extends ReorderableItem>({
         cursorX: args.clientX,
         cursorY: args.clientY,
       });
+      if (listId && kind) {
+        startPointerDragCursor(args.id, kind, listId, args.clientX, args.clientY);
+      }
       onDragStartRef.current?.(args.id);
     }, POINTER_DRAG_HOLD_MS);
-  }, [setReorderStateSync]);
+  }, [setReorderStateSync, listId, kind]);
 
   const updateReorder = useCallback((event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
     const session = sessionRef.current;
@@ -175,7 +196,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (!movedEnough && !reorderStateRef.current.isPointerDragging) return;
 
     // If movement threshold reached before hold timer, activate immediately
-    if (!reorderStateRef.current.activeId) {
+    const wasInactive = !reorderStateRef.current.activeId;
+    if (wasInactive) {
       if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
       onDragStartRef.current?.(session.id);
     }
@@ -188,6 +210,16 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorX: event.clientX,
       cursorY: event.clientY,
     });
+
+    // Cross-list cursor publish: notify other list instances of the live
+    // cursor position so they can compute their own foreign drop index.
+    if (listId && kind) {
+      if (wasInactive) {
+        startPointerDragCursor(session.id, kind, listId, event.clientX, event.clientY);
+      } else {
+        updatePointerDragCursor(event.clientX, event.clientY);
+      }
+    }
 
     // Update sidebar hover target using elementFromPoint (pointer capture blocks pointerenter)
     if (onDragStartRef.current) {

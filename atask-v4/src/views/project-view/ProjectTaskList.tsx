@@ -1,4 +1,5 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useRef, useState } from 'react';
+import useForeignDropIndex from '../../hooks/useForeignDropIndex';
 import TaskRow, { shouldHandleTaskRowPointerDown } from '../../components/TaskRow';
 import TaskInlineEditor from '../../components/TaskInlineEditor';
 import NewTaskRow from '../../components/NewTaskRow';
@@ -14,6 +15,14 @@ import { todayLocal, tomorrowLocal } from '../../lib/dates';
 interface ProjectTaskListProps {
   tasks: Task[];
   projectId: string;
+  /**
+   * Stable identifier for this task list instance. Each section's
+   * ProjectTaskList must pass a different listId so cross-section drag
+   * detection can tell them apart. Top-level (sectionless) lists pass
+   * `task-sectionless:${projectId}`; per-section lists pass
+   * `task-section:${section.id}`.
+   */
+  listId: string;
   expandedTaskId: string | null;
   selectedTaskId: string | null;
   selectedTaskIds: Set<string>;
@@ -28,6 +37,7 @@ interface ProjectTaskListProps {
 export default function ProjectTaskList({
   tasks,
   projectId,
+  listId,
   expandedTaskId,
   selectedTaskId,
   selectedTaskIds,
@@ -98,14 +108,43 @@ export default function ProjectTaskList({
     return false;
   };
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const { reorderState, getPointerHandlers, registerItem, getItemRect } = usePointerReorder({
     getSelectedIds: () => $selectedTaskIds.get(),
     items: tasks,
+    listId,
+    kind: 'task',
     onReorder: onReorderTasks,
     shouldHandlePointerDown: (event) => shouldHandleTaskRowPointerDown(event.target),
     onDragStart: startTaskPointerDrag,
     onDragEnd: endTaskPointerDrag,
     onCrossListDrop: handleCrossListDrop,
+  });
+
+  // Foreign drop indicator: show an insertion line when a task being
+  // dragged from another section/list is hovering this list.
+  const taskItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const registerTaskItem = useCallback((id: string) => {
+    const hookRegister = registerItem(id);
+    return (node: HTMLDivElement | null) => {
+      if (node) taskItemRefs.current.set(id, node);
+      else taskItemRefs.current.delete(id);
+      hookRegister(node);
+    };
+  }, [registerItem]);
+
+  const foreignDrop = useForeignDropIndex({
+    listId,
+    kind: 'task',
+    containerRef,
+    getItemElements: () => {
+      const elements: HTMLDivElement[] = [];
+      for (const task of tasks) {
+        const el = taskItemRefs.current.get(task.id);
+        if (el) elements.push(el);
+      }
+      return elements;
+    },
   });
   const draggedTaskIndex = reorderState.activeId
     ? tasks.findIndex((task) => task.id === reorderState.activeId)
@@ -131,18 +170,24 @@ export default function ProjectTaskList({
   };
 
   const renderDropZone = (index: number) => {
-    if (!isDragging) return null;
+    const localVisible =
+      isDragging &&
+      reorderState.dropIndex === index &&
+      index !== draggedTaskIndex &&
+      index !== draggedTaskIndex + 1;
+    // Foreign-list drag landing in this list -> mirror its dropIndex.
+    const foreignVisible =
+      !isDragging &&
+      foreignDrop.isForeignHovering &&
+      foreignDrop.dropIndex === index;
 
-    const isVisible = reorderState.dropIndex === index
-      && index !== draggedTaskIndex
-      && index !== draggedTaskIndex + 1;
+    if (!localVisible && !foreignVisible) return null;
+
     const edgeClass = index === 0
       ? ' task-drop-zone-edge-top'
       : index === tasks.length
         ? ' task-drop-zone-edge-bottom'
         : '';
-
-    if (!isVisible) return null;
 
     return (
       <div
@@ -175,6 +220,7 @@ export default function ProjectTaskList({
 
   return (
     <div
+      ref={containerRef}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onPointerUp={handlePointerUp}
@@ -198,7 +244,7 @@ export default function ProjectTaskList({
               hideProjectPill
               onClick={() => onSelectTask(task.id)}
               onDoubleClick={() => onExpandTask(task.id)}
-              reorderRef={registerItem(task.id)}
+              reorderRef={registerTaskItem(task.id)}
               reorderHandlers={getPointerHandlers(task.id)}
               isReordering={reorderState.activeId === task.id}
             />

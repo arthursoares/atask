@@ -132,6 +132,7 @@ export default function ProjectSectionBlock({
         <ProjectTaskList
           tasks={tasks}
           projectId={projectId}
+          listId={`task-section:${section.id}`}
           expandedTaskId={expandedTaskId}
           selectedTaskId={selectedTaskId}
           selectedTaskIds={selectedTaskIds}
