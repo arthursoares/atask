@@ -104,6 +104,33 @@ export default function usePointerReorder<T extends ReorderableItem>({
   onCrossListDropRef.current = onCrossListDrop;
   getSelectedIdsRef.current = getSelectedIds;
 
+  // Throttled cursor publish: pointermove fires at the display refresh rate
+  // (typically 60-240 Hz). Publishing to $pointerDragCursor on every event
+  // would re-render every subscribed consumer at the same rate, which then
+  // churns ref callbacks and trashes pointer-event continuity. Coalesce to
+  // one publish per animation frame.
+  const cursorRafRef = useRef<number | null>(null);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const flushCursor = () => {
+    cursorRafRef.current = null;
+    const pending = pendingCursorRef.current;
+    pendingCursorRef.current = null;
+    if (pending) updatePointerDragCursor(pending.x, pending.y);
+  };
+  const schedulePublishCursor = (x: number, y: number) => {
+    pendingCursorRef.current = { x, y };
+    if (cursorRafRef.current == null) {
+      cursorRafRef.current = requestAnimationFrame(flushCursor);
+    }
+  };
+  const cancelCursorPublish = () => {
+    if (cursorRafRef.current != null) {
+      cancelAnimationFrame(cursorRafRef.current);
+      cursorRafRef.current = null;
+    }
+    pendingCursorRef.current = null;
+  };
+
   const setReorderStateSync = useCallback((nextState: PointerReorderState) => {
     reorderStateRef.current = nextState;
     setReorderState(nextState);
@@ -130,6 +157,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorY: null,
     });
     if (listId && kind) {
+      cancelCursorPublish();
       endPointerDragCursor();
     }
     if (prevId) {
@@ -213,11 +241,13 @@ export default function usePointerReorder<T extends ReorderableItem>({
 
     // Cross-list cursor publish: notify other list instances of the live
     // cursor position so they can compute their own foreign drop index.
+    // Subsequent updates are rAF-batched so consumers don't re-render at
+    // pointermove rate.
     if (listId && kind) {
       if (wasInactive) {
         startPointerDragCursor(session.id, kind, listId, event.clientX, event.clientY);
       } else {
-        updatePointerDragCursor(event.clientX, event.clientY);
+        schedulePublishCursor(event.clientX, event.clientY);
       }
     }
 

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $activeView,
@@ -154,13 +154,34 @@ function SidebarProjectGroup({
   // Parallel ref map so the foreign-drop computation can read item rects
   // without poking into usePointerReorder's private itemElementsRef.
   const projectItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Cache the per-id ref callback so React sees a stable function across
+  // re-renders. Without this, every render of SidebarProjectGroup (which
+  // happens on every cursor move during a drag because $pointerDragCursor
+  // updates trigger useStore subscribers) creates a fresh closure for
+  // every project, churning the ref maps and breaking pointer-event
+  // continuity. The cache invalidates whenever registerItem changes
+  // (which is stable in practice — usePointerReorder memoizes it with []
+  // deps).
+  const registerProjectItemCacheRef = useRef<Map<string, (node: HTMLDivElement | null) => void>>(
+    new Map(),
+  );
+  useEffect(() => {
+    // Drop the cache whenever the underlying register function rotates.
+    registerProjectItemCacheRef.current = new Map();
+  }, [registerItem]);
   const registerProjectItem = useCallback((id: string) => {
-    const hookRegister = registerItem(id);
-    return (node: HTMLDivElement | null) => {
-      if (node) projectItemRefs.current.set(id, node);
-      else projectItemRefs.current.delete(id);
-      hookRegister(node);
-    };
+    let cached = registerProjectItemCacheRef.current.get(id);
+    if (!cached) {
+      const hookRegister = registerItem(id);
+      cached = (node: HTMLDivElement | null) => {
+        if (node) projectItemRefs.current.set(id, node);
+        else projectItemRefs.current.delete(id);
+        hookRegister(node);
+      };
+      registerProjectItemCacheRef.current.set(id, cached);
+    }
+    return cached;
   }, [registerItem]);
 
   const renderDragClone = (id: string) => {

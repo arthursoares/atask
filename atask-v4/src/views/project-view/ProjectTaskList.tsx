@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import useForeignDropIndex from '../../hooks/useForeignDropIndex';
 import TaskRow, { shouldHandleTaskRowPointerDown } from '../../components/TaskRow';
 import TaskInlineEditor from '../../components/TaskInlineEditor';
@@ -124,13 +124,30 @@ export default function ProjectTaskList({
   // Foreign drop indicator: show an insertion line when a task being
   // dragged from another section/list is hovering this list.
   const taskItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Cache per-id ref callback. See SidebarProjectGroup for the rationale:
+  // we re-render on every cursor move during a drag, and a fresh closure
+  // per render would null + reset every TaskRow ref, breaking pointer
+  // capture continuity. Stable identity per id keeps React from
+  // re-attaching refs.
+  const registerTaskItemCacheRef = useRef<Map<string, (node: HTMLDivElement | null) => void>>(
+    new Map(),
+  );
+  useEffect(() => {
+    registerTaskItemCacheRef.current = new Map();
+  }, [registerItem]);
   const registerTaskItem = useCallback((id: string) => {
-    const hookRegister = registerItem(id);
-    return (node: HTMLDivElement | null) => {
-      if (node) taskItemRefs.current.set(id, node);
-      else taskItemRefs.current.delete(id);
-      hookRegister(node);
-    };
+    let cached = registerTaskItemCacheRef.current.get(id);
+    if (!cached) {
+      const hookRegister = registerItem(id);
+      cached = (node: HTMLDivElement | null) => {
+        if (node) taskItemRefs.current.set(id, node);
+        else taskItemRefs.current.delete(id);
+        hookRegister(node);
+      };
+      registerTaskItemCacheRef.current.set(id, cached);
+    }
+    return cached;
   }, [registerItem]);
 
   const foreignDrop = useForeignDropIndex({
