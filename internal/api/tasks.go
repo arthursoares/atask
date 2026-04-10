@@ -476,10 +476,16 @@ func (h *TaskHandler) AddLink(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
 		}
-		// Domain validation errors (e.g. self-link) are user input
-		// problems, not server faults — return 422 so clients can
-		// distinguish "your request was bad" from "we crashed".
-		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		// Self-link is the only known validation error from AddLink —
+		// translate it to 422 ("user sent invalid input"). Anything
+		// else (DB write failure, event-store append failure, etc.) is
+		// a server-side fault and must surface as 5xx so clients retry
+		// it instead of treating it as a permanent rejection.
+		if errors.Is(err, service.ErrSelfLink) {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

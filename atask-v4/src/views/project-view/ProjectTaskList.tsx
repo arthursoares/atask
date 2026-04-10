@@ -7,7 +7,7 @@ import DropSlot from '../../components/task-row/DropSlot';
 import DragOverlay from '../../components/DragOverlay';
 import usePointerReorder from '../../hooks/usePointerReorder';
 import type { ReorderMove, Task } from '../../types';
-import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $tasks, $projects, $selectedTaskIds } from '../../store/index';
+import { startTaskPointerDrag, endTaskPointerDrag, updateTask, reorderTasks, $tasks, $projects, $selectedTaskIds } from '../../store/index';
 import { useStore } from '@nanostores/react';
 import { $taskPointerDrag } from '../../store/ui';
 import { todayLocal, tomorrowLocal } from '../../lib/dates';
@@ -50,7 +50,76 @@ export default function ProjectTaskList({
 }: ProjectTaskListProps) {
   const [isDropTarget, setIsDropTarget] = useState(false);
   const taskDrag = useStore($taskPointerDrag);
-  const handleCrossListDrop = (taskId: string, target: Element) => {
+  /**
+   * Compute the insertion index for a cross-list drop by walking the
+   * task elements inside `targetWrapper` and finding the one whose
+   * vertical center is below the cursor. Mirrors the within-list
+   * getDropIndex logic in usePointerReorder. Returns the index in the
+   * TARGET list's order (0..N inclusive).
+   */
+  const computeTargetDropIndex = (targetWrapper: Element, cursorY: number): number => {
+    const taskNodes = Array.from(
+      targetWrapper.querySelectorAll<HTMLElement>('[data-task-id]'),
+    );
+    for (let i = 0; i < taskNodes.length; i += 1) {
+      const rect = taskNodes[i].getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      if (cursorY < centerY) return i;
+    }
+    return taskNodes.length;
+  };
+
+  /**
+   * Apply a cross-list move to the task: update the section/sectionless
+   * pointer AND reorder the destination list so the dropped task lands
+   * at the position the user released over (matching the foreign drop
+   * indicator). Without the reorder, the task lands at its old index
+   * inside the new list, ignoring the insertion line — Codex P2.
+   *
+   * Skips the reorder when targetSectionId is unchanged (within-section
+   * paths use the within-list splice in usePointerReorder instead).
+   */
+  const applyCrossSectionDrop = async (
+    taskId: string,
+    targetSectionId: string | null,
+    targetTaskIds: string[],
+    insertionIndex: number,
+  ) => {
+    // Move the task into the target section first.
+    await updateTask({ id: taskId, sectionId: targetSectionId });
+
+    // Build the new ordering for the target list. Filter out the
+    // dragged task in case it was already there (cross-list path
+    // shouldn't normally happen since the same-target guards return
+    // false above, but keep this defensive).
+    const filtered = targetTaskIds.filter((id) => id !== taskId);
+    const clampedIndex = Math.max(0, Math.min(insertionIndex, filtered.length));
+    const newOrder = [
+      ...filtered.slice(0, clampedIndex),
+      taskId,
+      ...filtered.slice(clampedIndex),
+    ];
+
+    // Convert ordering to {id, index} moves. Only emit moves for tasks
+    // whose index actually changes — avoid touching unrelated rows.
+    const allTasks = $tasks.get();
+    const moves: Array<{ id: string; index: number }> = [];
+    newOrder.forEach((id, idx) => {
+      const task = allTasks.find((t) => t.id === id);
+      if (!task || task.index !== idx) {
+        moves.push({ id, index: idx });
+      }
+    });
+    if (moves.length > 0) {
+      await reorderTasks(moves);
+    }
+  };
+
+  const handleCrossListDrop = (
+    taskId: string,
+    target: Element,
+    cursor: { x: number; y: number },
+  ) => {
     const sidebarItemId = target.getAttribute('data-sidebar-item-id');
     const sidebarItemKind = target.getAttribute('data-sidebar-item-kind');
 
@@ -74,7 +143,16 @@ export default function ProjectTaskList({
       if (draggedTask && draggedTask.sectionId === sidebarItemId) {
         return false;
       }
-      updateTask({ id: taskId, sectionId: sidebarItemId });
+      // Compute target ordering: tasks already in this section, sorted
+      // by their current index, then place the dragged task at the
+      // position the cursor released over.
+      const targetTaskIds = $tasks
+        .get()
+        .filter((t) => t.projectId === projectId && t.sectionId === sidebarItemId && t.status === 0)
+        .sort((a, b) => a.index - b.index)
+        .map((t) => t.id);
+      const insertionIndex = computeTargetDropIndex(target, cursor.y);
+      void applyCrossSectionDrop(taskId, sidebarItemId, targetTaskIds, insertionIndex);
       return true;
     }
 
@@ -86,7 +164,13 @@ export default function ProjectTaskList({
       if (draggedTask && draggedTask.sectionId == null) {
         return false;
       }
-      updateTask({ id: taskId, sectionId: null });
+      const targetTaskIds = $tasks
+        .get()
+        .filter((t) => t.projectId === projectId && t.sectionId == null && t.status === 0)
+        .sort((a, b) => a.index - b.index)
+        .map((t) => t.id);
+      const insertionIndex = computeTargetDropIndex(target, cursor.y);
+      void applyCrossSectionDrop(taskId, null, targetTaskIds, insertionIndex);
       return true;
     }
 

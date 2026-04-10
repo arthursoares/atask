@@ -646,13 +646,19 @@ func (s *TaskService) RemoveTag(ctx context.Context, id, tagID, actorID string) 
 	return s.publishEvent(ctx, domain.TaskTagRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
 }
 
+// ErrSelfLink is returned by AddLink when a task is asked to link to
+// itself. Exposed as a sentinel so the HTTP handler can distinguish
+// "user input was invalid" (-> 422) from "infrastructure failed"
+// (-> 500). Caller code should use errors.Is(err, ErrSelfLink).
+var ErrSelfLink = errors.New("task cannot link to itself")
+
 // AddLink adds a bidirectional link between two tasks and emits
 // task.link_added for both tasks so clients viewing either task receive the
 // delta. The link is stored as two mirrored rows in task_links so that
 // hydrateLinks (which reads only outgoing) works symmetrically.
 func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID string) error {
 	if id == relatedTaskID {
-		return errors.New("task cannot link to itself")
+		return ErrSelfLink
 	}
 
 	now := timeNow()

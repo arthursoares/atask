@@ -24,7 +24,11 @@ interface PointerReorderOptions<T extends ReorderableItem> {
   shouldHandlePointerDown?: (event: StartEvent, id: string) => boolean;
   onDragStart?: (id: string) => void;
   onDragEnd?: (id: string) => void;
-  onCrossListDrop?: (id: string, dropTarget: Element) => boolean;
+  onCrossListDrop?: (
+    id: string,
+    dropTarget: Element,
+    cursor: { x: number; y: number },
+  ) => boolean;
   /**
    * Optional callback returning the current multi-selection set. If the
    * dragged item is in the set, commitReorder moves the whole selection
@@ -281,7 +285,10 @@ export default function usePointerReorder<T extends ReorderableItem>({
     const sidebarItem = dropTarget?.closest('[data-sidebar-item-id]');
 
     if (sidebarItem && onCrossListDropRef.current) {
-      const handled = onCrossListDropRef.current(currentState.activeId, sidebarItem);
+      const handled = onCrossListDropRef.current(currentState.activeId, sidebarItem, {
+        x: cursorX,
+        y: cursorY,
+      });
       if (handled) {
         cancelReorder();
         return;
