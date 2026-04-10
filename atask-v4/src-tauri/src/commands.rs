@@ -1738,40 +1738,62 @@ pub fn remove_tag_from_task(
     })
 }
 
+pub(crate) fn add_task_link_impl(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    linked_task_id: &str,
+) -> Result<(), String> {
+    if task_id == linked_task_id {
+        return Err("task cannot link to itself".to_string());
+    }
+    // Insert both directions locally to match the server's bidirectional
+    // storage; otherwise the local DB disagrees with what the delta pull
+    // will bring back and $linksByTaskId flickers on next sync.
+    conn.execute(
+        "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
+        rusqlite::params![task_id, linked_task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
+        rusqlite::params![linked_task_id, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn add_task_link(
     db: tauri::State<'_, Database>,
     task_id: String,
     linked_task_id: String,
 ) -> Result<(), String> {
-    if task_id == linked_task_id {
-        return Err("task cannot link to itself".to_string());
-    }
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     with_tx(&conn, |tx| {
-        // Insert both directions locally to match the server's bidirectional
-        // storage; otherwise the local DB disagrees with what the delta pull
-        // will bring back and $linksByTaskId flickers on next sync.
-        tx.execute(
-            "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
-            rusqlite::params![task_id, linked_task_id],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.execute(
-            "INSERT OR IGNORE INTO taskLinks (taskId, linkedTaskId) VALUES (?1, ?2)",
-            rusqlite::params![linked_task_id, task_id],
-        )
-        .map_err(|e| e.to_string())?;
-
+        add_task_link_impl(tx, &task_id, &linked_task_id)?;
         queue_pending_op(
             tx,
             "POST",
             &format!("/tasks/{}/links/{}", task_id, linked_task_id),
             None,
         )?;
-
         Ok(())
     })
+}
+
+pub(crate) fn remove_task_link_impl(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    linked_task_id: &str,
+) -> Result<(), String> {
+    // Delete BOTH mirrored rows so an immediate $linksByTaskId read does
+    // not still show the reverse direction lingering.
+    conn.execute(
+        "DELETE FROM taskLinks WHERE (taskId = ?1 AND linkedTaskId = ?2) OR (taskId = ?2 AND linkedTaskId = ?1)",
+        rusqlite::params![task_id, linked_task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1782,21 +1804,13 @@ pub fn remove_task_link(
 ) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     with_tx(&conn, |tx| {
-        // Delete BOTH mirrored rows so an immediate $linksByTaskId read does
-        // not still show the reverse direction lingering.
-        tx.execute(
-            "DELETE FROM taskLinks WHERE (taskId = ?1 AND linkedTaskId = ?2) OR (taskId = ?2 AND linkedTaskId = ?1)",
-            rusqlite::params![task_id, linked_task_id],
-        )
-        .map_err(|e| e.to_string())?;
-
+        remove_task_link_impl(tx, &task_id, &linked_task_id)?;
         queue_pending_op(
             tx,
             "DELETE",
             &format!("/tasks/{}/links/{}", task_id, linked_task_id),
             None,
         )?;
-
         Ok(())
     })
 }
@@ -2180,6 +2194,20 @@ pub struct CreateLocationParams {
     pub name: String,
 }
 
+pub(crate) fn create_location_impl(
+    conn: &rusqlite::Connection,
+    params: CreateLocationParams,
+) -> Result<Location, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO locations (id, name, createdAt, updatedAt) VALUES (?1, ?2, ?3, ?3)",
+        rusqlite::params![id, params.name, now],
+    )
+    .map_err(|e| e.to_string())?;
+    read_location(conn, &id)
+}
+
 #[tauri::command]
 pub fn create_location(
     db: tauri::State<'_, Database>,
@@ -2187,16 +2215,7 @@ pub fn create_location(
 ) -> Result<Location, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     with_tx(&conn, move |tx| {
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
-
-        tx.execute(
-            "INSERT INTO locations (id, name, createdAt, updatedAt) VALUES (?1, ?2, ?3, ?3)",
-            rusqlite::params![id, params.name, now],
-        )
-        .map_err(|e| e.to_string())?;
-
-        let loc = read_location(tx, &id)?;
+        let loc = create_location_impl(tx, params)?;
         let body = serde_json::json!({"id": loc.id, "name": loc.name}).to_string();
         queue_pending_op(tx, "POST", "/locations", Some(&body))?;
         Ok(loc)
@@ -2232,26 +2251,45 @@ pub fn update_location(
     })
 }
 
+pub(crate) fn delete_location_impl(
+    conn: &rusqlite::Connection,
+    id: &str,
+) -> Result<(), String> {
+    // Clear locationId on tasks that reference this location BEFORE the
+    // delete so a local FK violation can't occur and so deleting a
+    // location doesn't leave orphan references in tasks.
+    conn.execute(
+        "UPDATE tasks SET locationId = NULL WHERE locationId = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM locations WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn delete_location(db: tauri::State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     with_tx(&conn, |tx| {
-        // Clear locationId on tasks that reference this location (must be
-        // in the same tx so we don't leave dangling references if the delete
-        // or the pending-op enqueue fails partway).
-        tx.execute(
-            "UPDATE tasks SET locationId = NULL WHERE locationId = ?1",
-            rusqlite::params![id],
-        )
-        .map_err(|e| e.to_string())?;
-
-        tx.execute("DELETE FROM locations WHERE id = ?1", rusqlite::params![id])
-            .map_err(|e| e.to_string())?;
-
+        delete_location_impl(tx, &id)?;
         queue_pending_op(tx, "DELETE", &format!("/locations/{}", id), None)?;
-
         Ok(())
     })
+}
+
+pub(crate) fn set_task_location_impl(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    location_id: Option<&str>,
+) -> Result<Task, String> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET locationId = ?1, updatedAt = ?2 WHERE id = ?3",
+        rusqlite::params![location_id, now, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    query_task(conn, task_id)
 }
 
 #[tauri::command]
@@ -2262,15 +2300,7 @@ pub fn set_task_location(
 ) -> Result<Task, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     with_tx(&conn, move |tx| {
-        let now = Utc::now().to_rfc3339();
-
-        tx.execute(
-            "UPDATE tasks SET locationId = ?1, updatedAt = ?2 WHERE id = ?3",
-            rusqlite::params![location_id, now, task_id],
-        )
-        .map_err(|e| e.to_string())?;
-
-        let task = query_task(tx, &task_id)?;
+        let task = set_task_location_impl(tx, &task_id, location_id.as_deref())?;
         let body = serde_json::json!({"id": location_id}).to_string();
         queue_pending_op(
             tx,

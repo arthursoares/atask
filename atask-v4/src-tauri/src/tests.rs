@@ -453,4 +453,151 @@ mod tests {
         let expanded = toggle_section_collapsed_impl(&conn, &section.id).unwrap();
         assert!(!expanded.collapsed);
     }
+
+
+    // ── 15. add_task_link bidirectional ─────────────────────────────────────
+
+    #[test]
+    fn test_add_task_link_inserts_both_directions() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+
+        let a = create_task_impl(&conn, make_task("A")).unwrap();
+        let b = create_task_impl(&conn, make_task("B")).unwrap();
+
+        add_task_link_impl(&conn, &a.id, &b.id).unwrap();
+
+        let state = load_all_impl(&conn).unwrap();
+        let pairs: Vec<(String, String)> = state
+            .task_links
+            .iter()
+            .map(|tl| (tl.task_id.clone(), tl.linked_task_id.clone()))
+            .collect();
+
+        assert!(
+            pairs.contains(&(a.id.clone(), b.id.clone())),
+            "expected A->B link, got {:?}",
+            pairs
+        );
+        assert!(
+            pairs.contains(&(b.id.clone(), a.id.clone())),
+            "expected B->A link (mirror), got {:?}",
+            pairs
+        );
+    }
+
+    #[test]
+    fn test_add_task_link_self_link_rejected() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let a = create_task_impl(&conn, make_task("Lonely")).unwrap();
+
+        let err = add_task_link_impl(&conn, &a.id, &a.id);
+        assert!(err.is_err(), "expected self-link to be rejected");
+
+        let state = load_all_impl(&conn).unwrap();
+        assert_eq!(state.task_links.len(), 0);
+    }
+
+    #[test]
+    fn test_add_task_link_idempotent() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let a = create_task_impl(&conn, make_task("A")).unwrap();
+        let b = create_task_impl(&conn, make_task("B")).unwrap();
+
+        add_task_link_impl(&conn, &a.id, &b.id).unwrap();
+        add_task_link_impl(&conn, &a.id, &b.id).unwrap();
+
+        let state = load_all_impl(&conn).unwrap();
+        // Two rows total: (a,b) and (b,a). INSERT OR IGNORE prevents
+        // duplicates.
+        assert_eq!(state.task_links.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_task_link_clears_both_directions() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let a = create_task_impl(&conn, make_task("A")).unwrap();
+        let b = create_task_impl(&conn, make_task("B")).unwrap();
+
+        add_task_link_impl(&conn, &a.id, &b.id).unwrap();
+        assert_eq!(load_all_impl(&conn).unwrap().task_links.len(), 2);
+
+        remove_task_link_impl(&conn, &a.id, &b.id).unwrap();
+        assert_eq!(
+            load_all_impl(&conn).unwrap().task_links.len(),
+            0,
+            "removing a link must clear both mirrored rows"
+        );
+    }
+
+    #[test]
+    fn test_remove_task_link_works_in_either_direction() {
+        // Calling remove with the args swapped should still clear both rows.
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let a = create_task_impl(&conn, make_task("A")).unwrap();
+        let b = create_task_impl(&conn, make_task("B")).unwrap();
+
+        add_task_link_impl(&conn, &a.id, &b.id).unwrap();
+        // Remove with B,A instead of A,B.
+        remove_task_link_impl(&conn, &b.id, &a.id).unwrap();
+        assert_eq!(load_all_impl(&conn).unwrap().task_links.len(), 0);
+    }
+
+    // ── 16. location create / set / delete ──────────────────────────────────
+
+    #[test]
+    fn test_create_location_returns_location_with_id() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let loc = create_location_impl(&conn, CreateLocationParams { name: "Office".into() }).unwrap();
+        assert!(!loc.id.is_empty());
+        assert_eq!(loc.name, "Office");
+
+        let state = load_all_impl(&conn).unwrap();
+        assert_eq!(state.locations.len(), 1);
+        assert_eq!(state.locations[0].id, loc.id);
+    }
+
+    #[test]
+    fn test_set_task_location_assigns_then_clears() {
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let task = create_task_impl(&conn, make_task("Buy milk")).unwrap();
+        let loc = create_location_impl(&conn, CreateLocationParams { name: "Store".into() }).unwrap();
+
+        // Assign.
+        let updated = set_task_location_impl(&conn, &task.id, Some(&loc.id)).unwrap();
+        assert_eq!(updated.location_id.as_deref(), Some(loc.id.as_str()));
+
+        // Clear.
+        let cleared = set_task_location_impl(&conn, &task.id, None).unwrap();
+        assert!(cleared.location_id.is_none());
+    }
+
+    #[test]
+    fn test_delete_location_clears_referencing_tasks() {
+        // Regression guard for Fix #3 (T3): deleting a location must
+        // null out task.locationId on every task that references it,
+        // BEFORE the delete, so the local FK doesn't break.
+        let db = setup();
+        let conn = db.conn.lock().unwrap();
+        let task = create_task_impl(&conn, make_task("Buy milk")).unwrap();
+        let loc = create_location_impl(&conn, CreateLocationParams { name: "Store".into() }).unwrap();
+        set_task_location_impl(&conn, &task.id, Some(&loc.id)).unwrap();
+
+        delete_location_impl(&conn, &loc.id).unwrap();
+
+        let state = load_all_impl(&conn).unwrap();
+        assert_eq!(state.locations.len(), 0, "location should be deleted");
+        let reloaded_task = state.tasks.iter().find(|t| t.id == task.id).unwrap();
+        assert!(
+            reloaded_task.location_id.is_none(),
+            "task.locationId should be cleared after location delete; got {:?}",
+            reloaded_task.location_id
+        );
+    }
 }
