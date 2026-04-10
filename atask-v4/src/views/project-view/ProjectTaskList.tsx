@@ -79,6 +79,13 @@ export default function ProjectTaskList({
     }
 
     if (sidebarItemKind === 'sectionless') {
+      // Same-target guard: if the dragged task is already sectionless,
+      // fall through to within-list reorder instead of firing a no-op
+      // updateTask that would skip the index splice.
+      const draggedTask = $tasks.get().find((t) => t.id === taskId);
+      if (draggedTask && draggedTask.sectionId == null) {
+        return false;
+      }
       updateTask({ id: taskId, sectionId: null });
       return true;
     }
@@ -235,13 +242,19 @@ export default function ProjectTaskList({
     );
   };
 
+  // The "sectionless" data-sidebar-item-id is only set for the top-level
+  // ProjectTaskList. Per-section instances must leave it off so that the
+  // closest() walk from a task row inside lands on the section block's
+  // outer wrapper, not on the inner sectionless wrapper.
+  const isTopLevelSectionless = listId.startsWith('task-sectionless:');
   return (
     <div
       ref={containerRef}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onPointerUp={handlePointerUp}
-      data-sidebar-item-kind="sectionless"
+      data-sidebar-item-kind={isTopLevelSectionless ? 'sectionless' : undefined}
+      data-sidebar-item-id={isTopLevelSectionless ? listId : undefined}
       style={isDropTarget ? { background: 'var(--accent-subtle)', borderRadius: 'var(--radius-md)' } : undefined}
     >
       {tasks.map((task, index) => (
