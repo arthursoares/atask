@@ -476,7 +476,10 @@ func (h *TaskHandler) AddLink(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		// Domain validation errors (e.g. self-link) are user input
+		// problems, not server faults — return 422 so clients can
+		// distinguish "your request was bad" from "we crashed".
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
