@@ -23,6 +23,23 @@ export default defineConfig({
           },
         },
       },
+      {
+        // Plain Node-environment unit tests for pure helpers, store
+        // selectors, and other JS-only logic. Excludes storybook,
+        // playwright, and Tauri E2E tests.
+        extends: true,
+        test: {
+          name: "unit",
+          environment: "node",
+          include: ["src/**/*.{test,spec}.{ts,tsx}"],
+          exclude: [
+            "src/**/*.stories.tsx",
+            "tests/playwright/**",
+            "tests/e2e/**",
+            "node_modules/**",
+          ],
+        },
+      },
     ],
   },
 });
