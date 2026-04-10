@@ -46,3 +46,17 @@ atask-v4/playwright-report/
 atask-v4/test-results/
 atask-v4/blob-report/
 atask-v4/.playwright/
+
+# Go build cache (millions of small files; can overflow git status buffers)
+.gocache/
+
+# Git worktrees attached at repo root (each is its own working copy and
+# should not be tracked by the parent)
+.worktrees/
+
+# Local "run" scratch directory
+run/
+
+# Stray Playwright artifacts at repo root (from running playwright from
+# the wrong cwd — guarded against, but the directory may still exist)
+/test-results/
