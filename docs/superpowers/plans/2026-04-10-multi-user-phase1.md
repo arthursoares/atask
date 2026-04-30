@@ -4,11 +4,15 @@
 
 **Goal:** Add multi-user data isolation to the Go backend with PocketBase-powered authentication, user-scoped sync/SSE, a basic web admin UI, and Tauri client login support.
 
-**Architecture:** PocketBase is embedded as the auth engine (users, OAuth, tokens). All domain tables gain a `user_id` column scoped to PocketBase user record IDs. A thin `AuthProvider` adapter interface isolates PocketBase internals from the rest of the codebase. The existing sqlc query layer, service layer, and event system are enhanced with per-user filtering.
+**Architecture:** PocketBase is embedded as the auth engine (users, OAuth, tokens) and writes its own SQLite database under `${DATA_DIR}/pb_data/data.db`. The atask domain layer continues to write to its own SQLite database at `${DATA_DIR}/atask.db` — the two halves live side-by-side in the same data directory but never share a connection. All domain tables gain a `user_id` column scoped to PocketBase user record IDs (denormalized; no cross-database FK). A thin `AuthProvider` adapter interface isolates PocketBase internals from the rest of the codebase. The existing sqlc query layer, service layer, and event system are enhanced with per-user filtering at both the SQL and service layers.
 
-**Tech Stack:** Go 1.25, PocketBase (embedded), sqlc, SQLite, Tauri 2 (Rust + React), `tauri-plugin-keychain`
+**Estimate:** ~4.5 weeks (matching the spec's decisions log; the original ~3-week framing was found to be ~2x optimistic by Codex review).
+
+**Tech Stack:** Go 1.25, PocketBase (embedded), sqlc, SQLite, Tauri 2 (Rust + React), `keyring` crate for OS keychain access
 
 **Spec:** `docs/superpowers/specs/2026-04-10-multi-user-design.md`
+
+**Review history:** This plan was revised on 2026-04-29 in response to a Codex adversarial design review that found three P0 issues (DB topology contradiction, missing legacy-table cleanup, orphan-data invisibility) and four P1 issues (router strategy unspecified, plaintext token storage drift, sync cursor not user-scoped, weak query scanner). All findings are addressed in the amendments below; see commit history for the diff.
 
 ---
 
@@ -150,6 +154,104 @@ Expected: All existing tests pass (new columns have defaults, no breakage).
 ```bash
 git add internal/store/migrations/005_multi_user.sql
 git commit -m "feat(schema): add user_id to all domain and event tables (migration 005)"
+```
+
+---
+
+## Task 1.5: Legacy Cleanup Migration (006)
+
+**Why this task exists:** The original plan tried to add legacy-table cleanup and api_keys scope/expiry into migration 005 mid-stream (Task 16). That edits an already-committed migration file — brittle in any environment that ran 005 first. This task splits cleanup into a fresh migration 006 that runs sequentially after 005.
+
+**Files:**
+- Create: `internal/store/migrations/006_legacy_cleanup.sql`
+- Modify: `internal/store/queries/auth.sql` (delete legacy user queries)
+
+- [ ] **Step 1: Write migration 006**
+
+```sql
+-- internal/store/migrations/006_legacy_cleanup.sql
+
+-- +goose Up
+
+-- API keys: retarget user_id to PocketBase user record IDs and add scope/expiry.
+-- SQLite cannot ALTER COLUMN to drop the FK reference, so we rebuild the table.
+-- Existing rows are preserved; their user_id values become orphaned until
+-- `atask admin assign-data --to <pb-user-id>` is run.
+CREATE TABLE api_keys_new (
+    id           TEXT NOT NULL PRIMARY KEY,
+    user_id      TEXT NOT NULL DEFAULT '',
+    name         TEXT,
+    key_hash     TEXT UNIQUE,
+    permissions  TEXT NOT NULL DEFAULT '[]',
+    scope        TEXT NOT NULL DEFAULT 'read_write',
+    expires_at   DATETIME,
+    created_at   DATETIME,
+    last_used_at DATETIME
+);
+
+INSERT INTO api_keys_new (id, user_id, name, key_hash, permissions, created_at, last_used_at)
+SELECT id, COALESCE(user_id, ''), name, key_hash, permissions, created_at, last_used_at
+FROM api_keys;
+
+DROP TABLE api_keys;
+ALTER TABLE api_keys_new RENAME TO api_keys;
+CREATE INDEX idx_api_keys_user_id ON api_keys (user_id);
+
+-- Drop legacy users table; identity now lives in pb_data/data.db
+DROP TABLE users;
+
+-- +goose Down
+-- Down migrations omitted (SQLite makes them painful and rollback is via backup).
+```
+
+- [ ] **Step 2: Delete legacy queries from auth.sql**
+
+Open `internal/store/queries/auth.sql` and delete these four queries (they reference the dropped table):
+- `CreateUser`
+- `GetUserByEmail`
+- `GetUserByID`
+- `UpdateUser`
+
+Keep all `api_keys`-related queries; they will be updated in a later step (Task 16 → folded into Task 11 below) to include `scope` and `expires_at`.
+
+- [ ] **Step 3: Update CreateAPIKey query for new columns**
+
+Replace the existing `CreateAPIKey` query in `auth.sql`:
+
+```sql
+-- name: CreateAPIKey :one
+INSERT INTO api_keys (id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+RETURNING *;
+
+-- name: GetAPIKeyByHash :one
+SELECT * FROM api_keys
+WHERE key_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'));
+```
+
+- [ ] **Step 4: Identify and stub callers of deleted queries**
+
+Run: `grep -rn "CreateUser\|GetUserByEmail\|GetUserByID\b\|UpdateUser\b" internal/ cmd/`
+
+For each match, the call site must either be deleted (legacy auth handler logic that will be replaced by the AuthProvider in Task 12) or temporarily stubbed to return `errors.New("legacy auth removed; use AuthProvider")`. Do not delete the call sites yet — Task 12 rewrites them properly. The point of this step is to make the build green after sqlc regeneration.
+
+Expected matches: `internal/api/auth.go` (login, register handlers), and possibly `cmd/atask/main.go` if it has a bootstrap admin path.
+
+- [ ] **Step 5: Regenerate sqlc and verify build**
+
+Run: `make sqlc && go build ./...`
+Expected: Compiles. The legacy `CreateUser` etc. methods are gone from generated code; api_keys queries have new params (`Scope`, `ExpiresAt`).
+
+- [ ] **Step 6: Verify migration applies**
+
+Run: `make migrate && make test`
+Expected: 005 and 006 both apply cleanly; existing tests pass (auth tests may fail — that is fine; they will be rewritten in Task 12).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add internal/store/migrations/006_legacy_cleanup.sql internal/store/queries/auth.sql internal/store/sqlc/ internal/api/auth.go
+git commit -m "feat(schema): migration 006 — drop legacy users, retarget api_keys, add scope/expires_at"
 ```
 
 ---
@@ -440,12 +542,14 @@ git commit -m "feat(queries): add user_id scoping to all domain, view, and event
 
 ---
 
-## Task 4: Query Scanning Safety-Net Test
+## Task 4: Query Scanning Safety-Net Test (Operation-Aware)
+
+**Why this is operation-aware, not substring-based:** The original plan's scanner only checked that the substring `user_id` appeared somewhere in the query body. That false-passes any query whose `WHERE` clause omits `user_id` as long as the column appears anywhere — for example in a `SELECT user_id, ...` projection, a comment, or a sibling JOIN. The dangerous case Codex flagged: `ListTaskTags` and `ListProjectTags` JOIN through join tables to surface tag rows; the join table has `user_id` in its INSERT but the SELECT predicate may not constrain it. We need the test to *parse statements* and check that every `SELECT`/`UPDATE`/`DELETE` against a user-owned table has `user_id = ?` (or equivalent) in its `WHERE` predicate.
 
 **Files:**
 - Create: `internal/store/queries/query_scope_test.go`
 
-- [ ] **Step 1: Write the test**
+- [ ] **Step 1: Write the operation-aware scanner**
 
 ```go
 package queries_test
@@ -453,74 +557,183 @@ package queries_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
-// domainTables lists tables that MUST have user_id scoping in every query.
-var domainTables = []string{
+// userOwnedTables: every read/write of these MUST include user_id in its WHERE.
+var userOwnedTables = []string{
 	"tasks", "projects", "areas", "sections", "tags",
 	"locations", "checklist_items", "activities",
 	"task_tags", "project_tags", "task_links",
 	"delta_events", "domain_events",
 }
 
-func TestAllDomainQueriesIncludeUserID(t *testing.T) {
+// hasUserIDPredicate looks for `user_id` followed by a comparison operator
+// somewhere in the body (after the first FROM/UPDATE/DELETE keyword).
+// It is intentionally lenient about positioning — the goal is "is user_id
+// constrained anywhere in this statement" — and strict about *form* (must
+// be a predicate, not just a column reference).
+var userIDPredicate = regexp.MustCompile(`(?i)user_id\s*(=|in\s*\()`)
+
+// statementOpKind classifies the SQL statement.
+func statementOpKind(body string) string {
+	trim := strings.TrimSpace(strings.ToLower(body))
+	switch {
+	case strings.HasPrefix(trim, "insert"):
+		return "insert"
+	case strings.HasPrefix(trim, "select"):
+		return "select"
+	case strings.HasPrefix(trim, "update"):
+		return "update"
+	case strings.HasPrefix(trim, "delete"):
+		return "delete"
+	default:
+		return "other"
+	}
+}
+
+// touchesUserOwned: returns the matched table name, or "" if none.
+func touchesUserOwned(body string) string {
+	lower := strings.ToLower(body)
+	for _, tbl := range userOwnedTables {
+		// word-boundary match: " tasks " or " tasks\n" etc., not "tasks_x"
+		idx := strings.Index(lower, tbl)
+		for idx >= 0 {
+			before := byte(' ')
+			after := byte(' ')
+			if idx > 0 {
+				before = lower[idx-1]
+			}
+			if idx+len(tbl) < len(lower) {
+				after = lower[idx+len(tbl)]
+			}
+			if !isIdentChar(before) && !isIdentChar(after) {
+				return tbl
+			}
+			next := strings.Index(lower[idx+1:], tbl)
+			if next < 0 {
+				break
+			}
+			idx = idx + 1 + next
+		}
+	}
+	return ""
+}
+
+func isIdentChar(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+}
+
+func TestAllUserOwnedQueriesScopeByUserID(t *testing.T) {
+	skip := map[string]bool{
+		"auth.sql":    true, // legacy users table queries are deleted in Task 1.5;
+		                     // remaining api_keys queries scope by key_hash, not user_id
+		"invites.sql": true, // invites are claimed by token, not scoped by user_id
+	}
+
 	files, err := filepath.Glob("*.sql")
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
 
 	for _, f := range files {
-		if f == "auth.sql" || f == "invites.sql" {
-			continue // auth queries don't need user_id scoping
+		if skip[f] {
+			continue
 		}
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		content := string(data)
-
-		// Split by query name comments
-		queries := strings.Split(content, "-- name:")
-		for _, q := range queries[1:] { // skip preamble
+		queries := strings.Split(string(data), "-- name:")
+		for _, q := range queries[1:] {
 			lines := strings.SplitN(q, "\n", 2)
 			name := strings.TrimSpace(strings.Split(lines[0], ":")[0])
-			body := ""
-			if len(lines) > 1 {
-				body = strings.ToLower(lines[1])
-			}
-
-			// Check if query touches a domain table
-			touchesDomain := false
-			for _, tbl := range domainTables {
-				if strings.Contains(body, tbl) {
-					touchesDomain = true
-					break
-				}
-			}
-			if !touchesDomain {
+			if len(lines) < 2 {
 				continue
 			}
+			body := lines[1]
 
-			if !strings.Contains(body, "user_id") {
-				t.Errorf("query %q in %s touches a domain table but does not include user_id", name, f)
+			tbl := touchesUserOwned(body)
+			if tbl == "" {
+				continue
+			}
+			op := statementOpKind(body)
+
+			switch op {
+			case "insert":
+				// INSERT must include user_id in the column list
+				lower := strings.ToLower(body)
+				colsStart := strings.Index(lower, "(")
+				colsEnd := strings.Index(lower, ")")
+				if colsStart < 0 || colsEnd < 0 || colsEnd < colsStart {
+					t.Errorf("%s/%s: INSERT touches %q but column list unparseable", f, name, tbl)
+					continue
+				}
+				cols := lower[colsStart:colsEnd]
+				if !strings.Contains(cols, "user_id") {
+					t.Errorf("%s/%s: INSERT into %q missing user_id column", f, name, tbl)
+				}
+			case "select", "update", "delete":
+				if !userIDPredicate.MatchString(body) {
+					t.Errorf("%s/%s: %s on %q has no `user_id =` or `user_id IN` predicate", f, name, strings.ToUpper(op), tbl)
+				}
 			}
 		}
 	}
 }
 ```
 
-- [ ] **Step 2: Run the test**
+- [ ] **Step 2: Add explicit failing-case tests for the JOIN-through queries**
 
-Run: `cd internal/store/queries && go test -run TestAllDomainQueriesIncludeUserID -v`
-Expected: PASS — all queries include `user_id`.
+These three tests exercise the scanner against synthetic query bodies that should fail. They guarantee the scanner catches the patterns Codex flagged, so future refactors of the scanner can't silently weaken it.
 
-- [ ] **Step 3: Commit**
+```go
+func TestScannerCatchesJoinThroughWithoutPredicate(t *testing.T) {
+	// Synthetic ListTaskTags-style query: joins tags via task_tags, but
+	// the WHERE clause only filters by task_id — no user_id predicate.
+	body := `
+SELECT t.* FROM tags t
+JOIN task_tags tt ON tt.tag_id = t.id
+WHERE tt.task_id = ?;`
+	if userIDPredicate.MatchString(body) {
+		t.Fatal("scanner should NOT find user_id predicate in this body")
+	}
+	if touchesUserOwned(body) == "" {
+		t.Fatal("scanner should detect that this body touches a user-owned table")
+	}
+}
+
+func TestScannerAcceptsScopedJoinThrough(t *testing.T) {
+	body := `
+SELECT t.* FROM tags t
+JOIN task_tags tt ON tt.tag_id = t.id AND tt.user_id = ?
+WHERE tt.task_id = ? AND tt.user_id = ?;`
+	if !userIDPredicate.MatchString(body) {
+		t.Fatal("scanner should accept this body as scoped")
+	}
+}
+
+func TestScannerRejectsProjectionOnly(t *testing.T) {
+	// `SELECT user_id, ...` mentions user_id as a column but does not constrain it.
+	body := `SELECT user_id, id, title FROM tasks WHERE id = ?;`
+	if userIDPredicate.MatchString(body) {
+		t.Fatal("scanner should NOT count `SELECT user_id` as a predicate")
+	}
+}
+```
+
+- [ ] **Step 3: Run the tests**
+
+Run: `cd internal/store/queries && go test -run "TestAllUserOwnedQueriesScopeByUserID|TestScanner" -v`
+Expected: All four tests PASS — the real query files include user_id, and the synthetic bad-pattern bodies are correctly flagged.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add internal/store/queries/query_scope_test.go
-git commit -m "test: add query scanning safety-net for user_id scoping"
+git commit -m "test: operation-aware query scanner for user_id scoping (incl. JOIN-through)"
 ```
 
 ---
@@ -599,16 +812,75 @@ Same pattern for both methods.
 
 Modify `internal/event/event_store.go` — `InsertDelta` and `InsertDomainEvent` gain a `UserID` field in their params, passed to the sqlc `INSERT`.
 
-- [ ] **Step 10: Verify compilation**
+- [ ] **Step 10: Add cross-entity ownership validation (Spec §2.4)**
+
+**Why this step exists:** sqlc scoping prevents User A from reading or writing User B's *root* rows, but it does not stop User A from setting their own task's `project_id` to a UUID that belongs to User B. The SQL `UPDATE tasks SET project_id = ? WHERE id = ? AND user_id = ?` matches User A's task row regardless of who owns the project. Every service method that accepts a foreign-key reference must do an owner-scoped lookup before mutating. Codex flagged this; the spec §2.4 enumerates the full set.
+
+For each method below, follow this pattern:
+
+```go
+// Before:
+func (s *TaskService) UpdateProject(ctx context.Context, userID, taskID string, projectID *string) (*domain.Task, error) {
+    // ... directly calls s.q.UpdateTaskProject(...)
+}
+
+// After:
+func (s *TaskService) UpdateProject(ctx context.Context, userID, taskID string, projectID *string) (*domain.Task, error) {
+    if projectID != nil {
+        // Verify the user owns the target project. Returns ErrNotFound if not.
+        if _, err := s.projects.Get(ctx, userID, *projectID); err != nil {
+            return nil, err
+        }
+    }
+    // ... existing UpdateTaskProject call
+}
+```
+
+Apply to these specific methods (one TDD cycle per method — write a failing cross-user test first, then add the check):
+
+- [ ] **TaskService.UpdateProject** — verify `GetProject(ctx, userID, *projectID)` succeeds
+- [ ] **TaskService.UpdateArea** — verify `GetArea(ctx, userID, *areaID)` succeeds
+- [ ] **TaskService.UpdateSection** — verify `GetSection(ctx, userID, *sectionID)` succeeds, and that the section's `project_id` matches the task's current `project_id`
+- [ ] **TaskService.UpdateLocation** — verify `GetLocation(ctx, userID, *locationID)` succeeds
+- [ ] **TaskService.AddLink** — verify `GetTask(ctx, userID, relatedID)` succeeds; reject self-link with 422
+- [ ] **TaskService.AddTag** — verify `GetTag(ctx, userID, tagID)` succeeds
+- [ ] **ProjectService.UpdateArea** — verify `GetArea(ctx, userID, *areaID)` succeeds
+- [ ] **ProjectService.AddTag** — verify `GetTag(ctx, userID, tagID)` succeeds
+- [ ] **SectionService.Create** — verify `GetProject(ctx, userID, projectID)` succeeds
+- [ ] **ChecklistService.Add** — verify `GetTask(ctx, userID, taskID)` succeeds
+
+For each method, the failing test pattern (which becomes a regression guard) is:
+
+```go
+// internal/service/task_service_ownership_test.go (or per-service file)
+func TestTaskService_UpdateProject_RejectsCrossUserProject(t *testing.T) {
+    svc := newTestSetup(t)
+    // user-a owns task; user-b owns project
+    taskA, _ := svc.tasks.Create(ctx, "user-a", "task A", "actor-a")
+    projB, _ := svc.projects.Create(ctx, "user-b", "project B", "actor-b")
+    // user-a tries to attach user-b's project to their task
+    _, err := svc.tasks.UpdateProject(ctx, "user-a", taskA.ID, &projB.ID)
+    if !errors.Is(err, domain.ErrNotFound) {
+        t.Fatalf("expected ErrNotFound, got %v", err)
+    }
+}
+```
+
+- [ ] **Step 11: Verify compilation**
 
 Run: `go build ./...`
 Expected: Compilation errors in API handlers (they still pass old signatures). This is expected — Task 6 fixes them.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Run service-layer ownership tests**
+
+Run: `go test ./internal/service/ -run Ownership -v`
+Expected: All ownership regression tests pass.
+
+- [ ] **Step 13: Commit**
 
 ```bash
 git add internal/service/ internal/event/
-git commit -m "feat(service): thread userID through all service and event methods"
+git commit -m "feat(service): thread userID + add cross-entity ownership validation (spec §2.4)"
 ```
 
 ---
@@ -703,7 +975,31 @@ Expected: Tests fail where they don't pass `userID`. This is expected — test f
 
 - [ ] **Step 6: Fix test fixtures**
 
-Update all test helpers in `internal/api/patch_test.go`, `internal/api/handler_regression_test.go`, and any service tests to pass a test `userID` (e.g., `"test-user-1"`). For `setupPatchTestServer` and `setupFullTestServer`, the auth middleware can be configured to inject a default test user.
+Every API test that doesn't currently authenticate needs a test user injected via context. The complete list of files (verified against the codebase 2026-04-29):
+
+- `internal/api/patch_test.go` — PATCH endpoint integration tests
+- `internal/api/decode_integration_test.go` — request decode/validation tests
+- `internal/api/handler_regression_test.go` — recent-fix regression tests
+- `internal/api/views_test.go` — Inbox/Today/Upcoming view handler tests
+- `internal/api/sync_test.go` — delta sync handler tests
+- `internal/api/areas_test.go` — area handler tests
+- `internal/api/response_test.go` — response shape tests (only if it constructs a server, not pure helpers)
+
+For each file, find the test setup function (`setupPatchTestServer`, `setupFullTestServer`, equivalents) and pass a default test user ID through the auth middleware. Add a helper:
+
+```go
+// internal/api/test_helpers.go (or wherever the existing setup helpers live)
+func withTestUser(userID string) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ctx := context.WithValue(r.Context(), ctxUserID, userID)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+```
+
+Use it to wrap the handler under test. Default test user ID: `"test-user-1"`. Tests that need a second user (e.g., the cross-user isolation test in Task 7) construct their own wrapper.
 
 - [ ] **Step 7: Run tests again**
 
@@ -765,6 +1061,44 @@ func TestCrossUserIsolation(t *testing.T) {
     w = doJSONAsUser(t, mux, "user-b", http.MethodPatch, "/tasks/"+respA.Data.ID, `{"title":"hacked"}`)
     if w.Code != http.StatusNotFound {
         t.Errorf("user B patching A's task: expected 404, got %d", w.Code)
+    }
+}
+
+// Horizontal-escalation case: User A tries to attach User B's project to their own task.
+// SQL scoping passes (the task is A's), but service-layer ownership validation
+// (Task 5 Step 10) must reject it. This test guards against that regression.
+func TestCrossUserHorizontalEscalation_TaskProject(t *testing.T) {
+    mux := setupFullTestServer(t)
+
+    // User A creates a task
+    w := doJSONAsUser(t, mux, "user-a", http.MethodPost, "/tasks", `{"title":"A's task"}`)
+    if w.Code != http.StatusCreated {
+        t.Fatalf("create task A: %d", w.Code)
+    }
+    var respA struct{ Data struct{ ID string `json:"id"` } `json:"data"` }
+    json.NewDecoder(w.Body).Decode(&respA)
+
+    // User B creates a project
+    w = doJSONAsUser(t, mux, "user-b", http.MethodPost, "/projects", `{"title":"B's project"}`)
+    if w.Code != http.StatusCreated {
+        t.Fatalf("create project B: %d", w.Code)
+    }
+    var respB struct{ Data struct{ ID string `json:"id"` } `json:"data"` }
+    json.NewDecoder(w.Body).Decode(&respB)
+
+    // User A tries to PATCH their own task to point at User B's project
+    body := fmt.Sprintf(`{"projectId":%q}`, respB.Data.ID)
+    w = doJSONAsUser(t, mux, "user-a", http.MethodPatch, "/tasks/"+respA.Data.ID, body)
+    if w.Code != http.StatusNotFound && w.Code != http.StatusUnprocessableEntity {
+        t.Errorf("horizontal escalation via projectId: expected 404 or 422, got %d", w.Code)
+    }
+
+    // Verify the task was NOT modified
+    w = doJSONAsUser(t, mux, "user-a", http.MethodGet, "/tasks/"+respA.Data.ID, "")
+    var task struct{ Data struct{ ProjectID *string `json:"projectId"` } `json:"data"` }
+    json.NewDecoder(w.Body).Decode(&task)
+    if task.Data.ProjectID != nil {
+        t.Errorf("task projectId should remain unset after rejected escalation, got %v", *task.Data.ProjectID)
     }
 }
 ```
@@ -1117,7 +1451,9 @@ func main() {
 	})
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		// Open our domain database (shares the PocketBase SQLite file)
+		// Open the domain database. Per spec §1, this is a SEPARATE SQLite file
+		// in the same DATA_DIR as PocketBase's pb_data/data.db — they live
+		// side-by-side but never share a connection.
 		db, err := store.NewDB(cfg.DataDir + "/atask.db")
 		if err != nil {
 			return err
@@ -1144,8 +1480,12 @@ func main() {
 		activitySvc := service.NewActivityService(db, eventStore, bus)
 
 		// Register custom routes on PocketBase's router
+		apiKeySvc := service.NewAPIKeyService(db) // existing service, validates key + returns scope
+		csrfStore := api.NewCSRFStore()           // see Task 14 Step 5
 		api.RegisterRoutes(se, api.RoutesDeps{
 			AuthProvider: authProvider,
+			APIKeySvc:    apiKeySvc,
+			CSRFStore:    csrfStore,
 			Config:       cfg,
 			TaskSvc:      taskSvc,
 			ProjectSvc:   projectSvc,
@@ -1241,39 +1581,77 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 }
 ```
 
-- [ ] **Step 2: Restructure router for PocketBase integration**
+- [ ] **Step 2: Restructure router for PocketBase integration (single strategy: bridge wrapper)**
 
-Replace `NewRouter` with `RegisterRoutes` that works with PocketBase's router:
+**Decision (Codex review, 2026-04-29):** Wrap existing `http.HandlerFunc`s as PocketBase `func(*core.RequestEvent) error` callbacks via a single bridge function. This avoids rewriting 14 handler files into PocketBase's request/response idiom and preserves all existing tests. The same wrapper is reused by Task 14's admin routes — no separate `*http.ServeMux` is reintroduced.
+
+Add the bridge function at the top of `internal/api/router.go`:
+
+```go
+// bridge adapts an http.HandlerFunc to PocketBase's *core.RequestEvent callback.
+// PocketBase's RequestEvent embeds the underlying http.ResponseWriter and *http.Request,
+// so we can pass them through unchanged. Middleware that mutates the request context
+// (auth, requestID) runs *before* this bridge and is preserved on the underlying request.
+func bridge(h http.HandlerFunc) func(*core.RequestEvent) error {
+    return func(e *core.RequestEvent) error {
+        h.ServeHTTP(e.Response, e.Request)
+        return nil
+    }
+}
+```
+
+Replace `NewRouter` with `RegisterRoutes`:
 
 ```go
 type RoutesDeps struct {
     AuthProvider auth.AuthProvider
+    APIKeySvc    APIKeyValidator   // satisfies ValidateAPIKey(ctx, key) (userID, scope, error)
+    CSRFStore    *csrfStore         // session→csrf-token store; see Task 14 Step 5
     Config       *config.Config
     TaskSvc      *service.TaskService
-    // ... all services ...
+    ProjectSvc   *service.ProjectService
+    AreaSvc      *service.AreaService
+    SectionSvc   *service.SectionService
+    TagSvc       *service.TagService
+    LocationSvc  *service.LocationService
+    ChecklistSvc *service.ChecklistService
+    ActivitySvc  *service.ActivityService
+    EventStore   *event.EventStore
+    Bus          *event.Bus
 }
 
 func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
-    // Health (public)
-    se.Router.GET("/health", func(e *core.RequestEvent) error {
-        return e.JSON(200, map[string]string{"status": "ok"})
-    })
+    // Build handlers (existing constructors are unchanged)
+    taskH := NewTaskHandler(deps.TaskSvc)
+    projectH := NewProjectHandler(deps.ProjectSvc)
+    // ... etc.
 
-    // Auth wrapper endpoints (public)
-    registerAuthRoutes(se, deps)
+    authMW := requireAuth(deps.AuthProvider, deps.APIKeySvc)
 
-    // Protected domain routes — use middleware group
-    protected := se.Router.Group("")
-    protected.BindFunc(requireAuthMiddleware(deps.AuthProvider))
+    // Public routes
+    se.Router.GET("/health", bridge(healthHandler))
+    se.Router.POST("/auth/login", bridge(authH.Login))
+    se.Router.POST("/auth/register", bridge(authH.Register))
+    se.Router.POST("/auth/refresh", bridge(authH.Refresh))
+    se.Router.GET("/auth/providers", bridge(authH.Providers))
 
-    // Register all domain handlers on the protected group
-    registerTaskRoutes(protected, deps)
-    registerProjectRoutes(protected, deps)
-    // ... etc
+    // Protected routes — wrap each bridge with auth middleware
+    protect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+        return bridge(func(w http.ResponseWriter, r *http.Request) {
+            authMW(http.HandlerFunc(h)).ServeHTTP(w, r)
+        })
+    }
+
+    se.Router.GET("/tasks", protect(taskH.List))
+    se.Router.POST("/tasks", protect(taskH.Create))
+    se.Router.GET("/tasks/{id}", protect(taskH.Get))
+    se.Router.PATCH("/tasks/{id}", protect(taskH.Patch))
+    se.Router.DELETE("/tasks/{id}", protect(taskH.Delete))
+    // ... repeat for projects, areas, sections, tags, locations, checklist, activities, views, sync, sse
 }
 ```
 
-Note: This is a significant restructure from `http.ServeMux` to PocketBase's router. The handlers need to be adapted to PocketBase's `RequestEvent` pattern or wrapped.
+The wrapper preserves the entire existing handler surface — no handler signature changes, no test fixture rewrites beyond what Task 6 already covers. Admin routes in Task 14 use the same `bridge` and `protect` helpers (with `requireAdmin` substituted for `requireAuth`), so there is **only one routing primitive in the codebase**.
 
 - [ ] **Step 3: Verify build + tests**
 
@@ -1508,29 +1886,261 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 Each template extends `layout.html` via `{{template "layout" .}}` and defines `{{define "content"}}...{{end}}`. Keep them minimal — functional forms and tables.
 
-- [ ] **Step 4: Register admin routes with requireAdmin middleware**
+- [ ] **Step 4: Register admin routes via the bridge helper from Task 11**
+
+Use the same `bridge` and `protect` helpers introduced in Task 11 — the admin UI is just another set of `http.HandlerFunc`s. There is only one routing primitive in the codebase.
+
+In `RegisterRoutes` (added in Task 11), append:
 
 ```go
-func (h *AdminHandler) RegisterRoutes(mux *http.ServeMux) {
-    mux.HandleFunc("GET /admin/", h.Dashboard)
-    mux.HandleFunc("GET /admin/users", h.ListUsers)
-    mux.HandleFunc("GET /admin/users/new", h.CreateUser)
-    mux.HandleFunc("POST /admin/users/new", h.CreateUser)
-    mux.HandleFunc("GET /admin/users/{id}", h.EditUser)
-    mux.HandleFunc("POST /admin/users/{id}", h.EditUser)
-    mux.HandleFunc("GET /admin/login", h.LoginPage)
-    mux.HandleFunc("POST /admin/login", h.LoginSubmit)
-    mux.HandleFunc("GET /admin/logout", h.Logout)
+adminMW := requireAdmin(deps.AuthProvider) // verifies cookie session + role=admin
+adminProtect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+    return bridge(func(w http.ResponseWriter, r *http.Request) {
+        adminMW(http.HandlerFunc(h)).ServeHTTP(w, r)
+    })
+}
+
+// Public admin login page
+se.Router.GET("/admin/login", bridge(adminH.LoginPage))
+se.Router.POST("/admin/login", bridge(adminH.LoginSubmit))
+se.Router.GET("/admin/logout", bridge(adminH.Logout))
+
+// Protected admin routes
+se.Router.GET("/admin/", adminProtect(adminH.Dashboard))
+se.Router.GET("/admin/users", adminProtect(adminH.ListUsers))
+se.Router.GET("/admin/users/new", adminProtect(adminH.CreateUser))
+se.Router.POST("/admin/users/new", adminProtect(adminH.CreateUser))
+se.Router.GET("/admin/users/{id}", adminProtect(adminH.EditUser))
+se.Router.POST("/admin/users/{id}", adminProtect(adminH.EditUser))
+```
+
+Login sets `HttpOnly`, `Secure`, `SameSite=Strict` cookie. CSRF protection is wired in Step 5 below.
+
+- [ ] **Step 5: Implement CSRF protection (concrete)**
+
+Spec §5.2 requires CSRF on all mutation forms. Implementation:
+
+1. **Mint a CSRF token on login.** When `LoginSubmit` succeeds, generate a 32-byte random token, store it in a server-side session map keyed by the session ID (the cookie value), and surface it to templates via the request context.
+
+```go
+// internal/api/admin_csrf.go
+package api
+
+import (
+    "crypto/rand"
+    "encoding/hex"
+    "net/http"
+    "sync"
+)
+
+type csrfStore struct {
+    mu     sync.RWMutex
+    tokens map[string]map[string]struct{} // sessionID → set of valid CSRF tokens
+}
+
+func NewCSRFStore() *csrfStore { return &csrfStore{tokens: make(map[string]map[string]struct{})} }
+
+// issue returns a fresh token AND adds it to the session's valid-token set.
+// Multiple concurrent forms (e.g., two browser tabs) get distinct tokens that
+// are all valid until consumed. This avoids the "second tab invalidates first"
+// pitfall of single-token-per-session designs.
+func (s *csrfStore) issue(sessionID string) string {
+    buf := make([]byte, 32)
+    rand.Read(buf)
+    tok := hex.EncodeToString(buf)
+    s.mu.Lock()
+    if s.tokens[sessionID] == nil {
+        s.tokens[sessionID] = make(map[string]struct{})
+    }
+    s.tokens[sessionID][tok] = struct{}{}
+    s.mu.Unlock()
+    return tok
+}
+
+// verify checks that the presented token is currently valid for this session
+// AND consumes it (one-time use) so a captured token can't be replayed.
+// Returns true on first valid presentation, false on any subsequent reuse.
+func (s *csrfStore) verify(sessionID, presented string) bool {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    set, ok := s.tokens[sessionID]
+    if !ok {
+        return false
+    }
+    if _, valid := set[presented]; !valid {
+        return false
+    }
+    delete(set, presented) // consume — single-use
+    return true
+}
+
+func (s *csrfStore) clear(sessionID string) {
+    s.mu.Lock()
+    delete(s.tokens, sessionID)
+    s.mu.Unlock()
 }
 ```
 
-Admin routes use cookie-based auth with CSRF. Login sets `HttpOnly`, `Secure`, `SameSite=Strict` cookie.
+**Note on session-ID rotation (session-fixation defense):** The admin login handler must mint a *fresh* session ID after authenticating, not reuse a session ID the unauthenticated browser already had. This defeats session-fixation attacks where an attacker plants a session cookie before login and re-uses it after. Concretely, in `LoginSubmit`:
 
-- [ ] **Step 5: Commit**
+```go
+func (h *AdminHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
+    // ... validate email/password against AuthProvider ...
+
+    // SECURITY: rotate the session ID at the auth boundary. If the unauthenticated
+    // browser already had an admin_session cookie, discard it and mint a new one
+    // tied to the now-authenticated identity.
+    if oldSession, err := r.Cookie("admin_session"); err == nil {
+        h.csrfStore.clear(oldSession.Value)
+    }
+    newSessionID := generateSessionID() // 32 bytes, base64url
+    h.sessions.Set(newSessionID, userID) // server-side session→user map
+
+    http.SetCookie(w, &http.Cookie{
+        Name:     "admin_session",
+        Value:    newSessionID,
+        HttpOnly: true,
+        Secure:   true,
+        SameSite: http.SameSiteStrictMode,
+        Path:     "/admin/",
+        MaxAge:   3600 * 8, // 8h
+    })
+    http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+}
+```
+
+2. **Embed the token in every form template.** Add a hidden input to `user_form.html`, `user_edit.html`, and any future mutation form:
+
+```html
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+```
+
+The `Dashboard`, `ListUsers`, `CreateUser` (GET), `EditUser` (GET) handlers must inject `CSRFToken` into the template data map by calling `store.issue(sessionID)` (or returning the existing token if already issued for this session).
+
+3. **Verify on every mutation.** Add a middleware applied to all admin POST routes:
+
+```go
+func requireCSRF(store *csrfStore) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            if r.Method != http.MethodPost {
+                next.ServeHTTP(w, r)
+                return
+            }
+            sessionID, err := r.Cookie("admin_session")
+            if err != nil {
+                http.Error(w, "no session", http.StatusForbidden)
+                return
+            }
+            if err := r.ParseForm(); err != nil {
+                http.Error(w, "bad form", http.StatusBadRequest)
+                return
+            }
+            if !store.verify(sessionID.Value, r.FormValue("csrf_token")) {
+                http.Error(w, "csrf mismatch", http.StatusForbidden)
+                return
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+```
+
+Wire it into `adminProtect`:
+
+```go
+adminProtect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+    return bridge(func(w http.ResponseWriter, r *http.Request) {
+        adminMW(requireCSRF(deps.CSRFStore)(http.HandlerFunc(h))).ServeHTTP(w, r)
+    })
+}
+```
+
+4. **Logout clears the CSRF tokens** for the session ID before destroying the cookie.
+
+5. **Failure-path re-render must mint a fresh token.** Single-use tokens are consumed on `verify` regardless of whether the form's business logic ultimately succeeded — so any handler that displays a re-rendered form after a non-validation failure (e.g., `CreateUser` returning the form with an error message because the email is already taken) must call `csrfStore.issue(sessionID)` and inject the new token into the template, or the user's next submit will 403. The pattern:
+
+```go
+func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodGet {
+        h.renderForm(w, r, nil) // helper mints a fresh token
+        return
+    }
+    // POST: CSRF middleware already verified+consumed the token.
+    if _, err := h.auth.CreateUser(...); err != nil {
+        h.renderForm(w, r, &formErr{Message: err.Error()}) // mints a NEW token for the retry
+        return
+    }
+    http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+func (h *AdminHandler) renderForm(w http.ResponseWriter, r *http.Request, formErr *formErr) {
+    sessionID, _ := r.Cookie("admin_session")
+    csrfToken := h.csrfStore.issue(sessionID.Value)
+    h.templates.ExecuteTemplate(w, "user_form.html", map[string]any{
+        "CSRFToken": csrfToken,
+        "Error":     formErr,
+    })
+}
+```
+
+Note: this does not protect against browser back-button-then-resubmit of the *previous* form (the token in the back-cached HTML is already consumed). That trade-off is intentional — single-use tokens are the security primitive — but the user-facing "your session expired, please retry" message in `requireCSRF`'s 403 response should make this clear.
+
+- [ ] **Step 6: Test CSRF protection**
+
+```go
+// internal/api/admin_csrf_test.go
+func TestAdminCSRF_RejectsPostWithoutToken(t *testing.T) {
+    mux := setupAdminTestServer(t, "admin-user")
+    // login to get a session cookie
+    sessionCookie := loginAsAdmin(t, mux, "admin@test.com", "pw")
+
+    // POST to /admin/users/new without csrf_token
+    body := strings.NewReader("email=foo@bar.com&name=Foo&role=user")
+    req := httptest.NewRequest(http.MethodPost, "/admin/users/new", body)
+    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+    req.AddCookie(sessionCookie)
+    w := httptest.NewRecorder()
+    mux.ServeHTTP(w, req)
+    if w.Code != http.StatusForbidden {
+        t.Errorf("expected 403, got %d", w.Code)
+    }
+}
+
+func TestAdminCSRF_AcceptsPostWithValidToken(t *testing.T) {
+    // GET /admin/users/new → parse hidden csrf_token from HTML
+    // POST /admin/users/new with the token → expect 303 redirect
+}
+
+func TestAdminCSRF_RejectsTokenReuse(t *testing.T) {
+    // Tokens are single-use (defends against captured-token replay).
+    // First POST with a valid token → 303
+    // Second POST with the SAME token → 403
+}
+
+func TestAdminCSRF_ConcurrentTabsBothWork(t *testing.T) {
+    // Tab A opens user_form.html → token_A
+    // Tab B opens user_form.html → token_B (different)
+    // POST from Tab A with token_A → 303
+    // POST from Tab B with token_B → 303 (still valid)
+}
+
+func TestAdminLogin_RotatesSessionID(t *testing.T) {
+    // Plant an admin_session cookie before login.
+    // POST /admin/login with valid creds.
+    // The Set-Cookie response MUST issue a different admin_session value
+    // (defeats session-fixation).
+}
+```
+
+Run: `go test ./internal/api/ -run TestAdminCSRF -v`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add internal/api/admin.go internal/api/admin_templates/
-git commit -m "feat(admin): web admin UI with Go templates (login, users, dashboard)"
+git add internal/api/admin.go internal/api/admin_csrf.go internal/api/admin_csrf_test.go internal/api/admin_templates/
+git commit -m "feat(admin): web admin UI with Go templates + CSRF protection"
 ```
 
 ---
@@ -1601,45 +2211,60 @@ git commit -m "feat(cli): add admin create-user and assign-data commands"
 
 ---
 
-## Task 16: API Key Scope Enhancement
+## Task 16: API Key Scope Enforcement (Middleware Only)
+
+**Note (Codex review, 2026-04-29):** The original Task 16 added `scope`/`expires_at` columns to `api_keys` by editing the already-committed migration 005. That work has moved to Task 1.5 (migration 006), where it can land cleanly. This task is now narrowly scoped to *middleware enforcement* of the columns added in 1.5.
 
 **Files:**
-- Modify: `internal/store/migrations/005_multi_user.sql`
-- Modify: `internal/store/queries/auth.sql`
+- Modify: `internal/api/middleware.go`
 
-- [ ] **Step 1: Add scope + expires_at to api_keys (in migration 005)**
+- [ ] **Step 1: Enforce scope in the API key auth path**
 
-Append to migration 005:
+In the auth middleware from Task 11, after validating an API key, branch on the loaded `scope`:
 
-```sql
-ALTER TABLE api_keys ADD COLUMN scope TEXT NOT NULL DEFAULT 'read_write';
-ALTER TABLE api_keys ADD COLUMN expires_at DATETIME;
+```go
+// scope check: api_keys.scope is loaded by ValidateAPIKey
+switch scope {
+case "read":
+    if r.Method != http.MethodGet {
+        RespondError(w, http.StatusForbidden, "api key has read-only scope")
+        return
+    }
+case "read_write":
+    // domain endpoints OK; admin endpoints rejected below
+case "admin":
+    // all endpoints OK
+default:
+    RespondError(w, http.StatusForbidden, "unknown scope")
+    return
+}
+
+// Admin web UI is cookie-based — bearer/api-key auth does not apply.
+// Admin *API* endpoints (future) check for scope == "admin".
 ```
 
-- [ ] **Step 2: Update auth.sql queries**
+- [ ] **Step 2: Test scope enforcement**
 
-Add `scope` and `expires_at` to `CreateAPIKey` INSERT. Add expiry check to `GetAPIKeyByHash`:
+```go
+func TestAPIKeyScope_ReadOnlyRejectsPost(t *testing.T) {
+    // mint key with scope=read; POST /tasks → expect 403
+}
 
-```sql
--- name: GetAPIKeyByHash :one
-SELECT * FROM api_keys
-WHERE key_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'));
+func TestAPIKeyScope_ReadWriteAllowsPostAndGet(t *testing.T) {
+    // mint key with scope=read_write; POST /tasks → 201; GET /tasks → 200
+}
+
+func TestAPIKeyScope_ExpiredRejected(t *testing.T) {
+    // mint key with expires_at in the past; any request → 401
+    // (expiry is enforced inside ValidateAPIKey via the SQL predicate from Task 1.5 Step 3)
+}
 ```
 
-- [ ] **Step 3: Enforce scope in middleware**
-
-In the auth middleware (Task 11), after validating an API key, check:
-- `read` scope → reject non-GET requests
-- `read_write` scope → allow all domain endpoints
-- `admin` scope → allow admin API endpoints too
-
-- [ ] **Step 4: Regenerate sqlc + commit**
-
-Run: `make sqlc`
+- [ ] **Step 3: Commit**
 
 ```bash
-git add internal/store/migrations/005_multi_user.sql internal/store/queries/auth.sql internal/store/sqlc/ internal/api/middleware.go
-git commit -m "feat(auth): add scope + expiry to API keys with middleware enforcement"
+git add internal/api/middleware.go internal/api/middleware_scope_test.go
+git commit -m "feat(auth): API key scope enforcement (read / read_write / admin)"
 ```
 
 ---
@@ -1755,53 +2380,71 @@ git commit -m "feat(deploy): update Docker config for PocketBase + multi-user"
 
 ---
 
-## Task 19: Tauri Auth — Rust Commands + Keychain
+## Task 19: Tauri Auth — Rust Commands + Keychain (Hardened)
+
+**Why this task was reworked (Codex review, 2026-04-29):** The original draft (a) wrote `auth_token` to the unencrypted SQLite settings table, contradicting spec §4.2's explicit "no token in plaintext" decision; (b) only fixed 401 handling on the *flush* path, leaving the *pull* and *entity-fetch* paths to silently advance the cursor on 401 and lose inbound changes; (c) used a single global `sync_cursor` key, which replays/skips deltas across account switches; (d) duplicated auth-header selection logic per call site, inviting drift. This rewrite addresses all four.
+
+**Hard rules enforced by this task:**
+1. **No auth token of any kind in Tauri SQLite.** Refresh token in OS keychain only; access token in an in-memory `Mutex<Option<String>>` held by Tauri `State`.
+2. **All three sync paths share one `auth_header()` helper** — no duplication.
+3. **No sync path advances the cursor on a 401.** The cursor advances only after a successful pull *and* successful entity fetches.
+4. **Sync cursor is keyed by `(server_url, user_id)`** so account switching does not corrupt cursors.
 
 **Files:**
 - Create: `atask-v4/src-tauri/src/auth.rs`
-- Create: `atask-v4/src-tauri/src/migrations/007_auth.sql`
-- Modify: `atask-v4/src-tauri/src/lib.rs`
-- Modify: `atask-v4/src-tauri/src/sync.rs`
-- Modify: `atask-v4/src-tauri/src/sync_commands.rs`
+- Modify: `atask-v4/src-tauri/src/lib.rs` (register state + commands)
+- Modify: `atask-v4/src-tauri/src/sync.rs` (auth_header, 401 handling on all 3 paths, cursor key)
+- Modify: `atask-v4/src-tauri/src/sync_commands.rs` (read auth from State)
 
-- [ ] **Step 1: Add auth migration for Tauri local DB**
+(No new SQL migration is needed — the existing `settings` table is key-value and stores only `user_id`, `user_email`, `user_name`, `server_url` strings as profile cache. Token columns are explicitly forbidden.)
 
-```sql
--- atask-v4/src-tauri/src/migrations/007_auth.sql
--- Auth settings columns (stored alongside existing settings)
--- Settings table already uses key-value pairs; these are new keys:
--- 'auth_token' (cached, refreshed on launch)
--- 'user_id', 'user_email', 'user_name' (profile cache)
--- No schema change needed — settings table is key-value.
-```
-
-- [ ] **Step 2: Write auth.rs with Tauri commands**
+- [ ] **Step 1: Define in-memory AuthState held by Tauri State**
 
 ```rust
 // atask-v4/src-tauri/src/auth.rs
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use tauri::State;
 use crate::db::Database;
 
+/// Tokens held only in memory. Lost on app restart by design — a refresh on
+/// launch re-derives the access token from the keychain-stored refresh token.
+///
+/// `refresh_in_progress` is the single-flight coordinator required by spec §4.4:
+/// if multiple sync paths see a 401 simultaneously, only the first acquires the
+/// refresh lock and rotates the token; the rest park on the same lock and read
+/// the rotated token without sending a duplicate (and now invalid) refresh call.
+#[derive(Default)]
+pub struct AuthTokens {
+    pub access_token: Mutex<Option<String>>,
+    pub refresh_in_progress: tokio::sync::Mutex<()>,
+}
+
+/// Profile cache, persisted to SQLite settings (no token material).
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AuthState {
-    pub token: Option<String>,
     pub user_id: Option<String>,
     pub user_email: Option<String>,
     pub user_name: Option<String>,
     pub server_url: Option<String>,
+    /// Bool indicator only — the token itself is never serialized to the frontend.
+    pub authenticated: bool,
 }
 
+const KEYRING_SERVICE: &str = "atask-refresh-token";
+```
+
+- [ ] **Step 2: Implement login (no token in SQLite)**
+
+```rust
 #[tauri::command]
 pub fn login(
     db: State<Database>,
+    tokens: State<AuthTokens>,
     server_url: String,
     email: String,
     password: String,
 ) -> Result<AuthState, String> {
-    // POST to {server_url}/auth/login with email/password
-    // Store token in OS keychain via keyring crate
-    // Cache user profile in settings table
     let client = reqwest::blocking::Client::new();
     let resp = client
         .post(format!("{}/auth/login", server_url))
@@ -1814,50 +2457,122 @@ pub fn login(
     }
 
     let body: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
-    let token = body["token"].as_str().ok_or("missing token")?.to_string();
+    // PocketBase issues a single auth token (not a separate access/refresh pair).
+    // Per spec §4.2, the keychain holds the canonical token; the in-memory cache
+    // holds a copy to avoid keychain reads on every sync request. Both are kept
+    // in sync; the 401 handler rotates both.
+    let auth_token = body["token"].as_str().ok_or("missing token")?.to_string();
     let user_id = body["user"]["id"].as_str().unwrap_or("").to_string();
     let user_email = body["user"]["email"].as_str().unwrap_or("").to_string();
     let user_name = body["user"]["name"].as_str().unwrap_or("").to_string();
 
-    // Store in OS keychain
-    let entry = keyring::Entry::new("atask", &user_email).map_err(|e| e.to_string())?;
-    entry.set_password(&token).map_err(|e| e.to_string())?;
+    // Token → OS keychain (canonical) AND in-memory cache (copy).
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &user_email).map_err(|e| e.to_string())?;
+    entry.set_password(&auth_token).map_err(|e| e.to_string())?;
+    *tokens.access_token.lock().unwrap() = Some(auth_token);
 
-    // Cache in local settings
+    // Profile cache → SQLite (NO TOKEN MATERIAL)
     let conn = db.conn.lock().unwrap();
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('auth_token', ?1)", [&token]).ok();
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('user_id', ?1)", [&user_id]).ok();
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('user_email', ?1)", [&user_email]).ok();
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('user_name', ?1)", [&user_name]).ok();
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('server_url', ?1)", [&server_url]).ok();
+    for (key, value) in &[
+        ("user_id", &user_id),
+        ("user_email", &user_email),
+        ("user_name", &user_name),
+        ("server_url", &server_url),
+    ] {
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            [&key.to_string(), *value],
+        ).ok();
+    }
 
     Ok(AuthState {
-        token: Some(token),
         user_id: Some(user_id),
         user_email: Some(user_email),
         user_name: Some(user_name),
         server_url: Some(server_url),
+        authenticated: true,
+    })
+}
+```
+
+- [ ] **Step 3: Implement refresh_on_launch and logout**
+
+```rust
+#[tauri::command]
+pub fn refresh_on_launch(
+    db: State<Database>,
+    tokens: State<AuthTokens>,
+) -> Result<AuthState, String> {
+    let conn = db.conn.lock().unwrap();
+    let get = |k: &str| -> Option<String> {
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [k], |r| r.get(0)).ok()
+    };
+    let server_url = match get("server_url") { Some(v) => v, None => return Ok(AuthState::default()) };
+    let user_email = match get("user_email") { Some(v) => v, None => return Ok(AuthState::default()) };
+
+    // Read current token from keychain
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &user_email).map_err(|e| e.to_string())?;
+    let current_token = match entry.get_password() {
+        Ok(t) => t,
+        Err(_) => return Ok(AuthState::default()), // not signed in
+    };
+    drop(conn);
+
+    // Hit /auth/refresh — PocketBase rotates the token: returns a new one and
+    // invalidates the old one. We must persist the new token to the keychain
+    // immediately, otherwise subsequent launches will use a now-invalid token.
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post(format!("{}/auth/refresh", server_url))
+        .header("Authorization", format!("Bearer {}", current_token))
+        .send()
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Ok(AuthState::default()); // surfaces "please sign in again" in UI
+    }
+    let body: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+    let new_token = body["token"].as_str().ok_or("missing token")?.to_string();
+    // Write the rotated token back to the keychain BEFORE updating the in-memory
+    // cache, so a crash between the two leaves the keychain canonical.
+    entry.set_password(&new_token).map_err(|e| e.to_string())?;
+    *tokens.access_token.lock().unwrap() = Some(new_token);
+
+    let conn = db.conn.lock().unwrap();
+    Ok(AuthState {
+        user_id: get_from(&conn, "user_id"),
+        user_email: Some(user_email),
+        user_name: get_from(&conn, "user_name"),
+        server_url: Some(server_url),
+        authenticated: true,
     })
 }
 
+fn get_from(conn: &rusqlite::Connection, key: &str) -> Option<String> {
+    conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).ok()
+}
+
 #[tauri::command]
-pub fn logout(db: State<Database>) -> Result<(), String> {
+pub fn logout(db: State<Database>, tokens: State<AuthTokens>) -> Result<(), String> {
     let conn = db.conn.lock().unwrap();
 
     // Clear keychain
-    let email: Option<String> = conn
-        .query_row("SELECT value FROM settings WHERE key = 'user_email'", [], |r| r.get(0))
-        .ok();
-    if let Some(email) = email {
-        if let Ok(entry) = keyring::Entry::new("atask", &email) {
+    if let Some(email) = get_from(&conn, "user_email") {
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &email) {
             entry.delete_credential().ok();
         }
     }
 
-    // Clear auth settings
-    for key in &["auth_token", "user_id", "user_email", "user_name"] {
+    // Clear in-memory access token
+    *tokens.access_token.lock().unwrap() = None;
+
+    // Clear profile cache from settings
+    for key in &["user_id", "user_email", "user_name", "server_url"] {
         conn.execute("DELETE FROM settings WHERE key = ?1", [key]).ok();
     }
+
+    // Clear ALL per-user/per-server cursor keys (they are namespaced; see Step 5)
+    conn.execute("DELETE FROM settings WHERE key LIKE 'sync_cursor:%'", []).ok();
 
     // Wipe local domain data
     for table in &[
@@ -1867,72 +2582,198 @@ pub fn logout(db: State<Database>) -> Result<(), String> {
     ] {
         conn.execute(&format!("DELETE FROM {}", table), []).ok();
     }
-
-    // Reset sync state
-    conn.execute("DELETE FROM settings WHERE key = 'sync_cursor'", []).ok();
     conn.execute("DELETE FROM pending_ops", []).ok();
 
     Ok(())
 }
+```
 
-#[tauri::command]
-pub fn get_auth_state(db: State<Database>) -> Result<AuthState, String> {
-    let conn = db.conn.lock().unwrap();
-    let get = |key: &str| -> Option<String> {
-        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).ok()
+- [ ] **Step 4: Add a single auth_header() helper in sync.rs**
+
+Replace any per-path Authorization header construction with this single helper:
+
+```rust
+// atask-v4/src-tauri/src/sync.rs
+fn auth_header(tokens: &AuthTokens, api_key: &str) -> Option<String> {
+    if let Some(ref t) = *tokens.access_token.lock().unwrap() {
+        return Some(format!("Bearer {}", t));
+    }
+    if !api_key.is_empty() {
+        return Some(format!("ApiKey {}", api_key));
+    }
+    None
+}
+```
+
+Apply in all three sync paths: `flush_pending_ops`, `pull_deltas`, `fetch_entity`. No path constructs its own header.
+
+- [ ] **Step 5: Cursor key namespacing**
+
+The current `sync_cursor` key is global. Replace with per-user-per-server keys:
+
+```rust
+fn cursor_key(server_url: &str, user_id: &str) -> String {
+    format!("sync_cursor:{}:{}", server_url, user_id)
+}
+
+fn read_cursor(conn: &rusqlite::Connection, server_url: &str, user_id: &str) -> i64 {
+    let key = cursor_key(server_url, user_id);
+    conn.query_row("SELECT value FROM settings WHERE key = ?1", [&key], |r| r.get::<_, String>(0))
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
+}
+
+fn write_cursor(conn: &rusqlite::Connection, server_url: &str, user_id: &str, cursor: i64) {
+    let key = cursor_key(server_url, user_id);
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+        [&key, &cursor.to_string()],
+    ).ok();
+}
+```
+
+When `user_id` is unknown (anonymous local-only mode), use the empty string — that key remains stable for unauthenticated state.
+
+- [ ] **Step 6: 401 handling on all three paths**
+
+The previous draft only handled 401 in `flush_pending_ops`. The current `sync.rs` has three paths that hit the server:
+1. `flush_pending_ops` (POST/PATCH outbound)
+2. `pull_deltas` (GET delta cursor)
+3. `fetch_entity` (GET entity body, called for each delta)
+
+Each must use the same 401 contract: **never advance the cursor; never mark an op as synced; attempt single-flight refresh; pause on refresh failure**. Implement a single guard:
+
+```rust
+async fn refresh_access_token(
+    tokens: &AuthTokens,
+    server_url: &str,
+    user_email: &str,
+) -> Result<(), String> {
+    // Single-flight: acquire the refresh lock. Concurrent callers (e.g. flush,
+    // pull, and entity-fetch all hitting 401 at once) park here and proceed
+    // serially. The first holder rotates; subsequent holders detect the rotation
+    // via the cache/keychain comparison below and short-circuit.
+    let _guard = tokens.refresh_in_progress.lock().await;
+
+    let entry = keyring::Entry::new(KEYRING_SERVICE, user_email).map_err(|e| e.to_string())?;
+    let keychain_token = entry.get_password().map_err(|e| e.to_string())?;
+
+    // Has the keychain token changed while we were waiting for the lock?
+    // If yes, another caller already rotated. Sync the cache from the keychain
+    // and return — no need to send a second /auth/refresh call.
+    let cache_matches_keychain = {
+        let cache = tokens.access_token.lock().unwrap();
+        match &*cache {
+            Some(cached) => *cached == keychain_token,
+            None => false, // empty cache always counts as "needs sync"
+        }
     };
-    Ok(AuthState {
-        token: get("auth_token"),
-        user_id: get("user_id"),
-        user_email: get("user_email"),
-        user_name: get("user_name"),
-        server_url: get("server_url"),
-    })
-}
-```
-
-- [ ] **Step 3: Update sync.rs for Bearer token + 401 handling**
-
-In the `flush_pending_ops` function, replace the fixed `ApiKey` header with the dual-auth logic:
-
-```rust
-fn auth_header(config: &SyncConfig) -> String {
-    if let Some(ref token) = config.auth_token {
-        format!("Bearer {}", token)
-    } else if !config.api_key.is_empty() {
-        format!("ApiKey {}", config.api_key)
-    } else {
-        String::new()
+    if !cache_matches_keychain {
+        // Sync the cache from the keychain. Some other caller already did the
+        // network rotation; we just need to pick up its result.
+        *tokens.access_token.lock().unwrap() = Some(keychain_token);
+        return Ok(());
     }
+
+    // Cache and keychain agree — we are the rotator. PocketBase rotates: passing
+    // the old token yields a new token and invalidates the old.
+    let resp = reqwest::Client::new()
+        .post(format!("{}/auth/refresh", server_url))
+        .header("Authorization", format!("Bearer {}", keychain_token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("refresh failed: {}", resp.status()));
+    }
+    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let new_token = body["token"].as_str().ok_or("missing token")?.to_string();
+    // Persist to keychain BEFORE updating the in-memory cache. If we crash
+    // between the two writes, the keychain remains the source of truth and
+    // the next launch will pick up the rotated token.
+    entry.set_password(&new_token).map_err(|e| e.to_string())?;
+    *tokens.access_token.lock().unwrap() = Some(new_token);
+    Ok(())
+    // _guard drops here, releasing the single-flight lock.
+}
+
+/// Returns Ok(true) if the caller should retry; Ok(false) if not authenticated;
+/// Err if refresh failed and sync should pause.
+async fn handle_401(
+    tokens: &AuthTokens,
+    server_url: &str,
+    user_email: Option<&str>,
+) -> Result<bool, String> {
+    let email = match user_email {
+        Some(e) => e,
+        None => return Ok(false), // anonymous local mode — nothing to refresh
+    };
+    refresh_access_token(tokens, server_url, email).await.map(|_| true)
 }
 ```
 
-For 401 handling in the sync loop:
+In each of the three paths:
 
 ```rust
+// flush_pending_ops:
 if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-    // Do NOT mark op as synced — preserve it
-    // Attempt token refresh
-    if let Some(new_token) = refresh_token(config) {
-        config.auth_token = Some(new_token);
-        continue; // retry this op
-    } else {
-        // Refresh failed — pause sync
-        set_last_sync_error(conn, "Authentication expired. Please sign in again.");
-        return;
+    match handle_401(&tokens, &server_url, user_email.as_deref()).await {
+        Ok(true) => continue,                         // retry the op (do NOT mark synced)
+        Ok(false) => return,                          // anonymous; nothing to do
+        Err(e) => { set_last_sync_error(conn, &format!("Authentication expired: {e}")); return; }
+    }
+}
+
+// pull_deltas:
+if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+    match handle_401(&tokens, &server_url, user_email.as_deref()).await {
+        Ok(true) => continue,                         // retry the pull (do NOT advance cursor)
+        Ok(false) => return,
+        Err(e) => { set_last_sync_error(conn, &format!("Authentication expired: {e}")); return; }
+    }
+}
+
+// fetch_entity (inside the per-delta loop):
+if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+    match handle_401(&tokens, &server_url, user_email.as_deref()).await {
+        Ok(true) => continue,                         // retry this fetch (do NOT advance cursor past this delta)
+        Ok(false) => return,
+        Err(e) => { set_last_sync_error(conn, &format!("Authentication expired: {e}")); return; }
     }
 }
 ```
 
-- [ ] **Step 4: Register auth commands in lib.rs**
+**Critical:** The cursor advancement at the end of `pull_deltas` must be moved *inside* the per-delta loop's success arm — only advance after each entity is successfully fetched and applied. A 401 mid-batch must leave the cursor at the last fully-applied delta, never beyond it.
 
-Add `login`, `logout`, `get_auth_state` to the Tauri command registration.
+- [ ] **Step 7: Register state + commands in lib.rs**
 
-- [ ] **Step 5: Commit**
+```rust
+// atask-v4/src-tauri/src/lib.rs
+.manage(crate::auth::AuthTokens::default())
+.invoke_handler(tauri::generate_handler![
+    // ... existing commands ...
+    crate::auth::login,
+    crate::auth::logout,
+    crate::auth::refresh_on_launch,
+])
+```
+
+- [ ] **Step 8: Verify the SQLite-token guard via grep**
+
+Run: `grep -n "auth_token" atask-v4/src-tauri/src/`
+Expected: zero matches in `db.rs`, `sync.rs`, `auth.rs` settings writes. The only references should be field names on the in-memory `AuthTokens` struct, never SQL.
+
+- [ ] **Step 9: Run Rust tests**
+
+Run: `cargo test --manifest-path atask-v4/src-tauri/Cargo.toml`
+Expected: All tests pass; new tests for `auth_header()`, `cursor_key()`, and `handle_401()` cover the contract.
+
+- [ ] **Step 10: Commit**
 
 ```bash
 git add atask-v4/src-tauri/src/auth.rs atask-v4/src-tauri/src/sync.rs atask-v4/src-tauri/src/lib.rs
-git commit -m "feat(tauri): auth commands, keychain storage, 401 handling in sync"
+git commit -m "feat(tauri): keychain-only refresh token, in-memory access, 3-path 401 handling, namespaced cursor"
 ```
 
 ---
@@ -1951,8 +2792,12 @@ git commit -m "feat(tauri): auth commands, keychain storage, 401 handling in syn
 // atask-v4/src/store/auth.ts
 import { atom, computed } from 'nanostores';
 
+// IMPORTANT: No token field. The auth token never crosses the Tauri IPC
+// boundary into the frontend — it lives only in the Rust-side AuthTokens
+// state and the OS keychain. The frontend tracks identity via `authenticated`
+// (a boolean) and the user profile fields, which are safe to expose.
 export interface AuthState {
-  token: string | null;
+  authenticated: boolean;
   userId: string | null;
   userEmail: string | null;
   userName: string | null;
@@ -1960,14 +2805,14 @@ export interface AuthState {
 }
 
 export const $authState = atom<AuthState>({
-  token: null,
+  authenticated: false,
   userId: null,
   userEmail: null,
   userName: null,
   serverUrl: null,
 });
 
-export const $isAuthenticated = computed($authState, (s) => !!s.token);
+export const $isAuthenticated = computed($authState, (s) => s.authenticated);
 export const $currentUser = computed($authState, (s) =>
   s.userId ? { id: s.userId, email: s.userEmail, name: s.userName } : null,
 );
@@ -2091,4 +2936,143 @@ Expected: All unit tests pass.
 ```bash
 git add -A
 git commit -m "test: multi-user integration verification pass"
+```
+
+---
+
+## Task 22: Orphan-Data Startup Guard
+
+**Why this task exists (Codex review, 2026-04-29):** After migration 005, every existing single-user-mode row carries `user_id = ''`. After Task 6, every domain query filters by the authenticated user's ID. Result: an admin who upgrades a single-user deployment and signs in *sees an empty task list* until they run `atask admin assign-data --to <user-id>`. The plan acknowledges this exists but offers no guardrail. This task adds an explicit startup check that warns operators before the data appears to be lost.
+
+**Files:**
+- Modify: `cmd/atask/main.go` (call the check after migrations)
+- Create: `internal/store/orphan_check.go`
+- Create: `internal/store/orphan_check_test.go`
+- Modify: `internal/api/admin.go` (surface the count on the dashboard)
+
+- [ ] **Step 1: Write the orphan check**
+
+```go
+// internal/store/orphan_check.go
+package store
+
+import (
+    "context"
+    "database/sql"
+    "fmt"
+)
+
+// orphanedTables: every table that migration 005 added a user_id column to.
+// Each is checked for rows with user_id = '' since those become invisible
+// after Task 6 enforces user_id filtering. The list mirrors migration 005:
+// 11 domain tables (incl. join tables) + 2 event tables.
+var orphanedTables = []string{
+    // Root domain tables
+    "tasks", "projects", "areas", "sections", "tags",
+    "locations", "checklist_items", "activities",
+    // Join tables (orphaned rows here mean tags/links survive but their
+    // ownership relationship is invisible — equally bad)
+    "task_tags", "project_tags", "task_links",
+    // Event tables (orphaned events would otherwise replay to no one)
+    "delta_events", "domain_events",
+}
+
+// OrphanCounts returns the row count per domain table where user_id = ''.
+// A non-zero count for any table indicates pre-multi-user data that has not
+// been claimed via `atask admin assign-data`.
+func OrphanCounts(ctx context.Context, db *sql.DB) (map[string]int, error) {
+    out := make(map[string]int, len(orphanedTables))
+    for _, t := range orphanedTables {
+        var n int
+        // #nosec G201: table names come from a constant whitelist
+        q := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE user_id = ''`, t)
+        if err := db.QueryRowContext(ctx, q).Scan(&n); err != nil {
+            return nil, fmt.Errorf("count %s: %w", t, err)
+        }
+        if n > 0 {
+            out[t] = n
+        }
+    }
+    return out, nil
+}
+```
+
+- [ ] **Step 2: Test the check**
+
+```go
+// internal/store/orphan_check_test.go
+func TestOrphanCounts_EmptyDB(t *testing.T) {
+    db := newTestDB(t) // applies migrations 001-006
+    counts, err := OrphanCounts(context.Background(), db.Raw())
+    if err != nil { t.Fatal(err) }
+    if len(counts) != 0 {
+        t.Errorf("expected zero orphans on fresh DB, got %v", counts)
+    }
+}
+
+func TestOrphanCounts_DetectsPreMultiUserData(t *testing.T) {
+    db := newTestDB(t)
+    _, _ = db.Raw().Exec(`INSERT INTO tasks (id, user_id, title, "index", today_index, created_at, updated_at) VALUES ('t1', '', 'orphan task', 0, 0, datetime('now'), datetime('now'))`)
+    counts, err := OrphanCounts(context.Background(), db.Raw())
+    if err != nil { t.Fatal(err) }
+    if counts["tasks"] != 1 {
+        t.Errorf("expected 1 orphaned task, got %v", counts["tasks"])
+    }
+}
+```
+
+Run: `go test ./internal/store/ -run TestOrphan -v`
+Expected: PASS.
+
+- [ ] **Step 3: Wire the check into startup**
+
+In `cmd/atask/main.go`, immediately after `db.Migrate()`, log a structured warning when orphans are present:
+
+```go
+if counts, err := store.OrphanCounts(ctx, db.Raw()); err != nil {
+    slog.Warn("orphan check failed", "err", err)
+} else if len(counts) > 0 {
+    total := 0
+    for _, n := range counts { total += n }
+    slog.Warn(
+        "orphaned single-user data detected",
+        "tables", counts,
+        "total_rows", total,
+        "remediation", "atask admin assign-data --to <user-id>",
+    )
+}
+```
+
+- [ ] **Step 4: Surface the count on the admin dashboard**
+
+In `internal/api/admin.go`'s `Dashboard` handler, call `store.OrphanCounts` and pass the result into the template data. Update `dashboard.html` to render a yellow banner when total > 0:
+
+```html
+{{if .OrphanTotal}}
+<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+    <strong>{{.OrphanTotal}} orphaned rows detected.</strong>
+    Pre-multi-user data is not visible to any user. Run
+    <code>atask admin assign-data --to &lt;user-id&gt;</code> to claim it.
+</div>
+{{end}}
+```
+
+- [ ] **Step 5: Test the dashboard banner**
+
+```go
+func TestAdminDashboard_ShowsOrphanBanner(t *testing.T) {
+    // setup: insert a task with user_id = ''
+    // GET /admin/ as admin
+    // assert response body contains "orphaned rows detected"
+}
+```
+
+Run: `go test ./internal/api/ -run TestAdminDashboard -v`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add internal/store/orphan_check.go internal/store/orphan_check_test.go cmd/atask/main.go internal/api/admin.go internal/api/admin_templates/dashboard.html
+git commit -m "feat: orphan-data startup warning + admin dashboard banner"
 ```

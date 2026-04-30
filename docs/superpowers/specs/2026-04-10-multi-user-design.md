@@ -35,18 +35,34 @@ Single Go binary (PocketBase framework)
 │   ├── internal/service/ → business logic (all methods take userID)
 │   └── internal/event/   → event sourcing, delta events, domain events
 │
-└── Single SQLite file
-    ├── PocketBase tables: _users, _externalAuths, _admins, ...
-    └── Domain tables: tasks, projects, areas, sections, tags, ...
+└── Two SQLite files in DATA_DIR
+    ├── pb_data/data.db   (PocketBase-managed: _users, _externalAuths, _admins, ...)
+    └── atask.db          (domain-managed: tasks, projects, areas, sections, tags, ...)
 ```
 
-**Key boundary:** PocketBase manages identity. Custom code manages domain data. They share one SQLite file but own different tables. The bridge is `user_id` — PocketBase's user record ID becomes the `user_id` foreign key in all domain tables.
+**Key boundary:** PocketBase manages identity in its own SQLite file under `${DATA_DIR}/pb_data/`. Custom code manages domain data in `${DATA_DIR}/atask.db`. The two databases live side by side in the same directory but never share a connection — each side opens its own handle, runs its own migrations, and is backed up independently. The bridge is `user_id` — PocketBase's user record ID is denormalized into a `user_id` column on every domain table. There is no foreign-key constraint between the two databases (SQLite has no cross-database FKs); ownership integrity is enforced at the application layer.
 
 ---
 
 ## 2. Data Layer
 
-### 2.1 Schema Migration (005)
+### 2.1 Schema Migration (005 additive, 006 cleanup)
+
+The schema change is split across **two migrations** that ship in sequence:
+
+**Migration 005 — additive only (safe to roll back by ignoring new columns):**
+- Adds `user_id TEXT NOT NULL DEFAULT ''` to all 11 domain tables and both event tables.
+- Creates the `invites` table.
+- Adds indexes on `user_id`.
+- Does not touch the legacy `users` or `api_keys` tables.
+
+**Migration 006 — cleanup (lands after PocketBase is wired and at least one user exists):**
+- Drops the legacy `users` table.
+- Retargets `api_keys.user_id` to reference PocketBase user record IDs (drop FK, keep column; PocketBase IDs are TEXT like the existing column).
+- Adds `api_keys.scope TEXT NOT NULL DEFAULT 'read_write'` and `api_keys.expires_at DATETIME`.
+- Deletes the now-orphaned legacy queries from `internal/store/queries/auth.sql` (`CreateUser`, `GetUserByEmail`, `GetUserByID`, `UpdateUser`).
+
+The split lets 005 land independently and lets 006 run only after PocketBase is operational. Existing API keys keep working through the cutover because the `user_id` column type is unchanged — only its referent changes (manual reassignment via `assign-data` after the cutover).
 
 `user_id TEXT NOT NULL DEFAULT ''` added to **all 11 domain tables**. No JOIN-based scoping for children — every table carries its own `user_id` for defense-in-depth.
 
@@ -136,21 +152,23 @@ All sqlc queries include `WHERE user_id = ?` (or `AND user_id = ?` for by-ID loo
 
 Every `INSERT` includes `user_id` in its VALUES clause.
 
-### 2.4 Cross-Entity Validation
+### 2.4 Cross-Entity Validation (Service Layer)
 
-Service methods that reference other entities scope the lookup to the current user:
+**These checks live in the service layer, not in SQL.** sqlc scoping ensures every query reads or writes only the authenticated user's rows — but it does not validate that a foreign-key value supplied in a request body refers to an entity *the same user* owns. A `PATCH /tasks/{id} {"projectId": "<other-user's-project-id>"}` would pass the SQL `WHERE user_id = ?` check on the task row and quietly link it to the other user's project. Every service method that accepts an FK must perform an explicit owner-scoped lookup before mutating:
 
 | Operation | Validation |
 |-----------|-----------|
-| Set task's project | `GetProject(projectID, userID)` |
-| Set task's area | `GetArea(areaID, userID)` |
-| Set task's section | `GetSection(sectionID, userID)` |
-| Set task's location | `GetLocation(locationID, userID)` |
-| Add task link | `GetTask(relatedID, userID)` |
-| Create section in project | `GetProject(projectID, userID)` |
-| Add tag to task/project | `GetTag(tagID, userID)` |
+| Set task's project | `GetProject(ctx, projectID, userID)` — return 404 if not found |
+| Set task's area | `GetArea(ctx, areaID, userID)` |
+| Set task's section | `GetSection(ctx, sectionID, userID)` — and confirm the section's `project_id` matches the task's `project_id` |
+| Set task's location | `GetLocation(ctx, locationID, userID)` |
+| Add task link | `GetTask(ctx, relatedID, userID)` — and reject self-link |
+| Create section in project | `GetProject(ctx, projectID, userID)` |
+| Move project to area | `GetArea(ctx, areaID, userID)` |
+| Add tag to task/project | `GetTag(ctx, tagID, userID)` |
+| Add checklist item to task | `GetTask(ctx, taskID, userID)` |
 
-This prevents horizontal privilege escalation (User A moving their task into User B's project by guessing a UUID).
+This prevents horizontal privilege escalation. The plan must add an explicit ownership-validation subtask for each row above; SQL scoping alone is necessary but not sufficient.
 
 ### 2.5 Query Scanning Test
 
@@ -325,40 +343,63 @@ The app launches to Inbox with no auth gate. Settings page gets an expanded "Acc
 
 ### 4.2 Token Storage
 
-| Token | Storage | Rationale |
-|-------|---------|-----------|
-| Access token (short-lived) | In-memory (`Arc<Mutex<Option<String>>>`) | Lost on restart, refreshed on launch |
-| Refresh token (long-lived) | OS keychain (`tauri-plugin-keychain`) | Survives restart, OS-level encryption |
-| Server URL | Tauri SQLite settings | Non-sensitive config |
-| User profile cache | Tauri SQLite settings (`user_id`, `user_email`, `user_name`) | Display when offline |
+**Hard rule: no auth token of any kind ever lands in the Tauri SQLite settings table.** SQLite-on-disk is unencrypted and trivially readable by any local process; storing a bearer token there would re-open the vulnerability the team explicitly closed. The plan must enforce this — `INSERT OR REPLACE INTO settings (key, value) VALUES ('auth_token', ...)` and any equivalent is forbidden.
+
+**Note on PocketBase semantics:** PocketBase issues a single auth token that can be *rotated* via `/api/collections/users/auth-refresh` — there are not separate access/refresh tokens in the OAuth sense. The endpoint we expose at `/auth/refresh` is a thin wrapper around PocketBase's rotation. So Phase 1 uses one canonical token, with a two-tier storage layout that still preserves the security properties the spec cares about (no plaintext on disk, survives restart, refreshable):
+
+| Storage | Holds | Rationale |
+|---------|-------|-----------|
+| OS keychain (`keyring` crate, service `atask-refresh-token`, account = user email) | The current valid auth token (long-lived; rotated on every refresh) | OS-level encryption (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux); the canonical source of truth |
+| In-memory (`Mutex<Option<String>>` held by Tauri `State`) | A cached copy of the keychain token, populated on launch and after rotation | Avoids keychain access on every sync request; lost on restart by design |
+| Tauri SQLite settings | `user_id`, `user_email`, `user_name`, `server_url` (no token material) | Display when offline, profile cache only |
+
+The Tauri auth flow on launch:
+1. Read `user_email` and `server_url` from SQLite settings.
+2. Look up the auth token in the OS keychain by email.
+3. Hit `POST /auth/refresh` to *rotate* the token (PocketBase invalidates the old one and issues a new one). Write the new token back to the keychain and into the in-memory cache.
+4. If rotation fails (e.g., keychain token already invalid), surface "Please sign in again" — do not retry silently, do not fall back to a cached token.
+
+The 401 handler in §4.4 follows the same rotation pattern: on 401, call `/auth/refresh`; if it succeeds, write the new token to keychain + cache and retry; if it fails, pause sync.
+
+A future Phase 2 hardening could introduce a true short-lived/long-lived split by layering custom JWTs on top of PocketBase, but Phase 1 stays with PocketBase's native token-rotation model — the security properties (no plaintext on disk, OS-level encryption at rest, refreshable, revocable on logout) are equivalent.
 
 ### 4.3 Sync Auth
 
-`sync.rs` auth header selection:
+`sync.rs` auth header selection. The token is read from the **in-memory `AuthTokens` cache** (not from any persistent config struct or SQLite settings — see §4.2). Falls back to the API key from `SyncConfig` for unauthenticated agent flows.
 
 ```rust
-fn auth_header(config: &SyncConfig) -> String {
-    if let Some(token) = &config.auth_token {
-        format!("Bearer {}", token)
-    } else if !config.api_key.is_empty() {
-        format!("ApiKey {}", config.api_key)
-    } else {
-        String::new()
+fn auth_header(tokens: &AuthTokens, api_key: &str) -> Option<String> {
+    if let Some(ref t) = *tokens.access_token.lock().unwrap() {
+        return Some(format!("Bearer {}", t));
     }
+    if !api_key.is_empty() {
+        return Some(format!("ApiKey {}", api_key));
+    }
+    None
 }
 ```
 
+Used by all three sync paths (flush, pull, entity-fetch) — there is exactly one `auth_header` callsite per path, no per-path duplication.
+
 ### 4.4 401 Handling
 
-The sync worker currently treats all 4xx as permanent failure and discards pending ops. Revised behavior for 401:
+The sync worker currently treats all 4xx as permanent failure and discards pending ops. The 401 path must be revised consistently across **all three sync paths** — flush (outbound pending ops), pull (inbound delta cursor), and entity-fetch (inbound entity body). Each path has its own data-loss failure mode:
 
-1. On 401 response: **do not discard** the pending op
-2. Attempt single-flight token refresh (one retry)
-3. If refresh succeeds: retry the failed op with new token
-4. If refresh fails: pause sync, set sync status to "auth expired", preserve all pending ops
-5. Surface "Please sign in again" in the sync status UI
+| Path | Current bug | Revised behavior |
+|------|-------------|-------------------|
+| Flush pending op | 401 marks op as synced, op is discarded | Do not mark synced; attempt refresh; retry op or pause sync |
+| Pull delta cursor | 401 may advance cursor (if request reaches that step) | Do not advance cursor; attempt refresh; retry pull or pause sync |
+| Entity fetch (after delta) | 401 logged + skipped, but cursor still advances at end of pull | Do not advance cursor; attempt refresh; retry fetch or pause sync |
 
-All other 4xx responses keep existing behavior (log and skip).
+Single-flight refresh applies across all three paths (one in-flight refresh, all paths await its result). Concrete behavior:
+
+1. On any 401 from any sync path: **do not discard the op, do not advance the cursor**.
+2. Attempt single-flight refresh (one in-flight at a time, all callers share the result).
+3. If refresh succeeds: retry the failed call with the new token.
+4. If refresh fails: pause the sync worker, set sync status to "auth expired", preserve pending ops *and* current cursor position.
+5. Surface "Please sign in again" in the sync status UI.
+
+A single `auth_header(state)` helper is used by all three paths so the auth selection logic cannot drift between flush and pull. All other 4xx responses keep existing behavior (log and skip).
 
 ### 4.5 Account Switching
 
@@ -462,6 +503,14 @@ ORDER BY id ASC;
 ```
 
 Delete events include the `user_id` of the entity owner, captured before the delete. Cursor advancement is per-user (the client's sync cursor advances through their own events only).
+
+**Tauri-side cursor namespacing.** A single global `sync_cursor` setting key is wrong as soon as the user can switch accounts or servers — the cursor would replay or skip deltas across identities. The Tauri client stores cursors under composite keys:
+
+```
+sync_cursor:{server_url}:{user_id}
+```
+
+The active cursor key is recomputed whenever `server_url` or `user_id` changes. Logout clears all `sync_cursor:*` keys for the signed-out user (see §4.5). Sign-in to a new account on the same server starts at cursor 0.
 
 ### 6.2 SSE Stream
 
@@ -586,7 +635,7 @@ The adapter wraps PocketBase's Go API. If PocketBase introduces breaking changes
 
 ## 9. Phasing
 
-### Phase 1: Multi-User Foundation (~3 weeks)
+### Phase 1: Multi-User Foundation (~4.5 weeks)
 
 - Schema migration (user_id on all tables)
 - Query scoping (~84 queries)
@@ -638,4 +687,9 @@ The adapter wraps PocketBase's Go API. If PocketBase introduces breaking changes
 | Token storage in Tauri | OS keychain (refresh), in-memory (access) | SQLite settings table | Codex: plaintext SQLite is insecure for long-lived tokens |
 | PocketBase boundary | Thin adapter interface | Direct PB API calls everywhere | Isolates upgrade risk; pre-1.0 breaking changes affect only adapter |
 | Per-user DBs | Rejected | One DB with user_id | Sharing requires cross-user queries; per-user DBs make that hard |
+| DB topology | Two files in same DATA_DIR | Single shared file | SQLite has no cross-DB FKs; PocketBase owns its own data dir; lets us back up and migrate the two halves independently |
+| Migration split | 005 additive + 006 cleanup | Single migration | Mixing additive ALTER (always-safe) with destructive DROP/FK retarget (irreversible) in one file is brittle; split lets us ship 005 quickly and gate 006 on PocketBase wiring being live |
+| Service-layer ownership checks | Required in addition to SQL scoping | SQL scoping only | sqlc scoping prevents cross-user reads/writes of root entities, but a PATCH that *moves* a task to another user's project still passes SQL — the FK target needs an explicit `GetX(id, userID)` lookup |
+| Cursor key namespacing | `sync_cursor:{server_url}:{user_id}` | Single global key | Account/server switching with one key replays or skips deltas across identities |
+| 401 cursor advancement | Never advance on 401 | Advance and retry later | Advancing on 401 silently drops inbound changes when refresh fails; preserve cursor and pause sync instead |
 | Estimate | ~4.5 weeks (phased) | 16-19 days (original) | Codex: original estimate low by ~2x; phasing de-risks |
