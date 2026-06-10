@@ -17,3 +17,14 @@ export function tomorrowLocal(): string {
   d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/**
+ * Converts an ISO timestamp (e.g. completedAt, stored in UTC) to its
+ * YYYY-MM-DD date in the local timezone. Never slice(0, 10) a timestamp
+ * directly — that yields the UTC date, which is wrong near midnight.
+ */
+export function localDateOf(timestamp: string): string {
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return timestamp.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

@@ -1,4 +1,5 @@
 import { useLogbook, reopenTask } from "../store";
+import { localDateOf } from "../lib/dates";
 import CheckboxCircle from "../components/CheckboxCircle";
 import TagPill from "../components/TagPill";
 import DateGroupHeader from "../components/DateGroupHeader";
@@ -33,7 +34,7 @@ function formatDate(dateStr: string): string {
 function groupByDate(tasks: Task[]): DateGroup[] {
   const groups: DateGroup[] = [];
   for (const task of tasks) {
-    const date = task.completedAt ? task.completedAt.slice(0, 10) : "Unknown";
+    const date = task.completedAt ? localDateOf(task.completedAt) : "Unknown";
     const last = groups[groups.length - 1];
     if (last && last.date === date) {
       last.tasks.push(task);
