@@ -501,6 +501,16 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
         return Ok(());
     }
 
+    // The Go API serializes date-only fields as RFC3339 ("2026-06-10T00:00:00Z")
+    // but its PATCH handlers only accept plain "YYYY-MM-DD". Normalize on pull
+    // so locally-stored dates match what task_patch_body may echo back —
+    // otherwise the first local edit of a synced task gets a 400 and is lost.
+    let date_only = |v: Option<&str>| -> Option<String> {
+        v.map(|s| s.chars().take(10).collect())
+    };
+    let start_date = date_only(opt_s("startDate", "StartDate"));
+    let deadline = date_only(opt_s("deadline", "Deadline"));
+
     let repeat_rule = j
         .get("repeatRule")
         .or_else(|| j.get("RecurrenceRule"))
@@ -523,8 +533,8 @@ pub fn upsert_task(conn: &Connection, j: &serde_json::Value) -> Result<(), Strin
             s("notes", "Notes"),
             i("status", "Status"),
             i("schedule", "Schedule"),
-            opt_s("startDate", "StartDate"),
-            opt_s("deadline", "Deadline"),
+            start_date,
+            deadline,
             opt_s("completedAt", "CompletedAt"),
             i("index", "Index"),
             opt_i("todayIndex", "TodayIndex"),
@@ -937,5 +947,43 @@ mod tests {
 
         let ops = read_pending_ops(&conn, 10).expect("read pending ops after sync");
         assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn upsert_task_normalizes_rfc3339_dates_to_date_only() {
+        let conn = setup_test_conn();
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{
+                "id": "task-date-norm",
+                "title": "Synced task",
+                "notes": "",
+                "status": 0,
+                "schedule": 1,
+                "startDate": "2026-06-10T00:00:00Z",
+                "deadline": "2026-06-12T00:00:00Z",
+                "completedAt": "2026-06-09T22:55:00Z",
+                "index": 0,
+                "createdAt": "2026-06-09T00:00:00Z",
+                "updatedAt": "2026-06-09T00:00:00Z"
+            }"#,
+        )
+        .unwrap();
+
+        upsert_task(&conn, &json).expect("upsert task");
+
+        let (start_date, deadline, completed_at): (String, String, String) = conn
+            .query_row(
+                "SELECT startDate, deadline, completedAt FROM tasks WHERE id = 'task-date-norm'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read task back");
+
+        // Date-only fields must be stored as YYYY-MM-DD so task_patch_body
+        // round-trips through the Go PATCH handler (which 400s on RFC3339).
+        assert_eq!(start_date, "2026-06-10");
+        assert_eq!(deadline, "2026-06-12");
+        // completedAt is a real timestamp and must stay untouched.
+        assert_eq!(completed_at, "2026-06-09T22:55:00Z");
     }
 }
