@@ -133,6 +133,14 @@ export async function installTauriMock(page: Page, state: MockState = emptyState
       },
       transformCallback: <T>(cb: T) => cb,
     };
+
+    // @tauri-apps/api/event routes listener teardown through a separate
+    // plugin-internals global; without it every unlisten() becomes an
+    // unhandled rejection that the app (correctly) surfaces as an error
+    // toast.
+    (window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__: unknown }).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: () => {},
+    };
   }, state);
 }
 

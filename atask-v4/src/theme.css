@@ -867,9 +867,16 @@ html, body {
     color: var(--ink-quaternary);
 }
 
+/* Deadlines: red is reserved for overdue/imminent so it keeps meaning.
+   Distant deadlines render in the muted ink used for other metadata. */
 .task-deadline {
-    color: var(--deadline-red);
+    color: var(--ink-tertiary);
     font-weight: 700;
+}
+
+.task-deadline-overdue,
+.task-deadline-soon {
+    color: var(--deadline-red);
 }
 
 /* Inline checklist count badge (e.g. "2/5"). Muted by default, shifts to
@@ -1094,6 +1101,11 @@ html, body {
     cursor: pointer;
     user-select: none;
     border: 1px solid var(--border);
+    /* Pills render as <button> when interactive — neutralize UA styles. */
+    background: none;
+    font-family: inherit;
+    color: inherit;
+    line-height: inherit;
 }
 
 .attr-pill:hover {
@@ -1106,6 +1118,13 @@ html, body {
     margin-left: 2px;
     font-size: 10px;
     cursor: pointer;
+    /* Remove affordances are <button> elements for keyboard access. */
+    background: none;
+    border: none;
+    padding: 0 2px;
+    color: inherit;
+    font-family: inherit;
+    border-radius: var(--radius-xs);
 }
 
 .attr-pill .remove:hover,
@@ -1330,6 +1349,12 @@ html, body {
     font-size: var(--text-base);
     color: var(--ink-primary);
     cursor: pointer;
+    /* Options are <button> elements — neutralize UA styles. */
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
 }
 
 .when-option:hover {
@@ -1421,6 +1446,10 @@ html, body {
     cursor: pointer;
     border-radius: var(--radius-xs);
     color: var(--ink-secondary);
+    /* Day cells are <button> elements — neutralize UA styles. */
+    background: none;
+    border: none;
+    font-family: inherit;
 }
 
 .when-cal-day:hover {
@@ -1464,6 +1493,11 @@ html, body {
     font-weight: 700;
     color: var(--ink-secondary);
     cursor: pointer;
+    /* Rendered as <button> — neutralize UA styles. */
+    background: none;
+    border: none;
+    width: 100%;
+    font-family: inherit;
 }
 
 .when-clear:hover {
@@ -1721,6 +1755,12 @@ html, body {
     font-size: var(--text-xs);
     color: var(--accent);
     cursor: pointer;
+    /* Rendered as <button> for keyboard access — neutralize UA styles. */
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    border-radius: var(--radius-xs);
 }
 
 /* Tag + linked-task chips with remove affordance. The chip groups the pill
@@ -2459,6 +2499,19 @@ html, body {
     text-align: center;
     flex-shrink: 0;
     font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cmd-item-icon svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .cmd-item-label {
@@ -2788,6 +2841,17 @@ textarea:focus-visible {
     gap: 4px;
     cursor: default;
     font-size: var(--text-xs);
+    /* Actionable states render as <button> — neutralize UA styles. */
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    color: inherit;
+}
+
+button.sync-status {
+    cursor: pointer;
+    border-radius: var(--radius-xs);
 }
 
 .sync-status-error {
@@ -2983,6 +3047,14 @@ textarea:focus-visible {
     font-style: italic;
 }
 
+/* Mutation entries render text + timestamp as siblings — without a flex
+   gap they run together ("Scheduled for todayjust now"). */
+.activity-mutation .activity-body {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+}
+
 .activity-comment-input {
     margin-top: 8px;
 }
@@ -3018,3 +3090,133 @@ textarea:focus-visible {
     }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   Toasts — mutation feedback (errors, delete-undo grace period)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.toast-host {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 400;
+  max-width: 380px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--ink-primary);
+  color: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-sm);
+  animation: toast-in 160ms ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-error {
+  background: var(--deadline-red);
+}
+
+.toast-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.toast-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--text-md);
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.toast-dismiss:hover {
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   App loading / load-error state
+   ═══════════════════════════════════════════════════════════════════ */
+
+.app-loading {
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: app-spinner 800ms linear infinite;
+}
+
+@keyframes app-spinner {
+  to { transform: rotate(360deg); }
+}
+
+.app-loading-text {
+  color: var(--ink-tertiary);
+  font-size: var(--text-base);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Narrow-window layout — below 900px the fixed-width detail panel
+   would crush the task list and toolbar, so it floats as an overlay.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  .detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(340px, 88vw);
+    z-index: 250;
+    box-shadow: var(--shadow-popover);
+  }
+}
+
+/* Project notes shown under the progress row in project views. */
+.project-notes {
+  margin: 0 0 var(--sp-3);
+  padding: 0 var(--sp-1);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

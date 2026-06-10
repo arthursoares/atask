@@ -108,6 +108,8 @@ function getViewConfig(activeView: string, projectTitle?: string, areaTitle?: st
       return { title: "Someday", icon: <SomedayIcon /> };
     case "logbook":
       return { title: "Logbook", icon: <LogbookIcon /> };
+    case "settings":
+      return { title: "Settings", icon: null };
     default:
       if (activeView.startsWith("project-")) {
         return { title: projectTitle ?? "Project", icon: null };
@@ -179,7 +181,7 @@ export default function Toolbar() {
         </button>
         <button
           className="toolbar-btn"
-          title="Command Palette (⌘⇧P)"
+          title="Command Palette (⌘K)"
           aria-label="Open command palette"
           onClick={() => setShowPalette(true)}
         >

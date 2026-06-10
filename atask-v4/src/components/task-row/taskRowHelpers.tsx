@@ -11,20 +11,34 @@ import {
   updateTask,
 } from "../../store";
 
-export function formatDeadline(deadline: string): string {
+function deadlineDiffDays(deadline: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const d = new Date(deadline);
-  d.setHours(0, 0, 0, 0);
+  // deadline is a plain YYYY-MM-DD — anchor it to *local* midnight.
+  // new Date("YYYY-MM-DD") parses as UTC and is off by a day west of UTC.
+  const d = new Date(`${deadline.slice(0, 10)}T00:00:00`);
 
-  const diffDays = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function formatDeadline(deadline: string): string {
+  const diffDays = deadlineDiffDays(deadline);
 
   if (diffDays < 0) return "Overdue";
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
 
+  const d = new Date(`${deadline.slice(0, 10)}T00:00:00`);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** Red only when it actually demands attention — otherwise neutral. */
+export function deadlineUrgency(deadline: string): "overdue" | "soon" | "future" {
+  const diffDays = deadlineDiffDays(deadline);
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 1) return "soon";
+  return "future";
 }
 
 export function buildTaskContextMenuItems(task: Task, isCompleted: boolean, isCancelled: boolean): MenuItem[] {
@@ -40,7 +54,7 @@ export function buildTaskContextMenuItems(task: Task, isCompleted: boolean, isCa
       },
     },
     {
-      label: "Cancel",
+      label: "Mark Cancelled",
       onClick: () => cancelTask(task.id),
     },
     { separator: true },
@@ -62,7 +76,7 @@ export function buildTaskContextMenuItems(task: Task, isCompleted: boolean, isCa
     },
     {
       label: "Someday",
-      shortcut: "⌘O",
+      shortcut: "⌘S",
       onClick: () => updateTask({ id: task.id, schedule: 2 }),
     },
     {
@@ -116,7 +130,7 @@ export function TaskMeta({
       metaItems.push(<span key="sep-deadline" className="task-meta-sep">·</span>);
     }
     metaItems.push(
-      <span key="deadline" className="task-deadline">
+      <span key="deadline" className={`task-deadline task-deadline-${deadlineUrgency(task.deadline)}`}>
         {formatDeadline(task.deadline)}
       </span>,
     );
