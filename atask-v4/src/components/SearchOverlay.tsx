@@ -210,20 +210,28 @@ export default function SearchOverlay() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="search-overlay-results"
+            aria-activedescendant={results[activeIndex] ? `search-item-${activeIndex}` : undefined}
+            aria-label="Search tasks"
           />
           <span className="cmd-shortcut">⌘F</span>
         </div>
-        <div className="cmd-results" ref={resultsRef}>
+        <div className="cmd-results" id="search-overlay-results" role="listbox" aria-label="Search results" ref={resultsRef}>
           {results.map((result, index) => {
             const isActive = index === activeIndex;
             return (
               <div
                 key={`${result.type}-${result.id}`}
+                id={`search-item-${index}`}
+                role="option"
+                aria-selected={isActive}
                 className={`cmd-item${isActive ? " active" : ""}`}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => handleSelect(result)}
               >
-                <span className="cmd-item-icon">
+                <span className="cmd-item-icon" aria-hidden="true">
                   {result.type === "project" ? "📁" : "☐"}
                 </span>
                 <span className="cmd-item-label">
@@ -239,9 +247,12 @@ export default function SearchOverlay() {
                     </span>
                   )}
                 </span>
-                <span className="cmd-item-shortcut cmd-item-type">
-                  {result.type}
-                </span>
+                {/* Nearly every result is a task — only label the exceptions. */}
+                {result.type !== "task" && (
+                  <span className="cmd-item-shortcut cmd-item-type">
+                    {result.type}
+                  </span>
+                )}
               </div>
             );
           })}

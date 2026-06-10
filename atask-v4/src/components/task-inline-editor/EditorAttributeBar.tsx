@@ -15,19 +15,34 @@ interface EditorAttributeBarProps {
   onShowProjectPicker: () => void;
 }
 
+// Interactive pills render as real buttons so they're focusable and
+// activate on Enter/Space; static pills (attribute display) stay spans.
 function EditorPill({
   className,
   children,
   onClick,
+  label,
 }: {
   className: string;
   children: ReactNode;
   onClick?: () => void;
+  label?: string;
 }) {
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick} aria-label={label}>
+        {children}
+      </button>
+    );
+  }
+  return <span className={className}>{children}</span>;
+}
+
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <span className={className} onClick={onClick}>
-      {children}
-    </span>
+    <button type="button" className="remove" aria-label={label} onClick={onClick}>
+      ×
+    </button>
   );
 }
 
@@ -49,7 +64,7 @@ export default function EditorAttributeBar({
       {scheduleLabel && (
         <EditorPill className="attr-pill attr-today">
           {scheduleLabel}
-          <span className="remove" onClick={onRemoveSchedule}>×</span>
+          <RemoveButton label="Remove schedule" onClick={onRemoveSchedule} />
         </EditorPill>
       )}
 
@@ -60,32 +75,32 @@ export default function EditorAttributeBar({
             style={{ background: project.color || 'var(--accent)' }}
           />
           {project.title}
-          <span className="remove" onClick={onRemoveProject}>×</span>
+          <RemoveButton label="Remove from project" onClick={onRemoveProject} />
         </EditorPill>
       )}
 
       {taskTags.map((tag) => (
         <EditorPill key={tag.id} className="attr-pill attr-tag">
           {tag.title}
-          <span className="remove" onClick={() => onRemoveTag(tag.id)}>×</span>
+          <RemoveButton label={`Remove tag ${tag.title}`} onClick={() => onRemoveTag(tag.id)} />
         </EditorPill>
       ))}
 
       {!scheduleLabel && (
-        <EditorPill className="attr-pill attr-add" onClick={onShowWhenPicker}>
+        <EditorPill className="attr-pill attr-add" onClick={onShowWhenPicker} label="Set schedule">
           When
         </EditorPill>
       )}
-      <EditorPill className="attr-pill attr-add" onClick={onShowTagPicker}>
+      <EditorPill className="attr-pill attr-add" onClick={onShowTagPicker} label="Add tag">
         +Tag
       </EditorPill>
       {!task.repeatRule && (
-        <EditorPill className="attr-pill attr-add" onClick={onShowRepeatPicker}>
+        <EditorPill className="attr-pill attr-add" onClick={onShowRepeatPicker} label="Set repeat rule">
           Repeat
         </EditorPill>
       )}
       {!task.projectId && (
-        <EditorPill className="attr-pill attr-add" onClick={onShowProjectPicker}>
+        <EditorPill className="attr-pill attr-add" onClick={onShowProjectPicker} label="Move to project">
           Project
         </EditorPill>
       )}

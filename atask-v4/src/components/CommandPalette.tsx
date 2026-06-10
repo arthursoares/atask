@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { ReactNode } from "react";
 import { todayLocal } from '../lib/dates';
 import { useStore } from "@nanostores/react";
 import {
@@ -11,10 +12,52 @@ import {
   createTask,
   createProject,
 } from "../store/index";
+import {
+  InboxIcon,
+  TodayIcon,
+  UpcomingIcon,
+  SomedayIcon,
+  LogbookIcon,
+} from "./sidebar/SidebarIcons";
+
+// Monochrome line icons matching the sidebar set — the palette previously
+// mixed colored emoji into an otherwise line-icon design language.
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <path d="M13 9.5A5.5 5.5 0 0 1 6.5 3 5.5 5.5 0 1 0 13 9.5z" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <polyline points="3 8.5 6.5 12 13 4.5" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <line x1="8" y1="3" x2="8" y2="13" />
+      <line x1="3" y1="8" x2="13" y2="8" />
+    </svg>
+  );
+}
 
 interface Command {
   group: string;
-  icon: string;
+  icon: ReactNode;
   label: string;
   shortcut?: string;
   action: () => void;
@@ -65,7 +108,7 @@ export default function CommandPalette() {
       // Navigation group
       {
         group: "Navigation",
-        icon: "📥",
+        icon: <InboxIcon />,
         label: "Go to Inbox",
         shortcut: "⌘1",
         keywords: ["inbox", "navigate"],
@@ -76,7 +119,7 @@ export default function CommandPalette() {
       },
       {
         group: "Navigation",
-        icon: "★",
+        icon: <TodayIcon />,
         label: "Go to Today",
         shortcut: "⌘2",
         keywords: ["today", "navigate"],
@@ -87,7 +130,7 @@ export default function CommandPalette() {
       },
       {
         group: "Navigation",
-        icon: "📅",
+        icon: <UpcomingIcon />,
         label: "Go to Upcoming",
         shortcut: "⌘3",
         keywords: ["upcoming", "navigate", "scheduled"],
@@ -98,7 +141,7 @@ export default function CommandPalette() {
       },
       {
         group: "Navigation",
-        icon: "🕐",
+        icon: <SomedayIcon />,
         label: "Go to Someday",
         shortcut: "⌘4",
         keywords: ["someday", "navigate", "later"],
@@ -109,7 +152,7 @@ export default function CommandPalette() {
       },
       {
         group: "Navigation",
-        icon: "📖",
+        icon: <LogbookIcon />,
         label: "Go to Logbook",
         shortcut: "⌘5",
         keywords: ["logbook", "navigate", "completed", "done"],
@@ -126,7 +169,7 @@ export default function CommandPalette() {
       commands.push(
         {
           group: "Task Actions",
-          icon: "★",
+          icon: <TodayIcon />,
           label: "Schedule for Today",
           shortcut: "⌘T",
           keywords: ["schedule", "today", "task"],
@@ -138,7 +181,7 @@ export default function CommandPalette() {
         },
         {
           group: "Task Actions",
-          icon: "🌙",
+          icon: <MoonIcon />,
           label: "Schedule for Evening",
           shortcut: "⌘E",
           keywords: ["schedule", "evening", "task", "tonight"],
@@ -150,9 +193,9 @@ export default function CommandPalette() {
         },
         {
           group: "Task Actions",
-          icon: "📦",
+          icon: <SomedayIcon />,
           label: "Schedule for Someday",
-          shortcut: "⌘O",
+          shortcut: "⌘S",
           keywords: ["schedule", "someday", "task", "later"],
           action: () => {
             updateTask({ id: taskId, schedule: 2 });
@@ -161,9 +204,9 @@ export default function CommandPalette() {
         },
         {
           group: "Task Actions",
-          icon: "✓",
+          icon: <CheckIcon />,
           label: "Complete Task",
-          shortcut: "⌘K",
+          shortcut: "⇧⌘C",
           keywords: ["complete", "done", "finish", "task"],
           action: () => {
             completeTask(taskId);
@@ -172,7 +215,7 @@ export default function CommandPalette() {
         },
         {
           group: "Task Actions",
-          icon: "🗑",
+          icon: <TrashIcon />,
           label: "Delete Task",
           shortcut: "⌫",
           keywords: ["delete", "remove", "task"],
@@ -188,7 +231,7 @@ export default function CommandPalette() {
     commands.push(
       {
         group: "Create",
-        icon: "+",
+        icon: <PlusIcon />,
         label: "New Task",
         shortcut: "⌘N",
         keywords: ["new", "create", "add", "task"],
@@ -199,7 +242,7 @@ export default function CommandPalette() {
       },
       {
         group: "Create",
-        icon: "+",
+        icon: <PlusIcon />,
         label: "New Project",
         shortcut: "⌘⇧N",
         keywords: ["new", "create", "add", "project"],
@@ -273,24 +316,32 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="cmd-palette-results"
+            aria-activedescendant={`cmd-item-${activeIndex}`}
+            aria-label="Type a command or search"
           />
-          <span className="cmd-shortcut">⇧⌘O</span>
+          <span className="cmd-shortcut">⌘K</span>
         </div>
-        <div className="cmd-results">
+        <div className="cmd-results" id="cmd-palette-results" role="listbox" aria-label="Commands">
           {groups.map((group) => (
-            <div key={group.label}>
-              <div className="cmd-group-label">{group.label}</div>
+            <div key={group.label} role="group" aria-label={group.label}>
+              <div className="cmd-group-label" aria-hidden="true">{group.label}</div>
               {group.commands.map((cmd) => {
                 const currentIndex = flatIndex++;
                 const isActive = currentIndex === activeIndex;
                 return (
                   <div
                     key={cmd.label}
+                    id={`cmd-item-${currentIndex}`}
+                    role="option"
+                    aria-selected={isActive}
                     className={`cmd-item${isActive ? " active" : ""}`}
                     onMouseEnter={() => setActiveIndex(currentIndex)}
                     onClick={cmd.action}
                   >
-                    <span className="cmd-item-icon">{cmd.icon}</span>
+                    <span className="cmd-item-icon" aria-hidden="true">{cmd.icon}</span>
                     <span className="cmd-item-label">{cmd.label}</span>
                     {cmd.shortcut && (
                       <span className="cmd-item-shortcut">{cmd.shortcut}</span>
