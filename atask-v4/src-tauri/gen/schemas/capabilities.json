@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Core permissions for the main window: event listen/emit for the sync engine's store-changed reloads, window start-dragging for the overlay title bar drag region.","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-start-dragging"]}}
