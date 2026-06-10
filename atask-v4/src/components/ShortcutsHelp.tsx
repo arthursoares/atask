@@ -38,11 +38,10 @@ const shortcuts: ShortcutCategory[] = [
   { category: 'Scheduling', items: [
     { keys: '⌘T', action: 'Schedule Today' },
     { keys: '⌘E', action: 'Schedule Evening' },
-    { keys: '⌘O', action: 'Schedule Someday' },
+    { keys: '⌘S', action: 'Schedule Someday' },
   ]},
   { category: 'Tools', items: [
-    { keys: '⌘K', action: 'Command palette' },
-    { keys: '⇧⌘O', action: 'Command palette' },
+    { keys: '⌘K / ⇧⌘P', action: 'Command palette' },
     { keys: '⌘F', action: 'Search' },
     { keys: '⇧⌘M', action: 'Move to project' },
     { keys: '⌘?', action: 'This help' },
