@@ -21,8 +21,11 @@ import {
   $expandedTaskId,
   $activeTagFilters,
 } from './ui';
+import { showToast, showErrorToast } from './toasts';
 import type {
   Task,
+  TaskTag,
+  TaskLink,
   Project,
   Area,
   Section,
@@ -83,11 +86,6 @@ function removeTaskArtifacts(taskIds: Set<string>): void {
   $taskTags.set($taskTags.get().filter((taskTag) => !taskIds.has(taskTag.taskId)));
   $taskLinks.set($taskLinks.get().filter((link) => !taskIds.has(link.taskId) && !taskIds.has(link.linkedTaskId)));
   clearTaskUiState(taskIds);
-}
-
-function deleteTaskFromStores(taskId: string): void {
-  $tasks.set(removeItem($tasks.get(), taskId));
-  removeTaskArtifacts(new Set([taskId]));
 }
 
 function deleteProjectFromStores(projectId: string): void {
@@ -204,10 +202,88 @@ export async function duplicateTask(id: string): Promise<void> {
   notifySync();
 }
 
+// --- Soft delete with undo grace period ---
+//
+// Deleting removes the task(s) from the stores immediately but defers the
+// backend delete until the undo toast expires. Undo restores the captured
+// rows without any backend round-trip. If the app quits before the timer
+// fires the delete is simply lost — the fail-safe direction (task survives).
+
+const UNDO_GRACE_MS = 6000;
+
+interface PendingDelete {
+  tasks: Task[];
+  checklist: ChecklistItem[];
+  taskTags: TaskTag[];
+  taskLinks: TaskLink[];
+  timer: number;
+}
+
+const pendingDeletes = new Map<number, PendingDelete>();
+let nextPendingDeleteKey = 1;
+
 export async function deleteTask(id: string): Promise<void> {
-  await tauri.deleteTask(id);
-  deleteTaskFromStores(id);
-  notifySync();
+  await deleteTasksWithUndo([id]);
+}
+
+export async function deleteTasksWithUndo(ids: string[]): Promise<void> {
+  const idSet = new Set(ids);
+  const tasksToDelete = $tasks.get().filter((t) => idSet.has(t.id));
+  if (tasksToDelete.length === 0) return;
+
+  const snapshot: PendingDelete = {
+    tasks: tasksToDelete,
+    checklist: $checklistItems.get().filter((item) => idSet.has(item.taskId)),
+    taskTags: $taskTags.get().filter((tt) => idSet.has(tt.taskId)),
+    taskLinks: $taskLinks.get().filter((link) => idSet.has(link.taskId) || idSet.has(link.linkedTaskId)),
+    timer: 0,
+  };
+
+  // Remove from the UI right away.
+  $tasks.set($tasks.get().filter((t) => !idSet.has(t.id)));
+  removeTaskArtifacts(idSet);
+
+  const key = nextPendingDeleteKey++;
+  pendingDeletes.set(key, snapshot);
+
+  const commit = async () => {
+    if (!pendingDeletes.delete(key)) return;
+    try {
+      for (const task of snapshot.tasks) {
+        await tauri.deleteTask(task.id);
+      }
+      notifySync();
+    } catch (err) {
+      showErrorToast(`Couldn't delete ${snapshot.tasks.length === 1 ? 'task' : 'tasks'}: ${String(err)}`);
+      await loadAll();
+    }
+  };
+
+  snapshot.timer = window.setTimeout(() => { void commit(); }, UNDO_GRACE_MS);
+
+  const label =
+    tasksToDelete.length === 1
+      ? `Deleted "${truncate(tasksToDelete[0].title || 'Untitled task', 40)}"`
+      : `Deleted ${tasksToDelete.length} tasks`;
+
+  showToast(label, {
+    actionLabel: 'Undo',
+    duration: UNDO_GRACE_MS,
+    onAction: () => {
+      const pending = pendingDeletes.get(key);
+      if (!pending) return;
+      window.clearTimeout(pending.timer);
+      pendingDeletes.delete(key);
+      $tasks.set([...$tasks.get(), ...pending.tasks]);
+      $checklistItems.set([...$checklistItems.get(), ...pending.checklist]);
+      $taskTags.set([...$taskTags.get(), ...pending.taskTags]);
+      $taskLinks.set([...$taskLinks.get(), ...pending.taskLinks]);
+    },
+  });
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 export async function reorderTasks(moves: ReorderMove[]): Promise<void> {
