@@ -262,6 +262,7 @@ function SidebarProjectGroup({
         activeId={reorderState.activeId}
         grabOffsetX={reorderState.grabOffsetX}
         grabOffsetY={reorderState.grabOffsetY}
+        settleTo={reorderState.settleTo}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}
@@ -752,6 +753,7 @@ export default function Sidebar() {
         activeId={areaReorder.reorderState.activeId}
         grabOffsetX={areaReorder.reorderState.grabOffsetX}
         grabOffsetY={areaReorder.reorderState.grabOffsetY}
+        settleTo={areaReorder.reorderState.settleTo}
         cursorX={areaReorder.reorderState.cursorX}
         cursorY={areaReorder.reorderState.cursorY}
         itemWidth={areaItemWidth}

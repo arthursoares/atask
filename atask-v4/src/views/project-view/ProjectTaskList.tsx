@@ -3,7 +3,7 @@ import useForeignDropIndex from '../../hooks/useForeignDropIndex';
 import TaskRow, { shouldHandleTaskRowPointerDown } from '../../components/TaskRow';
 import TaskInlineEditor from '../../components/TaskInlineEditor';
 import NewTaskRow from '../../components/NewTaskRow';
-import DropSlot from '../../components/task-row/DropSlot';
+import DropGap from '../../components/task-row/DropGap';
 import DragOverlay from '../../components/DragOverlay';
 import TaskDragClone from '../../components/task-row/TaskDragClone';
 import usePointerReorder from '../../hooks/usePointerReorder';
@@ -290,21 +290,14 @@ export default function ProjectTaskList({
       foreignDrop.isForeignHovering &&
       foreignDrop.dropIndex === index;
 
-    if (!localVisible && !foreignVisible) return null;
-
-    const edgeClass = index === 0
-      ? ' task-drop-zone-edge-top'
-      : index === tasks.length
-        ? ' task-drop-zone-edge-bottom'
-        : '';
-
+    const edge = index === 0 ? 'top' as const : index === tasks.length ? 'bottom' as const : null;
     return (
-      <div
+      <DropGap
         key={`drop-zone-${index}`}
-        className={`task-drop-zone${edgeClass}`}
-      >
-        <DropSlot />
-      </div>
+        active={isDragging || foreignDrop.isForeignHovering}
+        open={localVisible || foreignVisible}
+        edge={edge}
+      />
     );
   };
 
@@ -359,6 +352,7 @@ export default function ProjectTaskList({
         activeId={reorderState.activeId}
         grabOffsetX={reorderState.grabOffsetX}
         grabOffsetY={reorderState.grabOffsetY}
+        settleTo={reorderState.settleTo}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}

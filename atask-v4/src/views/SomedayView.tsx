@@ -19,7 +19,7 @@ import TaskRow, { shouldHandleTaskRowPointerDown } from '../components/TaskRow';
 import TaskInlineEditor from '../components/TaskInlineEditor';
 import NewTaskRow from '../components/NewTaskRow';
 import EmptyState from '../components/EmptyState';
-import DropSlot from '../components/task-row/DropSlot';
+import DropGap from '../components/task-row/DropGap';
 import DragOverlay from '../components/DragOverlay';
 import TaskDragClone from '../components/task-row/TaskDragClone';
 import usePointerReorder from '../hooks/usePointerReorder';
@@ -96,27 +96,12 @@ export default function SomedayView() {
   const itemWidth = reorderState.activeId ? getItemRect(reorderState.activeId)?.width ?? null : null;
 
   const renderDropZone = (index: number) => {
-    if (!isDragging) return null;
-
-    const isVisible = reorderState.dropIndex === index
+    const open = isDragging
+      && reorderState.dropIndex === index
       && index !== draggedTaskIndex
       && index !== draggedTaskIndex + 1;
-    const edgeClass = index === 0
-      ? ' task-drop-zone-edge-top'
-      : index === tasks.length
-        ? ' task-drop-zone-edge-bottom'
-        : '';
-
-    if (!isVisible) return null;
-
-    return (
-      <div
-        key={`drop-zone-${index}`}
-        className={`task-drop-zone${edgeClass}`}
-      >
-        <DropSlot />
-      </div>
-    );
+    const edge = index === 0 ? 'top' as const : index === tasks.length ? 'bottom' as const : null;
+    return <DropGap key={`drop-zone-${index}`} active={isDragging} open={open} edge={edge} />;
   };
 
   const renderDragClone = (id: string) => {
@@ -162,6 +147,7 @@ export default function SomedayView() {
         activeId={reorderState.activeId}
         grabOffsetX={reorderState.grabOffsetX}
         grabOffsetY={reorderState.grabOffsetY}
+        settleTo={reorderState.settleTo}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}

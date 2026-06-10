@@ -55,12 +55,19 @@ test('single drag: lift clone, ghost row, drop gap', async ({ page }) => {
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/d1-mid-drag.png` });
 
-  // Drop gap exists and the floating clone shows the row identity
-  await expect(page.locator('.task-drop-zone')).toHaveCount(1);
+  // WDIO-aligned DOM contract: all n+1 gaps carry task-drop-zone during
+  // a drag, exactly one is open and contains the slot indicator line.
+  await expect(page.locator('.task-drop-zone')).toHaveCount(7);
+  await expect(page.locator('.task-drop-gap-open')).toHaveCount(1);
+  await expect(page.locator('.task-drop-slot')).toHaveCount(1);
   await expect(page.locator('.drag-clone .drag-clone-title')).toHaveText('Task number 2');
 
   await page.mouse.up();
-  await page.waitForTimeout(300);
+
+  // Settle: the clone glides to its landing slot before unmounting.
+  await expect(page.locator('.drag-overlay-settling')).toHaveCount(1);
+  await page.waitForTimeout(400);
+  await expect(page.locator('.drag-clone')).toHaveCount(0);
   await page.screenshot({ path: `${OUT}/d2-after-drop.png` });
 
   // Order actually changed: task 2 now sits after task 4

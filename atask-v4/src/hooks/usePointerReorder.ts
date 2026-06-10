@@ -21,6 +21,13 @@ export interface PointerReorderState {
    */
   grabOffsetX: number;
   grabOffsetY: number;
+  /**
+   * When set, the drop has been committed and the floating clone should
+   * glide to this viewport position before unmounting (Things-style
+   * settle). `absorb` marks cross-list drops where the card shrinks and
+   * fades into the target instead of landing as a row.
+   */
+  settleTo: { x: number; y: number; absorb: boolean } | null;
 }
 
 type StartEvent = React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>;
@@ -74,6 +81,10 @@ interface PointerDragSession {
 const POINTER_DRAG_THRESHOLD = 8;
 const POINTER_DRAG_HOLD_MS = 150;
 
+// Duration of the post-drop settle glide. Must match the transition in
+// theme.css (.drag-overlay-settling).
+const SETTLE_MS = 170;
+
 // Edge autoscroll: dragging within this distance of the scroll container's
 // top/bottom edge scrolls it, speed ramping up the closer to the edge.
 const AUTOSCROLL_EDGE_PX = 56;
@@ -120,9 +131,13 @@ export default function usePointerReorder<T extends ReorderableItem>({
     cursorY: null,
     grabOffsetX: 0,
     grabOffsetY: 0,
+    settleTo: null,
   });
   const reorderStateRef = useRef(reorderState);
   const sessionRef = useRef<PointerDragSession | null>(null);
+  // True from drop-commit until the settle glide finishes — pointer events
+  // arriving in that window must not resurrect the drag.
+  const settlingRef = useRef(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
   const onDragStartRef = useRef(onDragStart);
@@ -237,6 +252,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     const prevId = sessionRef.current?.id ?? null;
     sessionRef.current = null;
+    settlingRef.current = false;
     stopAutoScroll();
     lastCursorRef.current = null;
     document.body.classList.remove('is-pointer-dragging');
@@ -248,6 +264,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorY: null,
       grabOffsetX: 0,
       grabOffsetY: 0,
+      settleTo: null,
     });
     if (listId && kind) {
       cancelCursorPublish();
@@ -311,6 +328,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
         cursorY: args.clientY,
         grabOffsetX,
         grabOffsetY,
+        settleTo: null,
       });
       if (listId && kind) {
         startPointerDragCursor(args.id, kind, listId, args.clientX, args.clientY);
@@ -320,6 +338,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
   }, [setReorderStateSync, listId, kind]);
 
   const updateReorder = useCallback((event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
+    if (settlingRef.current) return;
     const session = sessionRef.current;
     if (!session || session.inputType !== inputType) return;
     if (inputType === 'pointer' && session.pointerId !== (event as PointerEvent).pointerId) return;
@@ -345,6 +364,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       cursorY: event.clientY,
       grabOffsetX: session.grabOffsetX,
       grabOffsetY: session.grabOffsetY,
+      settleTo: null,
     });
 
     // Keep the autoscroll loop fed with the latest cursor position; it only
@@ -373,6 +393,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
   }, [getDropIndex, setReorderStateSync, startAutoScroll]);
 
   const commitReorder = useCallback(async (event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
+    if (settlingRef.current) return;
     const session = sessionRef.current;
     if (!session || session.inputType !== inputType) return;
     if (inputType === 'pointer' && session.pointerId !== (event as PointerEvent).pointerId) return;
@@ -393,13 +414,33 @@ export default function usePointerReorder<T extends ReorderableItem>({
     const dropTarget = document.elementFromPoint(cursorX, cursorY);
     const sidebarItem = dropTarget?.closest('[data-sidebar-item-id]');
 
+    // Settle: keep the floating clone mounted and glide it to `rect`
+    // before tearing the drag down, so drops land instead of vanishing.
+    const settleAndFinish = (rect: { left: number; top: number } | null, absorb: boolean) => {
+      if (!rect) {
+        cancelReorder();
+        return;
+      }
+      settlingRef.current = true;
+      stopAutoScroll();
+      document.body.classList.remove('is-pointer-dragging');
+      setReorderStateSync({
+        ...reorderStateRef.current,
+        isPointerDragging: false,
+        dropIndex: null,
+        settleTo: { x: rect.left, y: rect.top, absorb },
+      });
+      window.setTimeout(() => cancelReorder(), SETTLE_MS + 30);
+    };
+
     if (sidebarItem && onCrossListDropRef.current) {
       const handled = onCrossListDropRef.current(currentState.activeId, sidebarItem, {
         x: cursorX,
         y: cursorY,
       });
       if (handled) {
-        cancelReorder();
+        // The task left this list — shrink the card into the target.
+        settleAndFinish(sidebarItem.getBoundingClientRect(), true);
         return;
       }
     }
@@ -443,21 +484,35 @@ export default function usePointerReorder<T extends ReorderableItem>({
 
     const reordered = [...remaining.slice(0, targetIndex), ...movedItems, ...remaining.slice(targetIndex)];
 
-    // Bail if the order is unchanged (drop point lands on same spot).
+    // Order unchanged (drop point lands on the same spot): spring the
+    // card back onto its row instead of blinking out.
     const unchanged =
       reordered.length === items.length &&
       reordered.every((item, i) => item.id === items[i].id);
     if (unchanged) {
-      cancelReorder();
+      const node = itemElementsRef.current.get(currentState.activeId);
+      settleAndFinish(node ? node.getBoundingClientRect() : null, false);
       return;
     }
 
     try {
       await onReorder(reordered.map((item, index) => ({ id: item.id, index })));
-    } finally {
+    } catch {
       cancelReorder();
+      return;
     }
-  }, [cancelReorder, items, onReorder]);
+
+    // Let React re-render the list in its new order, then glide the card
+    // onto the row's landing position.
+    const droppedId = currentState.activeId;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!sessionRef.current) return; // a cancel beat us to it
+        const node = itemElementsRef.current.get(droppedId);
+        settleAndFinish(node ? node.getBoundingClientRect() : null, false);
+      });
+    });
+  }, [cancelReorder, items, onReorder, setReorderStateSync, stopAutoScroll]);
 
   useEffect(() => {
     const cancelMouseSession = () => {
