@@ -7,6 +7,13 @@ interface DragOverlayProps {
   cursorY: number | null;
   itemWidth: number | null;
   renderClone: (id: string) => ReactNode;
+  /**
+   * Pointer-to-item-origin offset captured at pickup (see
+   * PointerReorderState.grabOffsetX/Y). Keeps the clone pinned under the
+   * grab point instead of snapping its corner to the cursor.
+   */
+  grabOffsetX?: number;
+  grabOffsetY?: number;
 }
 
 export default function DragOverlay({
@@ -15,6 +22,8 @@ export default function DragOverlay({
   cursorY,
   itemWidth,
   renderClone,
+  grabOffsetX = 0,
+  grabOffsetY = 0,
 }: DragOverlayProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -34,18 +43,29 @@ export default function DragOverlay({
     };
   }, []);
 
+  // Things-style compact card: cap the clone width so carrying a task
+  // across the window (e.g. onto a sidebar target) doesn't occlude the
+  // drop target with a full-row-width slab. Clamp the grab anchor into
+  // the capped card so the cursor always stays on the card.
+  const cloneWidth = itemWidth != null ? Math.min(itemWidth, 340) : null;
+  const effectiveOffsetX = cloneWidth != null
+    ? Math.min(grabOffsetX, cloneWidth - 48)
+    : grabOffsetX;
+
   useEffect(() => {
     if (ref.current) {
-      ref.current.style.transform = `translate(${cursorX ?? 0}px, ${(cursorY ?? 0) - 20}px)`;
+      const x = (cursorX ?? 0) - effectiveOffsetX;
+      const y = (cursorY ?? 0) - grabOffsetY;
+      ref.current.style.transform = `translate(${x}px, ${y}px)`;
     }
-  }, [cursorX, cursorY]);
+  }, [cursorX, cursorY, effectiveOffsetX, grabOffsetY]);
 
   if (!activeId || !ref.current) return null;
 
   const clone = renderClone(activeId);
 
   return createPortal(
-    <div style={{ width: itemWidth ?? 'auto' }}>
+    <div className="drag-overlay-lift" style={{ width: cloneWidth ?? 'auto' }}>
       {clone}
     </div>,
     ref.current

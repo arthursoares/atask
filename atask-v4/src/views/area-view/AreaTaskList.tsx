@@ -3,6 +3,7 @@ import TaskRow, { shouldHandleTaskRowPointerDown } from '../../components/TaskRo
 import TaskInlineEditor from '../../components/TaskInlineEditor';
 import DropSlot from '../../components/task-row/DropSlot';
 import DragOverlay from '../../components/DragOverlay';
+import TaskDragClone from '../../components/task-row/TaskDragClone';
 import usePointerReorder from '../../hooks/usePointerReorder';
 import type { ReorderMove, Task } from '../../types';
 import { startTaskPointerDrag, endTaskPointerDrag, updateTask, $projects, $selectedTaskIds } from '../../store/index';
@@ -114,20 +115,7 @@ export default function AreaTaskList({
   const renderDragClone = (id: string) => {
     const task = tasks.find((t) => t.id === id);
     if (!task) return null;
-    return (
-      <div
-        style={{
-          background: 'var(--sidebar-hover)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: '8px 12px',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-base)', color: 'var(--ink-primary)' }}>
-          {task.title}
-        </span>
-      </div>
-    );
+    return <TaskDragClone task={task} />;
   };
 
   if (tasks.length === 0) return null;
@@ -161,6 +149,8 @@ export default function AreaTaskList({
       {renderDropZone(tasks.length)}
       <DragOverlay
         activeId={reorderState.activeId}
+        grabOffsetX={reorderState.grabOffsetX}
+        grabOffsetY={reorderState.grabOffsetY}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}

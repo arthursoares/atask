@@ -195,17 +195,13 @@ function SidebarProjectGroup({
     const project = projects.find((p) => p.id === id);
     if (!project) return null;
     return (
-      <div
-        style={{
-          background: 'var(--sidebar-hover)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: '8px 12px',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
-          {project.title}
-        </span>
+      <div className="drag-clone drag-clone-compact">
+        <span
+          className="drag-clone-dot"
+          style={{ background: project.color || 'var(--accent)' }}
+          aria-hidden="true"
+        />
+        <span className="drag-clone-title">{project.title}</span>
       </div>
     );
   };
@@ -264,6 +260,8 @@ function SidebarProjectGroup({
       {renderDropZone(projects.length)}
       <DragOverlay
         activeId={reorderState.activeId}
+        grabOffsetX={reorderState.grabOffsetX}
+        grabOffsetY={reorderState.grabOffsetY}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}
@@ -524,17 +522,8 @@ export default function Sidebar() {
     const area = areas.find((a) => a.id === id);
     if (!area) return null;
     return (
-      <div
-        style={{
-          background: 'var(--sidebar-hover)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: '8px 12px',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
-          {area.title}
-        </span>
+      <div className="drag-clone drag-clone-compact">
+        <span className="drag-clone-title">{area.title}</span>
       </div>
     );
   };
@@ -761,6 +750,8 @@ export default function Sidebar() {
 
       <DragOverlay
         activeId={areaReorder.reorderState.activeId}
+        grabOffsetX={areaReorder.reorderState.grabOffsetX}
+        grabOffsetY={areaReorder.reorderState.grabOffsetY}
         cursorX={areaReorder.reorderState.cursorX}
         cursorY={areaReorder.reorderState.cursorY}
         itemWidth={areaItemWidth}

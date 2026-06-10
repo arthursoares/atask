@@ -14,6 +14,13 @@ export interface PointerReorderState {
   isPointerDragging: boolean;
   cursorX: number | null;
   cursorY: number | null;
+  /**
+   * Offset between the pointer and the grabbed item's top-left corner at
+   * pickup. The drag overlay subtracts this so the floating clone stays
+   * pinned under the grab point instead of teleporting to the cursor.
+   */
+  grabOffsetX: number;
+  grabOffsetY: number;
 }
 
 type StartEvent = React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>;
@@ -60,10 +67,28 @@ interface PointerDragSession {
   startX: number;
   startY: number;
   inputType: 'pointer' | 'mouse';
+  grabOffsetX: number;
+  grabOffsetY: number;
 }
 
 const POINTER_DRAG_THRESHOLD = 8;
 const POINTER_DRAG_HOLD_MS = 150;
+
+// Edge autoscroll: dragging within this distance of the scroll container's
+// top/bottom edge scrolls it, speed ramping up the closer to the edge.
+const AUTOSCROLL_EDGE_PX = 56;
+const AUTOSCROLL_MAX_SPEED = 14;
+
+function findScrollContainer(node: HTMLElement | null): HTMLElement | null {
+  let el: HTMLElement | null = node?.parentElement ?? null;
+  while (el) {
+    const style = window.getComputedStyle(el);
+    const scrollable = /(auto|scroll|overlay)/.test(style.overflowY);
+    if (scrollable && el.scrollHeight > el.clientHeight) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
 
 export interface PointerReorderReturn {
   reorderState: PointerReorderState;
@@ -93,6 +118,8 @@ export default function usePointerReorder<T extends ReorderableItem>({
     isPointerDragging: false,
     cursorX: null,
     cursorY: null,
+    grabOffsetX: 0,
+    grabOffsetY: 0,
   });
   const reorderStateRef = useRef(reorderState);
   const sessionRef = useRef<PointerDragSession | null>(null);
@@ -149,16 +176,78 @@ export default function usePointerReorder<T extends ReorderableItem>({
     itemElementsRef.current.delete(id);
   }, []);
 
+  // --- Edge autoscroll -----------------------------------------------------
+  // While a drag is active, a rAF loop scrolls the list container when the
+  // cursor sits near its top/bottom edge, and recomputes the drop index as
+  // rows shift beneath a stationary cursor (no pointermove fires then).
+  const autoScrollRafRef = useRef<number | null>(null);
+  const lastCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const getDropIndexRef = useRef<(clientY: number) => number>(() => 0);
+
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current != null) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
+    }
+  }, []);
+
+  const startAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current != null) return;
+
+    const step = () => {
+      autoScrollRafRef.current = null;
+      const session = sessionRef.current;
+      const cursor = lastCursorRef.current;
+      if (!session || !cursor || !reorderStateRef.current.isPointerDragging) return;
+
+      const itemNode = itemElementsRef.current.get(session.id)
+        ?? itemElementsRef.current.values().next().value;
+      const container = findScrollContainer(itemNode ?? null);
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        let delta = 0;
+        if (cursor.y < rect.top + AUTOSCROLL_EDGE_PX) {
+          const intensity = Math.min(1, (rect.top + AUTOSCROLL_EDGE_PX - cursor.y) / AUTOSCROLL_EDGE_PX);
+          delta = -Math.ceil(intensity * AUTOSCROLL_MAX_SPEED);
+        } else if (cursor.y > rect.bottom - AUTOSCROLL_EDGE_PX) {
+          const intensity = Math.min(1, (cursor.y - (rect.bottom - AUTOSCROLL_EDGE_PX)) / AUTOSCROLL_EDGE_PX);
+          delta = Math.ceil(intensity * AUTOSCROLL_MAX_SPEED);
+        }
+
+        if (delta !== 0) {
+          const before = container.scrollTop;
+          container.scrollTop = before + delta;
+          if (container.scrollTop !== before) {
+            // Rows moved under the cursor — refresh the drop index.
+            const dropIndex = getDropIndexRef.current(cursor.y);
+            if (dropIndex !== reorderStateRef.current.dropIndex) {
+              setReorderStateSync({ ...reorderStateRef.current, dropIndex });
+            }
+          }
+        }
+      }
+
+      autoScrollRafRef.current = requestAnimationFrame(step);
+    };
+
+    autoScrollRafRef.current = requestAnimationFrame(step);
+  }, [setReorderStateSync]);
+
   const cancelReorder = useCallback(() => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     const prevId = sessionRef.current?.id ?? null;
     sessionRef.current = null;
+    stopAutoScroll();
+    lastCursorRef.current = null;
+    document.body.classList.remove('is-pointer-dragging');
     setReorderStateSync({
       activeId: null,
       dropIndex: null,
       isPointerDragging: false,
       cursorX: null,
       cursorY: null,
+      grabOffsetX: 0,
+      grabOffsetY: 0,
     });
     if (listId && kind) {
       cancelCursorPublish();
@@ -167,7 +256,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
     if (prevId) {
       onDragEndRef.current?.(prevId);
     }
-  }, [setReorderStateSync, listId, kind]);
+  }, [setReorderStateSync, listId, kind, stopAutoScroll]);
 
   const getOrderedItems = useCallback(() => {
     return items
@@ -192,24 +281,36 @@ export default function usePointerReorder<T extends ReorderableItem>({
     return items.length;
   }, [getOrderedItems, items]);
 
+  getDropIndexRef.current = getDropIndex;
+
   const beginReorder = useCallback((args: PointerStartArgs) => {
+    // Anchor the floating clone to where the row was actually grabbed.
+    const itemRect = itemElementsRef.current.get(args.id)?.getBoundingClientRect();
+    const grabOffsetX = itemRect ? args.clientX - itemRect.left : 0;
+    const grabOffsetY = itemRect ? args.clientY - itemRect.top : 0;
+
     sessionRef.current = {
       id: args.id,
       pointerId: args.pointerId,
       startX: args.clientX,
       startY: args.clientY,
       inputType: args.inputType,
+      grabOffsetX,
+      grabOffsetY,
     };
 
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     holdTimerRef.current = setTimeout(() => {
       if (!sessionRef.current || sessionRef.current.id !== args.id) return;
+      document.body.classList.add('is-pointer-dragging');
       setReorderStateSync({
         activeId: args.id,
         dropIndex: null,
         isPointerDragging: false,
         cursorX: args.clientX,
         cursorY: args.clientY,
+        grabOffsetX,
+        grabOffsetY,
       });
       if (listId && kind) {
         startPointerDragCursor(args.id, kind, listId, args.clientX, args.clientY);
@@ -231,6 +332,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
     const wasInactive = !reorderStateRef.current.activeId;
     if (wasInactive) {
       if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      document.body.classList.add('is-pointer-dragging');
       onDragStartRef.current?.(session.id);
     }
 
@@ -241,7 +343,14 @@ export default function usePointerReorder<T extends ReorderableItem>({
       isPointerDragging: true,
       cursorX: event.clientX,
       cursorY: event.clientY,
+      grabOffsetX: session.grabOffsetX,
+      grabOffsetY: session.grabOffsetY,
     });
+
+    // Keep the autoscroll loop fed with the latest cursor position; it only
+    // actually scrolls while the cursor sits in a container edge zone.
+    lastCursorRef.current = { x: event.clientX, y: event.clientY };
+    startAutoScroll();
 
     // Cross-list cursor publish: notify other list instances of the live
     // cursor position so they can compute their own foreign drop index.
@@ -261,7 +370,7 @@ export default function usePointerReorder<T extends ReorderableItem>({
       const sidebarItem = el?.closest('[data-sidebar-item-id]');
       setTaskPointerHoverTarget(sidebarItem?.getAttribute('data-sidebar-item-id') ?? null);
     }
-  }, [getDropIndex, setReorderStateSync]);
+  }, [getDropIndex, setReorderStateSync, startAutoScroll]);
 
   const commitReorder = useCallback(async (event: MouseEvent | PointerEvent, inputType: 'pointer' | 'mouse') => {
     const session = sessionRef.current;

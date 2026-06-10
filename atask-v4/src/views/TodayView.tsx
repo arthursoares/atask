@@ -23,6 +23,7 @@ import SectionHeader from '../components/SectionHeader';
 import EmptyState from '../components/EmptyState';
 import DropSlot from '../components/task-row/DropSlot';
 import DragOverlay from '../components/DragOverlay';
+import TaskDragClone from '../components/task-row/TaskDragClone';
 import { todayLocal, tomorrowLocal } from '../lib/dates';
 import usePointerReorder, { type PointerReorderReturn, type PointerReorderState } from '../hooks/usePointerReorder';
 
@@ -163,20 +164,7 @@ export default function TodayView() {
     const renderDragClone = (id: string) => {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
-      return (
-        <div
-          style={{
-            background: 'var(--sidebar-hover)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            padding: '8px 12px',
-          }}
-        >
-          <span style={{ fontSize: 'var(--text-base)', color: 'var(--ink-primary)' }}>
-            {task.title}
-          </span>
-        </div>
-      );
+      return <TaskDragClone task={task} />;
     };
 
     return (
@@ -209,6 +197,8 @@ export default function TodayView() {
         {renderDropZone(tasks.length)}
         <DragOverlay
           activeId={reorderState.activeId}
+          grabOffsetX={reorderState.grabOffsetX}
+          grabOffsetY={reorderState.grabOffsetY}
           cursorX={reorderState.cursorX}
           cursorY={reorderState.cursorY}
           itemWidth={itemWidth}
