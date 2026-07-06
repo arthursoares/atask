@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/atask/atask/internal/auth"
+	"github.com/atask/atask/internal/store"
 )
 
 //go:embed admin_templates/*.html
@@ -32,6 +33,7 @@ const (
 // interpolated values so a user-controlled name/email cannot inject markup.
 type AdminHandler struct {
 	auth      auth.AuthProvider
+	db        *store.DB
 	templates *template.Template
 	csrf      *csrfStore
 	sessions  *sessionStore
@@ -45,10 +47,12 @@ type AdminHandler struct {
 // NewAdminHandler parses the embedded templates and wires the shared CSRF and
 // session stores. The same store instances must be shared with requireAdmin and
 // requireCSRF (see RegisterRoutes) so tokens/sessions issued here validate there.
-func NewAdminHandler(authProvider auth.AuthProvider, csrf *csrfStore, sessions *sessionStore, secure bool) *AdminHandler {
+// db backs the Task 22 orphan-data check surfaced on the dashboard.
+func NewAdminHandler(authProvider auth.AuthProvider, db *store.DB, csrf *csrfStore, sessions *sessionStore, secure bool) *AdminHandler {
 	tmpl := template.Must(template.ParseFS(adminFS, "admin_templates/*.html"))
 	return &AdminHandler{
 		auth:      authProvider,
+		db:        db,
 		templates: tmpl,
 		csrf:      csrf,
 		sessions:  sessions,
@@ -148,16 +152,33 @@ func (h *AdminHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }
 
-// Dashboard shows the user count and a user table (GET /admin/).
+// Dashboard shows the user count, a user table, and (Task 22) an orphaned-data
+// warning banner (GET /admin/).
 func (h *AdminHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	users, total, err := h.auth.ListUsers("", 1, 100)
 	if err != nil {
 		http.Error(w, "failed to list users", http.StatusInternalServerError)
 		return
 	}
+
+	// Surface pre-multi-user orphaned rows (user_id = '') so an admin who
+	// upgraded a single-user deployment sees why data looks "missing" instead
+	// of just an empty task list. A failure here must not break the dashboard
+	// — it only degrades to omitting the banner.
+	var orphanTotal int
+	if h.db != nil {
+		counts, oerr := store.OrphanCounts(r.Context(), h.db.DB)
+		if oerr != nil {
+			slog.Error("orphan check failed", "err", oerr)
+		} else {
+			orphanTotal = store.OrphanTotal(counts)
+		}
+	}
+
 	h.render(w, "dashboard.html", map[string]any{
-		"UserCount": total,
-		"Users":     users,
+		"UserCount":   total,
+		"Users":       users,
+		"OrphanTotal": orphanTotal,
 	})
 }
 

@@ -41,12 +41,16 @@ type adminEnv struct {
 	srv      *httptest.Server
 	sessions sessionSetter
 	auth     auth.AuthProvider
+	// db is the domain SQLite database RegisterRoutes wired the dashboard to
+	// (Task 22: lets tests seed orphaned rows ahead of a dashboard GET).
+	db *store.DB
 }
 
 // setupAdminServer wires the admin routes onto PocketBase's real router over a
 // real TCP listener and seeds a single admin account (admin@test.com /
 // adminpass1). Returns the server, the shared session store (for planting
-// sessions), and the AuthProvider (for creating additional users).
+// sessions), the AuthProvider (for creating additional users), and the domain
+// DB (for seeding rows directly, e.g. orphaned data).
 func setupAdminServer(t *testing.T) adminEnv {
 	t.Helper()
 
@@ -111,7 +115,7 @@ func setupAdminServer(t *testing.T) adminEnv {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	return adminEnv{srv: srv, sessions: sessions, auth: adapter}
+	return adminEnv{srv: srv, sessions: sessions, auth: adapter, db: db}
 }
 
 // noRedirectClient returns an http.Client that surfaces 3xx responses instead
@@ -261,6 +265,34 @@ func TestAdminLoginPage_HasForm(t *testing.T) {
 	}
 	if !strings.Contains(body, `action="/admin/login"`) || !strings.Contains(body, `name="password"`) {
 		t.Errorf("login page missing expected form: %s", body)
+	}
+}
+
+// TestAdminDashboard_ShowsOrphanBanner confirms the Task 22 orphan-data
+// warning banner renders on the dashboard once a pre-multi-user row
+// (user_id = '') exists.
+func TestAdminDashboard_ShowsOrphanBanner(t *testing.T) {
+	env := setupAdminServer(t)
+
+	_, err := env.db.DB.Exec(`INSERT INTO tasks (id, user_id, title, "index", today_index, created_at, updated_at) VALUES ('orphan-1', '', 'orphan task', 0, 0, datetime('now'), datetime('now'))`)
+	if err != nil {
+		t.Fatalf("insert orphan task: %v", err)
+	}
+
+	session := loginAsAdmin(t, env, "admin@test.com", "adminpass1")
+	req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/admin/", nil)
+	req.AddCookie(session)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("GET /admin/: %v", err)
+	}
+	defer resp.Body.Close()
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for admin dashboard, got %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, "orphaned rows detected") {
+		t.Errorf("expected dashboard to show the orphan banner, got: %s", body)
 	}
 }
 

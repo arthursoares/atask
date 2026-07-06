@@ -15,20 +15,6 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
-// domainTables lists every table migration 005
-// (internal/store/migrations/005_multi_user.sql) added a user_id column to:
-// 11 domain tables (including join tables) + 2 event tables. Pre-multi-user
-// rows in these tables carry user_id = ” and are invisible to every user
-// once user-scoped filtering is enforced (Task 6) until claimed via
-// `atask admin assign-data`. This list mirrors Task 22's orphan-detection
-// startup guard (internal/store/orphan_check.go).
-var domainTables = []string{
-	"tasks", "projects", "areas", "sections", "tags",
-	"locations", "checklist_items", "activities",
-	"task_tags", "project_tags", "task_links",
-	"delta_events", "domain_events",
-}
-
 // registerAdminCommands adds `atask admin create-user` and
 // `atask admin assign-data` to app's cobra RootCmd.
 //
@@ -157,7 +143,10 @@ func readPassword() (string, error) {
 
 // assignOrphanedData opens the domain SQLite database at dbPath and, inside
 // a single transaction, sets user_id = userID on every row across
-// domainTables that currently carries user_id = ” (pre-multi-user data).
+// store.OrphanableTables that currently carries user_id = '' (pre-multi-user
+// data). store.OrphanableTables is the single canonical table list, shared
+// with the Task 22 startup guard (internal/store/orphan_check.go), so the two
+// can never silently drift apart.
 func assignOrphanedData(dbPath, userID string) error {
 	db, err := store.NewDB(dbPath)
 	if err != nil {
@@ -176,9 +165,9 @@ func assignOrphanedData(dbPath, userID string) error {
 	defer tx.Rollback()
 
 	total := int64(0)
-	for _, table := range domainTables {
-		// #nosec G201 -- table names come from the constant domainTables
-		// whitelist above, never from user input.
+	for _, table := range store.OrphanableTables {
+		// #nosec G201 -- table names come from the constant
+		// store.OrphanableTables whitelist, never from user input.
 		query := fmt.Sprintf(`UPDATE %s SET user_id = ? WHERE user_id = ''`, table)
 		res, err := tx.Exec(query, userID)
 		if err != nil {

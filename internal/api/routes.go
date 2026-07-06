@@ -187,7 +187,7 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 	// sent over plain HTTP, which would break local http://localhost login.
 	secureCookies := deps.Config != nil && strings.HasPrefix(deps.Config.BaseURL, "https://")
 
-	adminH := NewAdminHandler(deps.AuthProvider, csrf, sessions, secureCookies)
+	adminH := NewAdminHandler(deps.AuthProvider, deps.DB, csrf, sessions, secureCookies)
 	adminMW := requireAdmin(deps.AuthProvider, sessions)
 	csrfMW := requireCSRF(csrf)
 

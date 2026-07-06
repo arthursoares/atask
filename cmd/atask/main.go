@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -60,6 +62,21 @@ func main() {
 		}
 		if err := db.Migrate(); err != nil {
 			return err
+		}
+
+		// Task 22: warn operators (rather than silently appearing to lose data)
+		// when pre-multi-user rows (user_id = '') are still present. After Task 6
+		// enforces user-scoped filtering, such rows are invisible to every user
+		// until claimed via `atask admin assign-data --to <user-id>`.
+		if counts, err := store.OrphanCounts(context.Background(), db.DB); err != nil {
+			slog.Warn("orphan check failed", "err", err)
+		} else if total := store.OrphanTotal(counts); total > 0 {
+			slog.Warn(
+				"orphaned single-user data detected",
+				"tables", counts,
+				"total_rows", total,
+				"remediation", "atask admin assign-data --to <user-id>",
+			)
 		}
 
 		// Close the domain database when PocketBase shuts down. The DB is opened

@@ -4,6 +4,13 @@
 <body>
     {{template "nav" .}}
     <h1>Dashboard</h1>
+    {{if .OrphanTotal}}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+        <strong>{{.OrphanTotal}} orphaned rows detected.</strong>
+        Pre-multi-user data is not visible to any user. Run
+        <code>atask admin assign-data --to &lt;user-id&gt;</code> to claim it.
+    </div>
+    {{end}}
     <p class="stat">{{.UserCount}}</p>
     <p class="muted">total users</p>
 
