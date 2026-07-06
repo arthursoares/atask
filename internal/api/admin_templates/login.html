@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+    <h1>atask admin</h1>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <form method="post" action="/admin/login">
+        <label for="email">Email</label>
+        <input id="email" type="email" name="email" required autofocus>
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" required>
+        <button class="btn" type="submit">Log in</button>
+    </form>
+</body>
+</html>

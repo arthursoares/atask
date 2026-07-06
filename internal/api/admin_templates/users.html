@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+    {{template "nav" .}}
+    <h1>Users <span class="muted">({{.Total}})</span></h1>
+    <p><a class="btn" href="/admin/users/new">New user</a></p>
+
+    <table>
+        <thead>
+            <tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.Email}}</td>
+                <td>{{.Name}}</td>
+                <td>{{.Role}}</td>
+                <td>{{if .Disabled}}disabled{{else}}active{{end}}</td>
+                <td><a href="/admin/users/{{.ID}}">Edit</a></td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="muted">No users yet.</td></tr>
+            {{end}}
+        </tbody>
+    </table>
+</body>
+</html>

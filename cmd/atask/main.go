@@ -97,6 +97,12 @@ func main() {
 		checklistSvc := service.NewChecklistService(db, eventStore, bus)
 		activitySvc := service.NewActivityService(db, eventStore, bus)
 
+		// Web admin UI (Task 14) needs process-memory CSRF + session stores.
+		// Constructed once here so a single instance is shared across the admin
+		// handler and its middleware for the lifetime of the server.
+		csrfStore := api.NewCSRFStore()
+		sessionStore := api.NewSessionStore()
+
 		// Register the domain routes on PocketBase's router with per-route auth
 		// (Task 11) and the AuthProvider-backed /auth handlers (Task 12).
 		api.RegisterRoutes(se, api.RoutesDeps{
@@ -115,6 +121,8 @@ func main() {
 			LocationSvc:   locationSvc,
 			ChecklistSvc:  checklistSvc,
 			ActivitySvc:   activitySvc,
+			CSRFStore:     csrfStore,
+			SessionStore:  sessionStore,
 		})
 
 		return se.Next()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
 
@@ -40,6 +41,14 @@ type RoutesDeps struct {
 	LocationSvc  *service.LocationService
 	ChecklistSvc *service.ChecklistService
 	ActivitySvc  *service.ActivityService
+
+	// CSRFStore and SessionStore back the Task 14 web admin UI. Both are
+	// process-memory stores shared between the AdminHandler and its middleware
+	// (requireCSRF / requireAdmin). main.go constructs and passes them; when
+	// nil (e.g. tests that don't exercise admin), RegisterRoutes constructs
+	// fresh ones so the admin routes are always wired consistently.
+	CSRFStore    *csrfStore
+	SessionStore *sessionStore
 }
 
 // bridge adapts an http.Handler to PocketBase's *core.RequestEvent callback.
@@ -149,6 +158,52 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 	protect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
 		return bridge(common(authMW(http.HandlerFunc(h))))
 	}
+
+	// --- Admin UI (Task 14) ---
+	// The CSRF + session stores are process-memory and must be the SAME
+	// instances the AdminHandler and its middleware share. main.go passes them
+	// in; fall back to fresh stores so tests and any minimal caller still get a
+	// fully-wired (and internally consistent) admin surface.
+	csrf := deps.CSRFStore
+	if csrf == nil {
+		csrf = NewCSRFStore()
+	}
+	sessions := deps.SessionStore
+	if sessions == nil {
+		sessions = NewSessionStore()
+	}
+	// Secure cookies only when served over https:// — a Secure cookie is never
+	// sent over plain HTTP, which would break local http://localhost login.
+	secureCookies := deps.Config != nil && strings.HasPrefix(deps.Config.BaseURL, "https://")
+
+	adminH := NewAdminHandler(deps.AuthProvider, csrf, sessions, secureCookies)
+	adminMW := requireAdmin(deps.AuthProvider, sessions)
+	csrfMW := requireCSRF(csrf)
+
+	// adminPublic wraps unauthenticated admin pages (login/logout) with the
+	// common middleware only.
+	adminPublic := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+		return bridge(common(h))
+	}
+	// adminProtect requires an admin session (requireAdmin) and, on POST,
+	// consumes a single-use CSRF token (requireCSRF, innermost so it only runs
+	// once the session is established).
+	adminProtect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+		return bridge(common(adminMW(csrfMW(http.HandlerFunc(h)))))
+	}
+
+	// Public admin login page.
+	se.Router.GET("/admin/login", adminPublic(adminH.LoginPage))
+	se.Router.POST("/admin/login", adminPublic(adminH.LoginSubmit))
+	se.Router.GET("/admin/logout", adminPublic(adminH.Logout))
+
+	// Protected admin routes.
+	se.Router.GET("/admin/", adminProtect(adminH.Dashboard))
+	se.Router.GET("/admin/users", adminProtect(adminH.ListUsers))
+	se.Router.GET("/admin/users/new", adminProtect(adminH.CreateUser))
+	se.Router.POST("/admin/users/new", adminProtect(adminH.CreateUser))
+	se.Router.GET("/admin/users/{id}", adminProtect(adminH.EditUser))
+	se.Router.POST("/admin/users/{id}", adminProtect(adminH.EditUser))
 
 	// --- Public routes ---
 	se.Router.GET("/health", public(handleHealth))

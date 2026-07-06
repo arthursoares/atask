@@ -1,0 +1,37 @@
+{{/* Shared partials for the admin UI. Each page template pulls in "head" and
+     (when authenticated) "nav". Kept as named partials rather than a single
+     wrapping "layout"/"content" pair because html/template parses every file
+     into one namespace, so a per-page {{define "content"}} would collide across
+     files — named partials compose cleanly instead. */}}
+{{define "head"}}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>atask admin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; color: #1a1a1a; }
+        nav { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #e0e0e0; }
+        nav a { margin-right: 1rem; color: #0066cc; text-decoration: none; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0e0e0; }
+        .btn { display: inline-block; padding: 0.4rem 1rem; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 0.9rem; }
+        .btn-danger { background: #cc3333; }
+        .btn-secondary { background: #666; }
+        input, select { padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; width: 100%; margin-bottom: 0.5rem; }
+        input[type=checkbox] { width: auto; margin-right: 0.4rem; }
+        label { display: block; margin-top: 0.5rem; font-weight: 600; font-size: 0.9rem; }
+        .error { color: #cc3333; margin-bottom: 1rem; }
+        h1 { margin-bottom: 1rem; }
+        .stat { font-size: 2rem; font-weight: 700; }
+        .muted { color: #999; }
+    </style>
+{{end}}
+
+{{define "nav"}}
+    <nav>
+        <strong>atask admin</strong>
+        <a href="/admin/">Dashboard</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/logout">Logout</a>
+    </nav>
+{{end}}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+    {{template "nav" .}}
+    <h1>Edit user</h1>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <form method="post" action="/admin/users/{{.User.ID}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label>Email</label>
+        <input type="email" value="{{.User.Email}}" disabled>
+        <label for="name">Name</label>
+        <input id="name" type="text" name="name" value="{{.User.Name}}">
+        <label for="role">Role</label>
+        <select id="role" name="role">
+            <option value="user" {{if eq .User.Role "user"}}selected{{end}}>user</option>
+            <option value="admin" {{if eq .User.Role "admin"}}selected{{end}}>admin</option>
+        </select>
+        <label><input type="checkbox" name="disabled" {{if .User.Disabled}}checked{{end}}>Disabled</label>
+        <p>
+            <button class="btn" type="submit">Save</button>
+            <a class="btn btn-secondary" href="/admin/users">Cancel</a>
+        </p>
+    </form>
+</body>
+</html>
