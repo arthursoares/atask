@@ -21,6 +21,7 @@ type ownershipTestSetup struct {
 	tags       *TagService
 	locations  *LocationService
 	checklists *ChecklistService
+	activities *ActivityService
 }
 
 func newOwnershipTestSetup(t *testing.T) *ownershipTestSetup {
@@ -36,6 +37,7 @@ func newOwnershipTestSetup(t *testing.T) *ownershipTestSetup {
 		tags:       NewTagService(db, es, bus),
 		locations:  NewLocationService(db, es, bus),
 		checklists: NewChecklistService(db, es, bus),
+		activities: NewActivityService(db, es, bus),
 	}
 }
 
@@ -266,6 +268,68 @@ func TestOwnership_ChecklistAddItem_RejectsCrossUserTask(t *testing.T) {
 	}
 
 	_, err = s.checklists.AddItem(ctx, "user-a", "buy milk", taskB.ID, "actor-a")
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// 11. ActivityService.Add (batch review P2: Add() inserted an activity
+// referencing taskID without verifying the caller owns that task, unlike its
+// sibling ChecklistService.AddItem).
+func TestOwnership_ActivityAdd_RejectsCrossUserTask(t *testing.T) {
+	s := newOwnershipTestSetup(t)
+	ctx := context.Background()
+
+	taskB, err := s.tasks.Create(ctx, "user-b", "task B", "actor-b")
+	if err != nil {
+		t.Fatalf("Create task B: %v", err)
+	}
+
+	_, err = s.activities.Add(ctx, "user-a", taskB.ID, "actor-a", domain.ActorHuman, domain.ActivityComment, "hi")
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// 12. TaskService.AddTag (batch review P2: AddTag verified the TAG belongs
+// to the user but not the TASK, so a caller could tag another user's task
+// using their own tag).
+func TestOwnership_TaskAddTag_RejectsCrossUserTask(t *testing.T) {
+	s := newOwnershipTestSetup(t)
+	ctx := context.Background()
+
+	taskB, err := s.tasks.Create(ctx, "user-b", "task B", "actor-b")
+	if err != nil {
+		t.Fatalf("Create task B: %v", err)
+	}
+	tagA, err := s.tags.Create(ctx, "user-a", "tag A", "actor-a")
+	if err != nil {
+		t.Fatalf("Create tag A: %v", err)
+	}
+
+	err = s.tasks.AddTag(ctx, "user-a", taskB.ID, tagA.ID, "actor-a")
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// 13. TaskService.AddLink primary-task side (batch review P2 follow-up:
+// AddLink only verified the related task's ownership, not the primary
+// task's, so a caller could link another user's task to one of their own).
+func TestOwnership_TaskAddLink_RejectsCrossUserPrimaryTask(t *testing.T) {
+	s := newOwnershipTestSetup(t)
+	ctx := context.Background()
+
+	taskA, err := s.tasks.Create(ctx, "user-a", "task A", "actor-a")
+	if err != nil {
+		t.Fatalf("Create task A: %v", err)
+	}
+	taskB, err := s.tasks.Create(ctx, "user-b", "task B", "actor-b")
+	if err != nil {
+		t.Fatalf("Create task B: %v", err)
+	}
+
+	err = s.tasks.AddLink(ctx, "user-a", taskB.ID, taskA.ID, "actor-a")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}

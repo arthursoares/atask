@@ -674,10 +674,15 @@ func (s *TaskService) SetRecurrence(ctx context.Context, userID, id string, rule
 	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("recurrence_rule"), nil)
 }
 
-// AddTag adds a tag to the task and emits task.tag_added. Verifies the tag belongs to
-// userID (spec §2.4) before mutating, returning domain.ErrNotFound if it does not.
+// AddTag adds a tag to the task and emits task.tag_added. Verifies both the task and
+// the tag belong to userID (spec §2.4) before mutating, returning domain.ErrNotFound
+// if either does not.
 func (s *TaskService) AddTag(ctx context.Context, userID, id, tagID, actorID string) error {
 	now := timeNow()
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID}); err != nil {
+		return mapNotFound(err)
+	}
 
 	if _, err := s.queries.GetTag(ctx, sqlc.GetTagParams{ID: tagID, UserID: userID}); err != nil {
 		return mapNotFound(err)
@@ -721,11 +726,15 @@ var ErrSelfLink = errors.New("task cannot link to itself")
 // task.link_added for both tasks so clients viewing either task receive the
 // delta. The link is stored as two mirrored rows in task_links so that
 // hydrateLinks (which reads only outgoing) works symmetrically.
-// Verifies the related task belongs to userID (spec §2.4) before linking,
-// returning domain.ErrNotFound if it does not.
+// Verifies both the primary task and the related task belong to userID
+// (spec §2.4) before linking, returning domain.ErrNotFound if either does not.
 func (s *TaskService) AddLink(ctx context.Context, userID, id, relatedTaskID, actorID string) error {
 	if id == relatedTaskID {
 		return ErrSelfLink
+	}
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID}); err != nil {
+		return mapNotFound(err)
 	}
 
 	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: relatedTaskID, UserID: userID}); err != nil {
