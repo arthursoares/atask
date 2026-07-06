@@ -1,3 +1,4 @@
+mod auth;
 mod commands;
 mod db;
 mod models;
@@ -74,6 +75,9 @@ pub fn run() {
             let database = Database::new(db_path).expect("init database");
             let conn_for_sync = database.conn.clone();
             app.manage(database);
+            // In-memory auth tokens (Bearer access token). Never persisted to
+            // SQLite — see auth.rs / Task 19 hard rules.
+            app.manage(auth::AuthTokens::default());
             sync::spawn_sync_worker(conn_for_sync, app.handle().clone());
             Ok(())
         })
@@ -145,6 +149,10 @@ pub fn run() {
             sync_commands::trigger_sync,
             sync_commands::test_connection,
             sync_commands::initial_sync,
+            // Auth commands
+            auth::login,
+            auth::logout,
+            auth::refresh_on_launch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
