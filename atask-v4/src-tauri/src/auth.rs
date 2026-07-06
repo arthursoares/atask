@@ -36,7 +36,13 @@ pub struct AuthTokens {
 
 /// Profile cache surfaced to the frontend. Never carries token material — the
 /// `authenticated` bool is the only signal of session presence.
+///
+/// `rename_all = "camelCase"` matches every other Serialize/Deserialize model
+/// in this crate (see models.rs) so the Tauri IPC JSON boundary is consistent
+/// (`userId`, `userEmail`, `userName`, `serverUrl`) — Task 20 (frontend) reads
+/// this shape directly.
 #[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthState {
     pub user_id: Option<String>,
     pub user_email: Option<String>,
