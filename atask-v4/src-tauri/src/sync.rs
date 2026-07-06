@@ -116,8 +116,15 @@ fn write_cursor(conn: &Connection, server_url: &str, user_id: &str, cursor: i64)
 // Bearer (in-memory access token) is preferred; the legacy api_key is the
 // fallback; otherwise no credential.
 
-fn auth_header(tokens: &AuthTokens, api_key: &str) -> Option<String> {
-    if let Some(ref t) = *tokens.access_token.lock().unwrap() {
+// Takes an already-resolved access token (rather than `&AuthTokens`) so a
+// caller that also needs the raw token value for other bookkeeping (e.g.
+// `send_authed`'s 401 handling, which records which token a failed request
+// used) reads the `access_token` lock exactly once and builds the header
+// from that single snapshot. Locking twice (once for the token, once inside
+// this helper) would risk a rotation landing in the gap between the two
+// reads, mis-recording which token actually went out on the wire.
+fn auth_header(token: Option<&str>, api_key: &str) -> Option<String> {
+    if let Some(t) = token {
         return Some(format!("Bearer {}", t));
     }
     if !api_key.is_empty() {
@@ -211,8 +218,11 @@ fn send_authed(
 ) -> Result<AuthOutcome, String> {
     // At most 2 attempts: original + one retry after a refresh.
     for _ in 0..2 {
+        // Read the access token exactly once, and derive both `used_token`
+        // (for 401 bookkeeping) and the header from that single snapshot —
+        // see auth_header's doc comment for why.
         let used_token = tokens.access_token.lock().unwrap().clone();
-        let header = auth_header(tokens, &config.api_key);
+        let header = auth_header(used_token.as_deref(), &config.api_key);
         let resp = build(header.as_deref())
             .send()
             .map_err(|e| e.to_string())?;
@@ -533,14 +543,34 @@ fn pull_deltas_blocking(
                         }
                     };
 
-                    if !resp.status().is_success() {
-                        // Non-401 fetch failure (404/5xx). Log and skip this
-                        // delta (advance cursor) to avoid wedging sync forever —
-                        // matches the previous behavior. 401 never reaches here.
+                    let status = resp.status();
+                    if status == reqwest::StatusCode::NOT_FOUND {
+                        // 404: the entity was deleted server-side after this
+                        // delta was recorded. This is legitimately skippable —
+                        // there's nothing left to fetch — so we deliberately
+                        // advance past it (log for visibility only).
                         eprintln!(
-                            "entity fetch failed for {entity_type}/{entity_id}: {} — skipping",
-                            resp.status()
+                            "entity fetch failed for {entity_type}/{entity_id}: 404 (entity gone) — skipping"
                         );
+                    } else if !status.is_success() {
+                        // 5xx / other unexpected non-success: transient. Do NOT
+                        // advance the cursor past this delta — return now so the
+                        // batch pauses at the last fully-applied delta and this
+                        // same entity is re-fetched on the next sync tick. This
+                        // mirrors flush_pending_ops_blocking's 5xx retry policy;
+                        // silently advancing here would drop an inbound change.
+                        eprintln!(
+                            "entity fetch failed for {entity_type}/{entity_id}: {status} — pausing without advancing cursor (will retry)"
+                        );
+                        if let Ok(c) = conn.lock() {
+                            let _ = set_last_sync_error(
+                                &c,
+                                Some(&format!(
+                                    "entity fetch {entity_type}/{entity_id} failed: {status}"
+                                )),
+                            );
+                        }
+                        return Ok(applied);
                     } else {
                         let json = resp
                             .json::<serde_json::Value>()
@@ -1040,21 +1070,18 @@ mod tests {
     // HARD RULE 2: one auth_header() helper, Bearer preferred over api_key.
     #[test]
     fn auth_header_prefers_bearer_then_api_key_then_none() {
-        let tokens = AuthTokens::default();
-
         // No bearer, no api_key -> None.
-        assert_eq!(auth_header(&tokens, ""), None);
+        assert_eq!(auth_header(None, ""), None);
 
         // No bearer, api_key present -> ApiKey.
         assert_eq!(
-            auth_header(&tokens, "secret-key"),
+            auth_header(None, "secret-key"),
             Some("ApiKey secret-key".to_string())
         );
 
         // Bearer present -> Bearer wins even when an api_key is also configured.
-        *tokens.access_token.lock().unwrap() = Some("access-123".to_string());
         assert_eq!(
-            auth_header(&tokens, "secret-key"),
+            auth_header(Some("access-123"), "secret-key"),
             Some("Bearer access-123".to_string())
         );
     }
@@ -1131,5 +1158,89 @@ mod tests {
 
         let ops = read_pending_ops(&conn, 10).expect("read pending ops after sync");
         assert!(ops.is_empty());
+    }
+
+    // Regression test for the data-loss bug: a transient (5xx) failure
+    // fetching a delta's entity must NOT advance the sync cursor past that
+    // delta. Before the fix, `pull_deltas_blocking` fell through to
+    // `cursor = delta.id; write_cursor(...)` on ANY non-success status
+    // (404 *and* 5xx alike), so a transient 500/503 permanently skipped the
+    // inbound change. This spins up a tiny raw-socket HTTP server (no mock
+    // crate available as a dev-dependency) that serves exactly two requests:
+    // the deltas poll, then the entity fetch that fails with 503.
+    #[test]
+    fn pull_deltas_does_not_advance_cursor_on_5xx_entity_fetch() {
+        use std::io::{Read, Write};
+        use std::net::{Shutdown, TcpListener};
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().expect("local addr");
+        let server_url = format!("http://{}", addr);
+
+        // Serves exactly 2 requests: 1) GET /sync/deltas -> one delta that
+        // needs an individual fetch; 2) GET /tasks/task-1 -> transient 503.
+        // If the fix regresses and the cursor advances, no third request
+        // would occur anyway (single delta), so the assertion below on the
+        // cursor value is what actually catches the regression.
+        let server = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut request = Vec::new();
+                let mut buf = [0u8; 4096];
+                loop {
+                    let n = stream.read(&mut buf).expect("read request");
+                    if n == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buf[..n]);
+                    if request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let req_text = String::from_utf8_lossy(&request);
+                let response = if req_text.contains("/sync/deltas") {
+                    let body = r#"[{"id":5,"entity_type":{"String":"task","Valid":true},"entity_id":{"String":"task-1","Valid":true},"action":{"Int64":1,"Valid":true}}]"#;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    let body = "service unavailable";
+                    format!(
+                        "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                };
+                stream.write_all(response.as_bytes()).expect("write response");
+                stream.flush().expect("flush");
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        });
+
+        let conn = Mutex::new(setup_test_conn());
+        let config = SyncConfig {
+            server_url: server_url.clone(),
+            api_key: String::new(),
+            user_id: "user-1".to_string(),
+            user_email: None,
+        };
+        let tokens = AuthTokens::default();
+        let client = reqwest::blocking::Client::new();
+
+        let applied = pull_deltas_blocking(&client, &conn, &config, &tokens)
+            .expect("pull_deltas_blocking should return Ok, not Err, on a 5xx entity fetch");
+
+        // The only delta hit a transient 503, so nothing was fully applied.
+        assert_eq!(applied, 0);
+
+        // Cursor must stay at 0 (unset) — NOT advance to delta id 5 — so the
+        // next sync tick re-fetches this same entity instead of losing it.
+        let c = conn.lock().unwrap();
+        assert_eq!(read_cursor(&c, &server_url, "user-1"), 0);
+        drop(c);
+
+        server.join().expect("mock server thread panicked");
     }
 }
