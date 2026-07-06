@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -81,7 +82,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.authProvider.CreateUser(body.Email, body.Password, body.Name, "user")
 	if err != nil {
-		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		slog.Error("register: create user failed", "err", err)
+		RespondError(w, http.StatusUnprocessableEntity, "could not create account")
 		return
 	}
 
@@ -175,13 +177,15 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.authProvider.UpdateUser(userID, map[string]any{"name": body.Name}); err != nil {
-		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		slog.Error("update me: update user failed", "err", err)
+		RespondError(w, http.StatusUnprocessableEntity, "could not update profile")
 		return
 	}
 
 	user, err := h.authProvider.FindUserByID(userID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("update me: reload user failed", "err", err)
+		RespondError(w, http.StatusInternalServerError, "could not update profile")
 		return
 	}
 

@@ -67,6 +67,17 @@ import (
 // comment for why a bare mux + httptest.NewRecorder cannot.
 func startRealPBServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	srv, _ := startRealPBServerWithApp(t)
+	return srv
+}
+
+// startRealPBServerWithApp is startRealPBServer, additionally returning the
+// underlying *tests.TestApp so callers can mint tokens directly against
+// PocketBase's seeded auth collections (e.g. a _superusers token — see
+// TestAuth_Refresh_RejectsSuperuserToken in auth_test.go) rather than only
+// through the HTTP-facing register/login flow.
+func startRealPBServerWithApp(t *testing.T) (*httptest.Server, *tests.TestApp) {
+	t.Helper()
 
 	app, err := tests.NewTestApp()
 	if err != nil {
@@ -125,7 +136,7 @@ func startRealPBServer(t *testing.T) *httptest.Server {
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, app
 }
 
 // TestRealPBRouter_ValidBody_NotRejectedAsTrailingData is the regression

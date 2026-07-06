@@ -88,16 +88,31 @@ func EnsureUserFields(app core.App) error {
 	return app.Save(collection)
 }
 
+// errNotUsersCollectionToken is returned whenever a resolved auth token
+// belongs to an auth collection other than usersCollection (notably
+// _superusers). Shared by ValidateToken and RefreshToken so both reject a
+// non-application token identically instead of duplicating the guard/string.
+var errNotUsersCollectionToken = errors.New("invalid token: not a users-collection token")
+
+// requireUsersCollectionRecord enforces that record belongs to the
+// application users collection. A _superusers (admin) auth record
+// authenticates against a different collection and must NOT be accepted as
+// an application user identity — by ValidateToken (would forge an app
+// identity) or by RefreshToken (would rotate/renew a superuser token).
+func requireUsersCollectionRecord(record *core.Record) error {
+	if record.Collection() == nil || record.Collection().Name != usersCollection {
+		return errNotUsersCollectionToken
+	}
+	return nil
+}
+
 func (a *PBAdapter) ValidateToken(token string) (string, error) {
 	record, err := a.app.FindAuthRecordByToken(token, core.TokenTypeAuth)
 	if err != nil {
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
-	// Only accept tokens belonging to the application users collection. A
-	// _superusers (admin) auth token authenticates against a different
-	// collection and must NOT be accepted as an application user identity.
-	if record.Collection() == nil || record.Collection().Name != usersCollection {
-		return "", errors.New("invalid token: not a users-collection token")
+	if err := requireUsersCollectionRecord(record); err != nil {
+		return "", err
 	}
 	return record.Id, nil
 }
@@ -156,6 +171,12 @@ func (a *PBAdapter) AuthWithPassword(email, password string) (string, *User, err
 func (a *PBAdapter) RefreshToken(token string) (string, error) {
 	record, err := a.app.FindAuthRecordByToken(token, core.TokenTypeAuth)
 	if err != nil {
+		return "", err
+	}
+	// Mirror ValidateToken's collection guard: a _superusers token must not
+	// be accepted here either, or POST /auth/refresh (a public route) would
+	// rotate an admin token into a fresh one for any caller who obtains it.
+	if err := requireUsersCollectionRecord(record); err != nil {
 		return "", err
 	}
 	newToken, err := record.NewAuthToken()

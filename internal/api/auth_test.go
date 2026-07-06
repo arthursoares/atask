@@ -14,6 +14,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // authUserJSON mirrors the {"id","email","name","role"} shape shared by
@@ -263,6 +265,72 @@ func TestAuth_Refresh_MissingOrInvalidToken(t *testing.T) {
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for a garbage token, got %d: %s", resp2.StatusCode, readBody(t, resp2))
+	}
+}
+
+// TestAuth_Refresh_RejectsSuperuserToken asserts POST /auth/refresh — a
+// public route — rejects a _superusers (admin) auth token with 401, mirroring
+// ValidateToken's users-collection scoping guard
+// (internal/auth/pocketbase.go's requireUsersCollectionRecord). Before the
+// fix, RefreshToken only checked IsAuth() on the resolved record and would
+// happily rotate a _superusers token into a fresh superuser token for any
+// caller who obtained one and presented it to this public endpoint.
+func TestAuth_Refresh_RejectsSuperuserToken(t *testing.T) {
+	srv, app := startRealPBServerWithApp(t)
+
+	// tests.NewTestApp seeds a test@example.com record in both the `users`
+	// and `_superusers` collections (see pocketbase_test.go's newTestAdapter
+	// doc comment) — mint a token for the superuser one.
+	su, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "test@example.com")
+	if err != nil {
+		t.Fatalf("find superuser: %v", err)
+	}
+	suToken, err := su.NewAuthToken()
+	if err != nil {
+		t.Fatalf("superuser NewAuthToken: %v", err)
+	}
+
+	req := bearerRequest(t, http.MethodPost, srv.URL+"/auth/refresh", suToken, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /auth/refresh (superuser token): %v", err)
+	}
+	defer resp.Body.Close()
+	raw := readBody(t, resp)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 rejecting a _superusers token, got %d: %s", resp.StatusCode, raw)
+	}
+}
+
+// TestAuth_Register_RejectsRoleInjection is a regression test pinning what
+// actually happens when a register request tries to smuggle in a "role"
+// field: the Register body struct has no Role field and DecodeJSON sets
+// DisallowUnknownFields (internal/api/response.go), so an unrecognized
+// "role" key must be rejected with 400 rather than silently accepted (which
+// would be safe only by accident, since Register always hardcodes "user"
+// regardless of what's in the body).
+func TestAuth_Register_RejectsRoleInjection(t *testing.T) {
+	srv := startRealPBServer(t)
+
+	reqBody, err := json.Marshal(map[string]string{
+		"email":    "eve@example.com",
+		"password": "roleinject1",
+		"name":     "Eve",
+		"role":     "admin",
+	})
+	if err != nil {
+		t.Fatalf("marshal register body: %v", err)
+	}
+
+	resp, err := http.Post(srv.URL+"/auth/register", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatalf("POST /auth/register: %v", err)
+	}
+	defer resp.Body.Close()
+	raw := readBody(t, resp)
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 rejecting the unknown \"role\" field, got %d: %s", resp.StatusCode, raw)
 	}
 }
 
