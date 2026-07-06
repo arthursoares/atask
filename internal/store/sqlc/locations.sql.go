@@ -13,24 +13,25 @@ import (
 
 const clearLocationFromTasks = `-- name: ClearLocationFromTasks :exec
 UPDATE tasks SET location_id = NULL, updated_at = ?
-WHERE location_id = ? AND deleted = 0
+WHERE location_id = ? AND user_id = ? AND deleted = 0
 `
 
 type ClearLocationFromTasksParams struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 	LocationID sql.NullString `json:"location_id"`
+	UserID     string         `json:"user_id"`
 }
 
 func (q *Queries) ClearLocationFromTasks(ctx context.Context, arg ClearLocationFromTasksParams) error {
-	_, err := q.db.ExecContext(ctx, clearLocationFromTasks, arg.UpdatedAt, arg.LocationID)
+	_, err := q.db.ExecContext(ctx, clearLocationFromTasks, arg.UpdatedAt, arg.LocationID, arg.UserID)
 	return err
 }
 
 const createLocation = `-- name: CreateLocation :one
 INSERT INTO locations (
-    id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at
+    id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?
 )
 RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id
 `
@@ -44,6 +45,7 @@ type CreateLocationParams struct {
 	Address   sql.NullString  `json:"address"`
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
+	UserID    string          `json:"user_id"`
 }
 
 func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error) {
@@ -56,6 +58,7 @@ func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) 
 		arg.Address,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Location
 	err := row.Scan(
@@ -76,11 +79,16 @@ func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) 
 
 const getLocation = `-- name: GetLocation :one
 SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id FROM locations
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetLocation(ctx context.Context, id string) (Location, error) {
-	row := q.db.QueryRowContext(ctx, getLocation, id)
+type GetLocationParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetLocation(ctx context.Context, arg GetLocationParams) (Location, error) {
+	row := q.db.QueryRowContext(ctx, getLocation, arg.ID, arg.UserID)
 	var i Location
 	err := row.Scan(
 		&i.ID,
@@ -100,11 +108,11 @@ func (q *Queries) GetLocation(ctx context.Context, id string) (Location, error) 
 
 const listLocations = `-- name: ListLocations :many
 SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id FROM locations
-WHERE deleted = 0
+WHERE user_id = ? AND deleted = 0
 `
 
-func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
-	rows, err := q.db.QueryContext(ctx, listLocations)
+func (q *Queries) ListLocations(ctx context.Context, userID string) ([]Location, error) {
+	rows, err := q.db.QueryContext(ctx, listLocations, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,23 +148,29 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 
 const softDeleteLocation = `-- name: SoftDeleteLocation :exec
 UPDATE locations SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteLocationParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteLocation(ctx context.Context, arg SoftDeleteLocationParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteLocation, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteLocation,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateLocationName = `-- name: UpdateLocationName :one
 UPDATE locations SET name = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -164,10 +178,16 @@ type UpdateLocationNameParams struct {
 	Name      sql.NullString `json:"name"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateLocationName(ctx context.Context, arg UpdateLocationNameParams) (Location, error) {
-	row := q.db.QueryRowContext(ctx, updateLocationName, arg.Name, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateLocationName,
+		arg.Name,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Location
 	err := row.Scan(
 		&i.ID,

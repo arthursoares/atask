@@ -12,9 +12,9 @@ import (
 
 const insertDeltaEvent = `-- name: InsertDeltaEvent :exec
 INSERT INTO delta_events (
-    entity_type, entity_id, action, field, old_value, new_value, actor_id, timestamp
+    entity_type, entity_id, action, field, old_value, new_value, actor_id, timestamp, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
@@ -27,6 +27,7 @@ type InsertDeltaEventParams struct {
 	NewValue   sql.NullString `json:"new_value"`
 	ActorID    sql.NullString `json:"actor_id"`
 	Timestamp  sql.NullTime   `json:"timestamp"`
+	UserID     string         `json:"user_id"`
 }
 
 func (q *Queries) InsertDeltaEvent(ctx context.Context, arg InsertDeltaEventParams) error {
@@ -39,15 +40,16 @@ func (q *Queries) InsertDeltaEvent(ctx context.Context, arg InsertDeltaEventPara
 		arg.NewValue,
 		arg.ActorID,
 		arg.Timestamp,
+		arg.UserID,
 	)
 	return err
 }
 
 const insertDomainEvent = `-- name: InsertDomainEvent :one
 INSERT INTO domain_events (
-    type, entity_type, entity_id, actor_id, payload, timestamp
+    type, entity_type, entity_id, actor_id, payload, timestamp, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?
 )
 RETURNING id
 `
@@ -59,6 +61,7 @@ type InsertDomainEventParams struct {
 	ActorID    sql.NullString `json:"actor_id"`
 	Payload    string         `json:"payload"`
 	Timestamp  sql.NullTime   `json:"timestamp"`
+	UserID     string         `json:"user_id"`
 }
 
 func (q *Queries) InsertDomainEvent(ctx context.Context, arg InsertDomainEventParams) (int64, error) {
@@ -69,6 +72,7 @@ func (q *Queries) InsertDomainEvent(ctx context.Context, arg InsertDomainEventPa
 		arg.ActorID,
 		arg.Payload,
 		arg.Timestamp,
+		arg.UserID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -77,12 +81,17 @@ func (q *Queries) InsertDomainEvent(ctx context.Context, arg InsertDomainEventPa
 
 const listDeltaEventsSince = `-- name: ListDeltaEventsSince :many
 SELECT id, entity_type, entity_id, "action", field, old_value, new_value, actor_id, timestamp, user_id FROM delta_events
-WHERE id > ?
+WHERE id > ? AND user_id = ?
 ORDER BY id
 `
 
-func (q *Queries) ListDeltaEventsSince(ctx context.Context, id int64) ([]DeltaEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listDeltaEventsSince, id)
+type ListDeltaEventsSinceParams struct {
+	ID     int64  `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ListDeltaEventsSince(ctx context.Context, arg ListDeltaEventsSinceParams) ([]DeltaEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listDeltaEventsSince, arg.ID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +126,7 @@ func (q *Queries) ListDeltaEventsSince(ctx context.Context, id int64) ([]DeltaEv
 
 const listDomainEventsByEntitySince = `-- name: ListDomainEventsByEntitySince :many
 SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
-WHERE entity_type = ? AND entity_id = ? AND id > ?
+WHERE entity_type = ? AND entity_id = ? AND id > ? AND user_id = ?
 ORDER BY id
 `
 
@@ -125,10 +134,16 @@ type ListDomainEventsByEntitySinceParams struct {
 	EntityType sql.NullString `json:"entity_type"`
 	EntityID   sql.NullString `json:"entity_id"`
 	ID         int64          `json:"id"`
+	UserID     string         `json:"user_id"`
 }
 
 func (q *Queries) ListDomainEventsByEntitySince(ctx context.Context, arg ListDomainEventsByEntitySinceParams) ([]DomainEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listDomainEventsByEntitySince, arg.EntityType, arg.EntityID, arg.ID)
+	rows, err := q.db.QueryContext(ctx, listDomainEventsByEntitySince,
+		arg.EntityType,
+		arg.EntityID,
+		arg.ID,
+		arg.UserID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -161,17 +176,18 @@ func (q *Queries) ListDomainEventsByEntitySince(ctx context.Context, arg ListDom
 
 const listDomainEventsByTypeSince = `-- name: ListDomainEventsByTypeSince :many
 SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
-WHERE type = ? AND id > ?
+WHERE type = ? AND id > ? AND user_id = ?
 ORDER BY id
 `
 
 type ListDomainEventsByTypeSinceParams struct {
-	Type sql.NullString `json:"type"`
-	ID   int64          `json:"id"`
+	Type   sql.NullString `json:"type"`
+	ID     int64          `json:"id"`
+	UserID string         `json:"user_id"`
 }
 
 func (q *Queries) ListDomainEventsByTypeSince(ctx context.Context, arg ListDomainEventsByTypeSinceParams) ([]DomainEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listDomainEventsByTypeSince, arg.Type, arg.ID)
+	rows, err := q.db.QueryContext(ctx, listDomainEventsByTypeSince, arg.Type, arg.ID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,12 +220,17 @@ func (q *Queries) ListDomainEventsByTypeSince(ctx context.Context, arg ListDomai
 
 const listDomainEventsSince = `-- name: ListDomainEventsSince :many
 SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
-WHERE id > ?
+WHERE id > ? AND user_id = ?
 ORDER BY id
 `
 
-func (q *Queries) ListDomainEventsSince(ctx context.Context, id int64) ([]DomainEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listDomainEventsSince, id)
+type ListDomainEventsSinceParams struct {
+	ID     int64  `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ListDomainEventsSince(ctx context.Context, arg ListDomainEventsSinceParams) ([]DomainEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listDomainEventsSince, arg.ID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

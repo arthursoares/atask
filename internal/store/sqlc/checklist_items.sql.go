@@ -13,9 +13,9 @@ import (
 
 const createChecklistItem = `-- name: CreateChecklistItem :one
 INSERT INTO checklist_items (
-    id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+    id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?
 )
 RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
@@ -28,6 +28,7 @@ type CreateChecklistItemParams struct {
 	Index     int64          `json:"index"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CreateChecklistItem(ctx context.Context, arg CreateChecklistItemParams) (ChecklistItem, error) {
@@ -39,6 +40,7 @@ func (q *Queries) CreateChecklistItem(ctx context.Context, arg CreateChecklistIt
 		arg.Index,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i ChecklistItem
 	err := row.Scan(
@@ -58,11 +60,16 @@ func (q *Queries) CreateChecklistItem(ctx context.Context, arg CreateChecklistIt
 
 const getChecklistItem = `-- name: GetChecklistItem :one
 SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id FROM checklist_items
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetChecklistItem(ctx context.Context, id string) (ChecklistItem, error) {
-	row := q.db.QueryRowContext(ctx, getChecklistItem, id)
+type GetChecklistItemParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetChecklistItem(ctx context.Context, arg GetChecklistItemParams) (ChecklistItem, error) {
+	row := q.db.QueryRowContext(ctx, getChecklistItem, arg.ID, arg.UserID)
 	var i ChecklistItem
 	err := row.Scan(
 		&i.ID,
@@ -81,12 +88,17 @@ func (q *Queries) GetChecklistItem(ctx context.Context, id string) (ChecklistIte
 
 const listChecklistItemsByTask = `-- name: ListChecklistItemsByTask :many
 SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id FROM checklist_items
-WHERE task_id = ? AND deleted = 0
+WHERE task_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListChecklistItemsByTask(ctx context.Context, taskID sql.NullString) ([]ChecklistItem, error) {
-	rows, err := q.db.QueryContext(ctx, listChecklistItemsByTask, taskID)
+type ListChecklistItemsByTaskParams struct {
+	TaskID sql.NullString `json:"task_id"`
+	UserID string         `json:"user_id"`
+}
+
+func (q *Queries) ListChecklistItemsByTask(ctx context.Context, arg ListChecklistItemsByTaskParams) ([]ChecklistItem, error) {
+	rows, err := q.db.QueryContext(ctx, listChecklistItemsByTask, arg.TaskID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,23 +133,29 @@ func (q *Queries) ListChecklistItemsByTask(ctx context.Context, taskID sql.NullS
 
 const softDeleteChecklistItem = `-- name: SoftDeleteChecklistItem :exec
 UPDATE checklist_items SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteChecklistItemParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteChecklistItem(ctx context.Context, arg SoftDeleteChecklistItemParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteChecklistItem, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteChecklistItem,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateChecklistItemIndex = `-- name: UpdateChecklistItemIndex :one
 UPDATE checklist_items SET "index" = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -145,10 +163,16 @@ type UpdateChecklistItemIndexParams struct {
 	Index     int64     `json:"index"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateChecklistItemIndex(ctx context.Context, arg UpdateChecklistItemIndexParams) (ChecklistItem, error) {
-	row := q.db.QueryRowContext(ctx, updateChecklistItemIndex, arg.Index, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateChecklistItemIndex,
+		arg.Index,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i ChecklistItem
 	err := row.Scan(
 		&i.ID,
@@ -167,7 +191,7 @@ func (q *Queries) UpdateChecklistItemIndex(ctx context.Context, arg UpdateCheckl
 
 const updateChecklistItemStatus = `-- name: UpdateChecklistItemStatus :one
 UPDATE checklist_items SET status = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -175,10 +199,16 @@ type UpdateChecklistItemStatusParams struct {
 	Status    int64     `json:"status"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateChecklistItemStatus(ctx context.Context, arg UpdateChecklistItemStatusParams) (ChecklistItem, error) {
-	row := q.db.QueryRowContext(ctx, updateChecklistItemStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateChecklistItemStatus,
+		arg.Status,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i ChecklistItem
 	err := row.Scan(
 		&i.ID,
@@ -197,7 +227,7 @@ func (q *Queries) UpdateChecklistItemStatus(ctx context.Context, arg UpdateCheck
 
 const updateChecklistItemTitle = `-- name: UpdateChecklistItemTitle :one
 UPDATE checklist_items SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -205,10 +235,16 @@ type UpdateChecklistItemTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateChecklistItemTitle(ctx context.Context, arg UpdateChecklistItemTitleParams) (ChecklistItem, error) {
-	row := q.db.QueryRowContext(ctx, updateChecklistItemTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateChecklistItemTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i ChecklistItem
 	err := row.Scan(
 		&i.ID,

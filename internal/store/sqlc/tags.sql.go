@@ -13,9 +13,9 @@ import (
 
 const createTag = `-- name: CreateTag :one
 INSERT INTO tags (
-    id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at
+    id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?
 )
 RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
@@ -28,6 +28,7 @@ type CreateTagParams struct {
 	Index     int64          `json:"index"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
@@ -39,6 +40,7 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, erro
 		arg.Index,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Tag
 	err := row.Scan(
@@ -58,11 +60,16 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, erro
 
 const getTag = `-- name: GetTag :one
 SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id FROM tags
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetTag(ctx context.Context, id string) (Tag, error) {
-	row := q.db.QueryRowContext(ctx, getTag, id)
+type GetTagParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetTag(ctx context.Context, arg GetTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTag, arg.ID, arg.UserID)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
@@ -81,12 +88,12 @@ func (q *Queries) GetTag(ctx context.Context, id string) (Tag, error) {
 
 const listTags = `-- name: ListTags :many
 SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id FROM tags
-WHERE deleted = 0
+WHERE user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
-	rows, err := q.db.QueryContext(ctx, listTags)
+func (q *Queries) ListTags(ctx context.Context, userID string) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTags, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,23 +128,29 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 
 const softDeleteTag = `-- name: SoftDeleteTag :exec
 UPDATE tags SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteTagParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteTag(ctx context.Context, arg SoftDeleteTagParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteTag, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteTag,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateTagShortcut = `-- name: UpdateTagShortcut :one
 UPDATE tags SET shortcut = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -145,10 +158,16 @@ type UpdateTagShortcutParams struct {
 	Shortcut  sql.NullString `json:"shortcut"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTagShortcut(ctx context.Context, arg UpdateTagShortcutParams) (Tag, error) {
-	row := q.db.QueryRowContext(ctx, updateTagShortcut, arg.Shortcut, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTagShortcut,
+		arg.Shortcut,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
@@ -167,7 +186,7 @@ func (q *Queries) UpdateTagShortcut(ctx context.Context, arg UpdateTagShortcutPa
 
 const updateTagTitle = `-- name: UpdateTagTitle :one
 UPDATE tags SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -175,10 +194,16 @@ type UpdateTagTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTagTitle(ctx context.Context, arg UpdateTagTitleParams) (Tag, error) {
-	row := q.db.QueryRowContext(ctx, updateTagTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTagTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Tag
 	err := row.Scan(
 		&i.ID,

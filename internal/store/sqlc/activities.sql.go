@@ -12,9 +12,9 @@ import (
 
 const createActivity = `-- name: CreateActivity :one
 INSERT INTO activities (
-    id, task_id, actor_id, actor_type, type, content, created_at
+    id, task_id, actor_id, actor_type, type, content, created_at, user_id
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?
 )
 RETURNING id, task_id, actor_id, actor_type, type, content, created_at, user_id
 `
@@ -27,6 +27,7 @@ type CreateActivityParams struct {
 	Type      sql.NullString `json:"type"`
 	Content   sql.NullString `json:"content"`
 	CreatedAt sql.NullTime   `json:"created_at"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CreateActivity(ctx context.Context, arg CreateActivityParams) (Activity, error) {
@@ -38,6 +39,7 @@ func (q *Queries) CreateActivity(ctx context.Context, arg CreateActivityParams) 
 		arg.Type,
 		arg.Content,
 		arg.CreatedAt,
+		arg.UserID,
 	)
 	var i Activity
 	err := row.Scan(
@@ -55,12 +57,17 @@ func (q *Queries) CreateActivity(ctx context.Context, arg CreateActivityParams) 
 
 const listActivitiesByTask = `-- name: ListActivitiesByTask :many
 SELECT id, task_id, actor_id, actor_type, type, content, created_at, user_id FROM activities
-WHERE task_id = ?
+WHERE task_id = ? AND user_id = ?
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListActivitiesByTask(ctx context.Context, taskID sql.NullString) ([]Activity, error) {
-	rows, err := q.db.QueryContext(ctx, listActivitiesByTask, taskID)
+type ListActivitiesByTaskParams struct {
+	TaskID sql.NullString `json:"task_id"`
+	UserID string         `json:"user_id"`
+}
+
+func (q *Queries) ListActivitiesByTask(ctx context.Context, arg ListActivitiesByTaskParams) ([]Activity, error) {
+	rows, err := q.db.QueryContext(ctx, listActivitiesByTask, arg.TaskID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

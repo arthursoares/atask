@@ -13,9 +13,9 @@ import (
 
 const createArea = `-- name: CreateArea :one
 INSERT INTO areas (
-    id, title, "index", archived, deleted, deleted_at, created_at, updated_at
+    id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
-    ?, ?, ?, 0, 0, NULL, ?, ?
+    ?, ?, ?, 0, 0, NULL, ?, ?, ?
 )
 RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
@@ -26,6 +26,7 @@ type CreateAreaParams struct {
 	Index     int64          `json:"index"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CreateArea(ctx context.Context, arg CreateAreaParams) (Area, error) {
@@ -35,6 +36,7 @@ func (q *Queries) CreateArea(ctx context.Context, arg CreateAreaParams) (Area, e
 		arg.Index,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Area
 	err := row.Scan(
@@ -53,11 +55,16 @@ func (q *Queries) CreateArea(ctx context.Context, arg CreateAreaParams) (Area, e
 
 const getArea = `-- name: GetArea :one
 SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetArea(ctx context.Context, id string) (Area, error) {
-	row := q.db.QueryRowContext(ctx, getArea, id)
+type GetAreaParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetArea(ctx context.Context, arg GetAreaParams) (Area, error) {
+	row := q.db.QueryRowContext(ctx, getArea, arg.ID, arg.UserID)
 	var i Area
 	err := row.Scan(
 		&i.ID,
@@ -75,12 +82,12 @@ func (q *Queries) GetArea(ctx context.Context, id string) (Area, error) {
 
 const listAllAreas = `-- name: ListAllAreas :many
 SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
-WHERE deleted = 0
+WHERE user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListAllAreas(ctx context.Context) ([]Area, error) {
-	rows, err := q.db.QueryContext(ctx, listAllAreas)
+func (q *Queries) ListAllAreas(ctx context.Context, userID string) ([]Area, error) {
+	rows, err := q.db.QueryContext(ctx, listAllAreas, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,12 +121,12 @@ func (q *Queries) ListAllAreas(ctx context.Context) ([]Area, error) {
 
 const listAreas = `-- name: ListAreas :many
 SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
-WHERE deleted = 0 AND archived = 0
+WHERE user_id = ? AND deleted = 0 AND archived = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListAreas(ctx context.Context) ([]Area, error) {
-	rows, err := q.db.QueryContext(ctx, listAreas)
+func (q *Queries) ListAreas(ctx context.Context, userID string) ([]Area, error) {
+	rows, err := q.db.QueryContext(ctx, listAreas, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -153,23 +160,29 @@ func (q *Queries) ListAreas(ctx context.Context) ([]Area, error) {
 
 const softDeleteArea = `-- name: SoftDeleteArea :exec
 UPDATE areas SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteAreaParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteArea(ctx context.Context, arg SoftDeleteAreaParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteArea, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteArea,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateAreaArchived = `-- name: UpdateAreaArchived :one
 UPDATE areas SET archived = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -177,10 +190,16 @@ type UpdateAreaArchivedParams struct {
 	Archived  int64     `json:"archived"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateAreaArchived(ctx context.Context, arg UpdateAreaArchivedParams) (Area, error) {
-	row := q.db.QueryRowContext(ctx, updateAreaArchived, arg.Archived, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateAreaArchived,
+		arg.Archived,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Area
 	err := row.Scan(
 		&i.ID,
@@ -198,7 +217,7 @@ func (q *Queries) UpdateAreaArchived(ctx context.Context, arg UpdateAreaArchived
 
 const updateAreaTitle = `-- name: UpdateAreaTitle :one
 UPDATE areas SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
+WHERE id = ? AND user_id = ? AND deleted = 0
 RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
 
@@ -206,10 +225,16 @@ type UpdateAreaTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateAreaTitle(ctx context.Context, arg UpdateAreaTitleParams) (Area, error) {
-	row := q.db.QueryRowContext(ctx, updateAreaTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateAreaTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Area
 	err := row.Scan(
 		&i.ID,
