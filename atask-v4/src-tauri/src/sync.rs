@@ -123,7 +123,7 @@ fn write_cursor(conn: &Connection, server_url: &str, user_id: &str, cursor: i64)
 // from that single snapshot. Locking twice (once for the token, once inside
 // this helper) would risk a rotation landing in the gap between the two
 // reads, mis-recording which token actually went out on the wire.
-fn auth_header(token: Option<&str>, api_key: &str) -> Option<String> {
+pub(crate) fn auth_header(token: Option<&str>, api_key: &str) -> Option<String> {
     if let Some(t) = token {
         return Some(format!("Bearer {}", t));
     }
