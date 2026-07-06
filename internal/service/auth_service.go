@@ -164,6 +164,21 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, key string) (userID, k
 		return "", "", "", errors.New("invalid api key")
 	}
 
+	// Belt-and-suspenders expiry check: GetAPIKeyByHash's SQL predicate
+	// (`expires_at IS NULL OR expires_at > datetime('now')`, Task 1.5) is
+	// meant to already exclude expired rows, but the modernc.org/sqlite
+	// driver serializes a bound time.Time in a form SQLite's own date
+	// functions cannot reliably parse back out of the column (confirmed via
+	// isolated repro: datetime(expires_at)/julianday(expires_at) both come
+	// back NULL for a value written as sql.NullTime), which silently
+	// defeats that string/date comparison. Re-check expiry here in Go, where
+	// row.ExpiresAt has already been decoded by database/sql into a real
+	// time.Time, so an expired key is rejected regardless of the SQL
+	// predicate's driver-dependent behavior.
+	if row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(timeNow()) {
+		return "", "", "", errors.New("invalid api key")
+	}
+
 	now := timeNow()
 	if err := s.queries.UpdateAPIKeyLastUsed(ctx, sqlc.UpdateAPIKeyLastUsedParams{
 		LastUsedAt: sql.NullTime{Time: now, Valid: true},

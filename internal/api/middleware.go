@@ -124,13 +124,15 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 			header := r.Header.Get("Authorization")
 
 			ctx := r.Context()
-			var userID, keyID string
+			var userID, keyID, scope string
+			var isAPIKeyAuth bool
 			var err error
 
 			switch {
 			case strings.HasPrefix(header, "ApiKey "):
 				key := strings.TrimPrefix(header, "ApiKey ")
-				userID, keyID, _, err = apiKeySvc.ValidateAPIKey(ctx, key)
+				userID, keyID, scope, err = apiKeySvc.ValidateAPIKey(ctx, key)
+				isAPIKeyAuth = true
 			case strings.HasPrefix(header, "Bearer "):
 				token := strings.TrimPrefix(header, "Bearer ")
 				userID, err = authProvider.ValidateToken(token)
@@ -162,6 +164,29 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 			if user.Disabled {
 				RespondError(w, http.StatusForbidden, "account disabled")
 				return
+			}
+
+			// Scope enforcement applies only to the ApiKey auth path — Bearer
+			// tokens are PocketBase-authenticated humans and are always
+			// full-access. api_keys.scope is loaded by ValidateAPIKey
+			// (migration 006 / Task 1.5); expiry is enforced further upstream
+			// by the same call (GetAPIKeyByHash's SQL predicate excludes
+			// expired rows, surfacing as the "invalid credentials" 401 above).
+			if isAPIKeyAuth {
+				switch scope {
+				case "read":
+					if r.Method != http.MethodGet && r.Method != http.MethodHead {
+						RespondError(w, http.StatusForbidden, "api key has read-only scope")
+						return
+					}
+				case "read_write":
+					// Domain endpoints OK; no admin API endpoints exist yet.
+				case "admin":
+					// All endpoints OK.
+				default:
+					RespondError(w, http.StatusForbidden, "unknown scope")
+					return
+				}
 			}
 
 			ctx = context.WithValue(ctx, ctxUserID, userID)
