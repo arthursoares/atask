@@ -16,7 +16,7 @@ INSERT INTO activities (
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, task_id, actor_id, actor_type, type, content, created_at
+RETURNING id, task_id, actor_id, actor_type, type, content, created_at, user_id
 `
 
 type CreateActivityParams struct {
@@ -48,12 +48,13 @@ func (q *Queries) CreateActivity(ctx context.Context, arg CreateActivityParams) 
 		&i.Type,
 		&i.Content,
 		&i.CreatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listActivitiesByTask = `-- name: ListActivitiesByTask :many
-SELECT id, task_id, actor_id, actor_type, type, content, created_at FROM activities
+SELECT id, task_id, actor_id, actor_type, type, content, created_at, user_id FROM activities
 WHERE task_id = ?
 ORDER BY created_at DESC
 `
@@ -75,6 +76,7 @@ func (q *Queries) ListActivitiesByTask(ctx context.Context, taskID sql.NullStrin
 			&i.Type,
 			&i.Content,
 			&i.CreatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}

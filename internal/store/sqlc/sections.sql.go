@@ -17,7 +17,7 @@ INSERT INTO sections (
 ) VALUES (
     ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type CreateSectionParams struct {
@@ -50,12 +50,13 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (S
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getSection = `-- name: GetSection :one
-SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed FROM sections
+SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id FROM sections
 WHERE id = ? AND deleted = 0
 `
 
@@ -73,12 +74,13 @@ func (q *Queries) GetSection(ctx context.Context, id string) (Section, error) {
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listSectionsByProject = `-- name: ListSectionsByProject :many
-SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed FROM sections
+SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id FROM sections
 WHERE project_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -103,6 +105,7 @@ func (q *Queries) ListSectionsByProject(ctx context.Context, projectID sql.NullS
 			&i.UpdatedAt,
 			&i.Archived,
 			&i.Collapsed,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -152,7 +155,7 @@ func (q *Queries) SoftDeleteSectionsByProject(ctx context.Context, arg SoftDelet
 const updateSectionIndex = `-- name: UpdateSectionIndex :one
 UPDATE sections SET "index" = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type UpdateSectionIndexParams struct {
@@ -175,6 +178,7 @@ func (q *Queries) UpdateSectionIndex(ctx context.Context, arg UpdateSectionIndex
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -182,7 +186,7 @@ func (q *Queries) UpdateSectionIndex(ctx context.Context, arg UpdateSectionIndex
 const updateSectionTitle = `-- name: UpdateSectionTitle :one
 UPDATE sections SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type UpdateSectionTitleParams struct {
@@ -205,6 +209,7 @@ func (q *Queries) UpdateSectionTitle(ctx context.Context, arg UpdateSectionTitle
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }

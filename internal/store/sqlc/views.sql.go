@@ -11,7 +11,7 @@ import (
 )
 
 const viewInbox = `-- name: ViewInbox :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
 WHERE schedule = 0 AND status = 0 AND deleted = 0
 ORDER BY "index"
 `
@@ -46,6 +46,7 @@ func (q *Queries) ViewInbox(ctx context.Context) ([]Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -61,7 +62,7 @@ func (q *Queries) ViewInbox(ctx context.Context) ([]Task, error) {
 }
 
 const viewLogbook = `-- name: ViewLogbook :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
 WHERE status IN (1, 2) AND deleted = 0
 ORDER BY completed_at DESC
 `
@@ -96,6 +97,7 @@ func (q *Queries) ViewLogbook(ctx context.Context) ([]Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -111,7 +113,7 @@ func (q *Queries) ViewLogbook(ctx context.Context) ([]Task, error) {
 }
 
 const viewSomeday = `-- name: ViewSomeday :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
 WHERE schedule = 2 AND status = 0 AND deleted = 0
 ORDER BY "index"
 `
@@ -146,6 +148,7 @@ func (q *Queries) ViewSomeday(ctx context.Context) ([]Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -161,7 +164,7 @@ func (q *Queries) ViewSomeday(ctx context.Context) ([]Task, error) {
 }
 
 const viewToday = `-- name: ViewToday :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
 WHERE schedule = 1 AND status = 0 AND deleted = 0
   AND (start_date IS NULL OR start_date <= ?)
 ORDER BY COALESCE(today_index, 999999), "index"
@@ -197,6 +200,7 @@ func (q *Queries) ViewToday(ctx context.Context, startDate sql.NullString) ([]Ta
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -212,7 +216,7 @@ func (q *Queries) ViewToday(ctx context.Context, startDate sql.NullString) ([]Ta
 }
 
 const viewUpcoming = `-- name: ViewUpcoming :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
 WHERE start_date > ? AND status = 0 AND deleted = 0
 ORDER BY start_date, "index"
 `
@@ -247,6 +251,7 @@ func (q *Queries) ViewUpcoming(ctx context.Context, startDate sql.NullString) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}

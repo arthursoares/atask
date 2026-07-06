@@ -17,7 +17,7 @@ INSERT INTO checklist_items (
 ) VALUES (
     ?, ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type CreateChecklistItemParams struct {
@@ -51,12 +51,13 @@ func (q *Queries) CreateChecklistItem(ctx context.Context, arg CreateChecklistIt
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getChecklistItem = `-- name: GetChecklistItem :one
-SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at FROM checklist_items
+SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id FROM checklist_items
 WHERE id = ? AND deleted = 0
 `
 
@@ -73,12 +74,13 @@ func (q *Queries) GetChecklistItem(ctx context.Context, id string) (ChecklistIte
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listChecklistItemsByTask = `-- name: ListChecklistItemsByTask :many
-SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at FROM checklist_items
+SELECT id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id FROM checklist_items
 WHERE task_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -102,6 +104,7 @@ func (q *Queries) ListChecklistItemsByTask(ctx context.Context, taskID sql.NullS
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -135,7 +138,7 @@ func (q *Queries) SoftDeleteChecklistItem(ctx context.Context, arg SoftDeleteChe
 const updateChecklistItemIndex = `-- name: UpdateChecklistItemIndex :one
 UPDATE checklist_items SET "index" = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateChecklistItemIndexParams struct {
@@ -157,6 +160,7 @@ func (q *Queries) UpdateChecklistItemIndex(ctx context.Context, arg UpdateCheckl
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -164,7 +168,7 @@ func (q *Queries) UpdateChecklistItemIndex(ctx context.Context, arg UpdateCheckl
 const updateChecklistItemStatus = `-- name: UpdateChecklistItemStatus :one
 UPDATE checklist_items SET status = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateChecklistItemStatusParams struct {
@@ -186,6 +190,7 @@ func (q *Queries) UpdateChecklistItemStatus(ctx context.Context, arg UpdateCheck
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -193,7 +198,7 @@ func (q *Queries) UpdateChecklistItemStatus(ctx context.Context, arg UpdateCheck
 const updateChecklistItemTitle = `-- name: UpdateChecklistItemTitle :one
 UPDATE checklist_items SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, status, task_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateChecklistItemTitleParams struct {
@@ -215,6 +220,7 @@ func (q *Queries) UpdateChecklistItemTitle(ctx context.Context, arg UpdateCheckl
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

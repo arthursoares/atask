@@ -32,7 +32,7 @@ INSERT INTO locations (
 ) VALUES (
     ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at
+RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type CreateLocationParams struct {
@@ -69,12 +69,13 @@ func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) 
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getLocation = `-- name: GetLocation :one
-SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at FROM locations
+SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id FROM locations
 WHERE id = ? AND deleted = 0
 `
 
@@ -92,12 +93,13 @@ func (q *Queries) GetLocation(ctx context.Context, id string) (Location, error) 
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listLocations = `-- name: ListLocations :many
-SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at FROM locations
+SELECT id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id FROM locations
 WHERE deleted = 0
 `
 
@@ -121,6 +123,7 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -154,7 +157,7 @@ func (q *Queries) SoftDeleteLocation(ctx context.Context, arg SoftDeleteLocation
 const updateLocationName = `-- name: UpdateLocationName :one
 UPDATE locations SET name = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at
+RETURNING id, name, latitude, longitude, radius, address, deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateLocationNameParams struct {
@@ -177,6 +180,7 @@ func (q *Queries) UpdateLocationName(ctx context.Context, arg UpdateLocationName
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

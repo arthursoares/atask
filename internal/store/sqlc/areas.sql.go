@@ -17,7 +17,7 @@ INSERT INTO areas (
 ) VALUES (
     ?, ?, ?, 0, 0, NULL, ?, ?
 )
-RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type CreateAreaParams struct {
@@ -46,12 +46,13 @@ func (q *Queries) CreateArea(ctx context.Context, arg CreateAreaParams) (Area, e
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getArea = `-- name: GetArea :one
-SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at FROM areas
+SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
 WHERE id = ? AND deleted = 0
 `
 
@@ -67,12 +68,13 @@ func (q *Queries) GetArea(ctx context.Context, id string) (Area, error) {
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listAllAreas = `-- name: ListAllAreas :many
-SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at FROM areas
+SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
 WHERE deleted = 0
 ORDER BY "index"
 `
@@ -95,6 +97,7 @@ func (q *Queries) ListAllAreas(ctx context.Context) ([]Area, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -110,7 +113,7 @@ func (q *Queries) ListAllAreas(ctx context.Context) ([]Area, error) {
 }
 
 const listAreas = `-- name: ListAreas :many
-SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at FROM areas
+SELECT id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id FROM areas
 WHERE deleted = 0 AND archived = 0
 ORDER BY "index"
 `
@@ -133,6 +136,7 @@ func (q *Queries) ListAreas(ctx context.Context) ([]Area, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -166,7 +170,7 @@ func (q *Queries) SoftDeleteArea(ctx context.Context, arg SoftDeleteAreaParams) 
 const updateAreaArchived = `-- name: UpdateAreaArchived :one
 UPDATE areas SET archived = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateAreaArchivedParams struct {
@@ -187,6 +191,7 @@ func (q *Queries) UpdateAreaArchived(ctx context.Context, arg UpdateAreaArchived
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -194,7 +199,7 @@ func (q *Queries) UpdateAreaArchived(ctx context.Context, arg UpdateAreaArchived
 const updateAreaTitle = `-- name: UpdateAreaTitle :one
 UPDATE areas SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at
+RETURNING id, title, "index", archived, deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateAreaTitleParams struct {
@@ -215,6 +220,7 @@ func (q *Queries) UpdateAreaTitle(ctx context.Context, arg UpdateAreaTitleParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

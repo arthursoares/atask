@@ -38,7 +38,7 @@ func (q *Queries) AddTaskTag(ctx context.Context, arg AddTaskTagParams) error {
 }
 
 const listProjectTags = `-- name: ListProjectTags :many
-SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at FROM tags t
+SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at, t.user_id FROM tags t
 INNER JOIN project_tags pt ON pt.tag_id = t.id
 WHERE pt.project_id = ? AND t.deleted = 0
 ORDER BY t."index"
@@ -63,6 +63,7 @@ func (q *Queries) ListProjectTags(ctx context.Context, projectID string) ([]Tag,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -78,7 +79,7 @@ func (q *Queries) ListProjectTags(ctx context.Context, projectID string) ([]Tag,
 }
 
 const listTaskTags = `-- name: ListTaskTags :many
-SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at FROM tags t
+SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at, t.user_id FROM tags t
 INNER JOIN task_tags tt ON tt.tag_id = t.id
 WHERE tt.task_id = ? AND t.deleted = 0
 ORDER BY t."index"
@@ -103,6 +104,7 @@ func (q *Queries) ListTaskTags(ctx context.Context, taskID string) ([]Tag, error
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}

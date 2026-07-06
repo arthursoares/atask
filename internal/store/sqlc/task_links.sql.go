@@ -33,7 +33,7 @@ func (q *Queries) AddTaskLink(ctx context.Context, arg AddTaskLinkParams) error 
 }
 
 const listTaskLinks = `-- name: ListTaskLinks :many
-SELECT task_id, related_task_id, relationship_type, created_at FROM task_links WHERE task_id = ?
+SELECT task_id, related_task_id, relationship_type, created_at, user_id FROM task_links WHERE task_id = ?
 `
 
 func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]TaskLink, error) {
@@ -50,6 +50,7 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]TaskLink,
 			&i.RelatedTaskID,
 			&i.RelationshipType,
 			&i.CreatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}

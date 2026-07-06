@@ -17,7 +17,7 @@ INSERT INTO tags (
 ) VALUES (
     ?, ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type CreateTagParams struct {
@@ -51,12 +51,13 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, erro
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getTag = `-- name: GetTag :one
-SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at FROM tags
+SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id FROM tags
 WHERE id = ? AND deleted = 0
 `
 
@@ -73,12 +74,13 @@ func (q *Queries) GetTag(ctx context.Context, id string) (Tag, error) {
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listTags = `-- name: ListTags :many
-SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at FROM tags
+SELECT id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id FROM tags
 WHERE deleted = 0
 ORDER BY "index"
 `
@@ -102,6 +104,7 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -135,7 +138,7 @@ func (q *Queries) SoftDeleteTag(ctx context.Context, arg SoftDeleteTagParams) er
 const updateTagShortcut = `-- name: UpdateTagShortcut :one
 UPDATE tags SET shortcut = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateTagShortcutParams struct {
@@ -157,6 +160,7 @@ func (q *Queries) UpdateTagShortcut(ctx context.Context, arg UpdateTagShortcutPa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -164,7 +168,7 @@ func (q *Queries) UpdateTagShortcut(ctx context.Context, arg UpdateTagShortcutPa
 const updateTagTitle = `-- name: UpdateTagTitle :one
 UPDATE tags SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at
+RETURNING id, title, parent_id, shortcut, "index", deleted, deleted_at, created_at, updated_at, user_id
 `
 
 type UpdateTagTitleParams struct {
@@ -186,6 +190,7 @@ func (q *Queries) UpdateTagTitle(ctx context.Context, arg UpdateTagTitleParams) 
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

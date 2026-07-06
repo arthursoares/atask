@@ -76,7 +76,7 @@ func (q *Queries) InsertDomainEvent(ctx context.Context, arg InsertDomainEventPa
 }
 
 const listDeltaEventsSince = `-- name: ListDeltaEventsSince :many
-SELECT id, entity_type, entity_id, "action", field, old_value, new_value, actor_id, timestamp FROM delta_events
+SELECT id, entity_type, entity_id, "action", field, old_value, new_value, actor_id, timestamp, user_id FROM delta_events
 WHERE id > ?
 ORDER BY id
 `
@@ -100,6 +100,7 @@ func (q *Queries) ListDeltaEventsSince(ctx context.Context, id int64) ([]DeltaEv
 			&i.NewValue,
 			&i.ActorID,
 			&i.Timestamp,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -115,7 +116,7 @@ func (q *Queries) ListDeltaEventsSince(ctx context.Context, id int64) ([]DeltaEv
 }
 
 const listDomainEventsByEntitySince = `-- name: ListDomainEventsByEntitySince :many
-SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp FROM domain_events
+SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
 WHERE entity_type = ? AND entity_id = ? AND id > ?
 ORDER BY id
 `
@@ -143,6 +144,7 @@ func (q *Queries) ListDomainEventsByEntitySince(ctx context.Context, arg ListDom
 			&i.ActorID,
 			&i.Payload,
 			&i.Timestamp,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -158,7 +160,7 @@ func (q *Queries) ListDomainEventsByEntitySince(ctx context.Context, arg ListDom
 }
 
 const listDomainEventsByTypeSince = `-- name: ListDomainEventsByTypeSince :many
-SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp FROM domain_events
+SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
 WHERE type = ? AND id > ?
 ORDER BY id
 `
@@ -185,6 +187,7 @@ func (q *Queries) ListDomainEventsByTypeSince(ctx context.Context, arg ListDomai
 			&i.ActorID,
 			&i.Payload,
 			&i.Timestamp,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -200,7 +203,7 @@ func (q *Queries) ListDomainEventsByTypeSince(ctx context.Context, arg ListDomai
 }
 
 const listDomainEventsSince = `-- name: ListDomainEventsSince :many
-SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp FROM domain_events
+SELECT id, type, entity_type, entity_id, actor_id, payload, timestamp, user_id FROM domain_events
 WHERE id > ?
 ORDER BY id
 `
@@ -222,6 +225,7 @@ func (q *Queries) ListDomainEventsSince(ctx context.Context, id int64) ([]Domain
 			&i.ActorID,
 			&i.Payload,
 			&i.Timestamp,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}

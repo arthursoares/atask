@@ -35,7 +35,7 @@ INSERT INTO projects (
     ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, 0, NULL, ?, ?
 )
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type CreateProjectParams struct {
@@ -90,12 +90,13 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
 WHERE id = ? AND deleted = 0
 `
 
@@ -119,12 +120,13 @@ func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
 WHERE deleted = 0
 ORDER BY "index"
 `
@@ -155,6 +157,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Color,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -170,7 +173,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 }
 
 const listProjectsByArea = `-- name: ListProjectsByArea :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
 WHERE area_id = ? AND deleted = 0
 ORDER BY "index"
 `
@@ -201,6 +204,7 @@ func (q *Queries) ListProjectsByArea(ctx context.Context, areaID sql.NullString)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Color,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -249,7 +253,7 @@ func (q *Queries) SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectPa
 const updateProjectArea = `-- name: UpdateProjectArea :one
 UPDATE projects SET area_id = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectAreaParams struct {
@@ -278,6 +282,7 @@ func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -285,7 +290,7 @@ func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaPa
 const updateProjectColor = `-- name: UpdateProjectColor :one
 UPDATE projects SET color = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectColorParams struct {
@@ -314,6 +319,7 @@ func (q *Queries) UpdateProjectColor(ctx context.Context, arg UpdateProjectColor
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -321,7 +327,7 @@ func (q *Queries) UpdateProjectColor(ctx context.Context, arg UpdateProjectColor
 const updateProjectDeadline = `-- name: UpdateProjectDeadline :one
 UPDATE projects SET deadline = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectDeadlineParams struct {
@@ -350,6 +356,7 @@ func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -357,7 +364,7 @@ func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDe
 const updateProjectNotes = `-- name: UpdateProjectNotes :one
 UPDATE projects SET notes = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectNotesParams struct {
@@ -386,6 +393,7 @@ func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotes
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -393,7 +401,7 @@ func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotes
 const updateProjectStatus = `-- name: UpdateProjectStatus :one
 UPDATE projects SET status = ?, completed_at = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectStatusParams struct {
@@ -428,6 +436,7 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -435,7 +444,7 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 const updateProjectTitle = `-- name: UpdateProjectTitle :one
 UPDATE projects SET title = ?, updated_at = ?
 WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectTitleParams struct {
@@ -464,6 +473,7 @@ func (q *Queries) UpdateProjectTitle(ctx context.Context, arg UpdateProjectTitle
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
