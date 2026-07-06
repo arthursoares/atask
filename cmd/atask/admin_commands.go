@@ -102,6 +102,29 @@ func registerAdminCommands(app *pocketbase.PocketBase) {
 				os.Exit(1)
 			}
 
+			// P1 fix: verify --to refers to a real PocketBase user *before*
+			// touching atask.db. Without this, a typo'd/nonexistent user ID
+			// would still satisfy `WHERE user_id = ''` in assignOrphanedData:
+			// every orphan row gets stamped with the bogus ID, the real
+			// intended user sees nothing, OrphanCounts (internal/store/orphan_check.go)
+			// stops flagging the data as orphaned (rows are no longer user_id=''
+			// so the startup/admin-banner warning falsely reports "clean"), and
+			// a second assign-data run can't repair it (it only ever touches
+			// user_id=''). At that point recovery needs hand-written SQL.
+			//
+			// registerAdminCommands' doc comment (above) establishes that both
+			// admin subcommands are registered on RootCmd before app.Start()
+			// runs Execute(), so PocketBase has already bootstrapped `app`
+			// (migrations applied, `users` collection ready) by the time this
+			// RunE executes — no extra manual bootstrap needed here, unlike
+			// create-user's EnsureUserFields call (which compensates for
+			// OnServe never firing for subcommands, a different concern).
+			adapter := auth.NewPBAdapter(app)
+			if err := validateUserExists(adapter, userID); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+
 			cfg := config.Load()
 			if err := assignOrphanedData(cfg.DataDir+"/atask.db", userID); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -139,6 +162,18 @@ func readPassword() (string, error) {
 		return "", err
 	}
 	return strings.TrimRight(line, "\r\n"), nil
+}
+
+// validateUserExists confirms userID resolves to a real user via adapter
+// (backed by PocketBase's `users` collection), returning a descriptive error
+// if it does not. Extracted from assignDataCmd's RunE so it can be unit
+// tested against a real PocketBase test app (see admin_commands_test.go)
+// without needing to exercise the process-exiting CLI plumbing.
+func validateUserExists(adapter auth.AuthProvider, userID string) error {
+	if _, err := adapter.FindUserByID(userID); err != nil {
+		return fmt.Errorf("user %s not found — create the user first with 'atask admin create-user': %w", userID, err)
+	}
+	return nil
 }
 
 // assignOrphanedData opens the domain SQLite database at dbPath and, inside
