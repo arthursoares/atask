@@ -128,6 +128,13 @@ func main() {
 		return se.Next()
 	})
 
+	// Register `atask admin create-user`/`atask admin assign-data` (Task 15).
+	// Must happen before app.Start(): PocketBase.Execute() (which app.Start()
+	// calls into) only bootstraps the app ahead of dispatch when the
+	// requested subcommand is already registered on RootCmd — see
+	// registerAdminCommands' doc comment in admin_commands.go.
+	registerAdminCommands(app)
+
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
