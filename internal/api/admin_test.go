@@ -8,6 +8,7 @@ package api_test
 // directly to exercise requireAdmin's role check in isolation.
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -293,6 +294,121 @@ func TestAdminDashboard_ShowsOrphanBanner(t *testing.T) {
 	}
 	if !strings.Contains(body, "orphaned rows detected") {
 		t.Errorf("expected dashboard to show the orphan banner, got: %s", body)
+	}
+}
+
+// TestAdminDashboard_ShowsStatsAndRecentEvent seeds two tasks (and their
+// task.created domain_events) for a real member account, via the same
+// TaskService the JSON API uses, then confirms the dashboard's stat tiles,
+// growth chart, recent-activity table, and per-user row all reflect that
+// seeded data -- not just a 200.
+func TestAdminDashboard_ShowsStatsAndRecentEvent(t *testing.T) {
+	env := setupAdminServer(t)
+
+	member, err := env.auth.CreateUser("member@test.com", "memberpass1", "Member", "user")
+	if err != nil {
+		t.Fatalf("create member user: %v", err)
+	}
+
+	es := event.NewEventStore(env.db)
+	bus := event.NewBus()
+	taskSvc := service.NewTaskService(env.db, es, bus)
+	ctx := context.Background()
+	if _, err := taskSvc.Create(ctx, member.ID, "Stats task one", member.ID); err != nil {
+		t.Fatalf("create task 1: %v", err)
+	}
+	if _, err := taskSvc.Create(ctx, member.ID, "Stats task two", member.ID); err != nil {
+		t.Fatalf("create task 2: %v", err)
+	}
+
+	session := loginAsAdmin(t, env, "admin@test.com", "adminpass1")
+	req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/admin/", nil)
+	req.AddCookie(session)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("GET /admin/: %v", err)
+	}
+	defer resp.Body.Close()
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for admin dashboard, got %d: %s", resp.StatusCode, body)
+	}
+
+	// Stat tile: system-wide task count reflects the two seeded tasks (no
+	// other account has any).
+	if !strings.Contains(body, `<p class="stat">2</p><p class="muted">tasks</p>`) {
+		t.Errorf("expected the tasks stat tile to show 2, got: %s", body)
+	}
+
+	// Recent-activity table: the seeded task.created events must appear,
+	// attributed to the member as actor.
+	if !strings.Contains(body, "task.created") {
+		t.Errorf("expected recent-activity table to show task.created, got: %s", body)
+	}
+	if !strings.Contains(body, "<td>"+member.ID+"</td>") {
+		t.Errorf("expected recent-activity table to attribute an event to actor %s, got: %s", member.ID, body)
+	}
+
+	// Users table: the member's row must show 2 items and a non-"never"
+	// last-active value (they just generated events).
+	rowRE := regexp.MustCompile(`(?s)<tr>\s*<td><a href="/admin/users/` + regexp.QuoteMeta(member.ID) + `">.*?</tr>`)
+	row := rowRE.FindString(body)
+	if row == "" {
+		t.Fatalf("expected a user-table row for %s, got: %s", member.ID, body)
+	}
+	if !strings.Contains(row, "<td>2</td>") {
+		t.Errorf("expected member row to show 2 items, got row: %s", row)
+	}
+	if strings.Contains(row, ">never<") {
+		t.Errorf("expected member row to show a last-active time, got row: %s", row)
+	}
+}
+
+// TestAdminUserEdit_ShowsOverview seeds three tasks for a member account and
+// confirms the user-detail page's overview block (join date, count tiles,
+// total events, per-user recent-activity table) renders the seeded values.
+func TestAdminUserEdit_ShowsOverview(t *testing.T) {
+	env := setupAdminServer(t)
+
+	member, err := env.auth.CreateUser("overview@test.com", "overviewpw1", "Overview", "user")
+	if err != nil {
+		t.Fatalf("create member user: %v", err)
+	}
+
+	es := event.NewEventStore(env.db)
+	bus := event.NewBus()
+	taskSvc := service.NewTaskService(env.db, es, bus)
+	ctx := context.Background()
+	for _, title := range []string{"Overview task one", "Overview task two", "Overview task three"} {
+		if _, err := taskSvc.Create(ctx, member.ID, title, member.ID); err != nil {
+			t.Fatalf("create task %q: %v", title, err)
+		}
+	}
+
+	session := loginAsAdmin(t, env, "admin@test.com", "adminpass1")
+	req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/admin/users/"+member.ID, nil)
+	req.AddCookie(session)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("GET /admin/users/%s: %v", member.ID, err)
+	}
+	defer resp.Body.Close()
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for user-edit page, got %d: %s", resp.StatusCode, body)
+	}
+
+	if !strings.Contains(body, "Joined "+member.CreatedAt.Format("2006-01-02")) {
+		t.Errorf("expected overview to show the join date, got: %s", body)
+	}
+	if !strings.Contains(body, `<p class="stat">3</p><p class="muted">tasks</p>`) {
+		t.Errorf("expected overview to show 3 tasks, got: %s", body)
+	}
+	if !strings.Contains(body, "3 total events") {
+		t.Errorf("expected overview to show 3 total events, got: %s", body)
+	}
+	if !strings.Contains(body, "task.created") {
+		t.Errorf("expected the per-user recent-activity table to show task.created, got: %s", body)
 	}
 }
 

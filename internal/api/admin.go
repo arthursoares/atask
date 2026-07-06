@@ -23,6 +23,15 @@ const (
 	adminCookiePath = "/admin/"
 	// adminSessionMaxAge is the cookie lifetime in seconds (8h).
 	adminSessionMaxAge = 3600 * 8
+	// adminRecentEventsLimit caps the recent-activity tables (dashboard and
+	// per-user overview) at a fixed, positive value. RecentEvents/
+	// RecentEventsByUser do not clamp their limit argument themselves (a
+	// negative value means "unlimited" to the underlying SQLite query), so
+	// this handler must always pass a positive constant.
+	adminRecentEventsLimit = 20
+	// adminGrowthDays is the window (in days) for the dashboard's
+	// creation-growth chart.
+	adminGrowthDays = 30
 )
 
 // AdminHandler renders the server-side admin UI (Go html/template) and owns the
@@ -152,9 +161,86 @@ func (h *AdminHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }
 
-// Dashboard shows the user count, a user table, and (Task 22) an orphaned-data
-// warning banner (GET /admin/).
+// dashboardUserRow merges one auth.User with its per-account entity counts
+// and activity summary for the dashboard's user table. Built here in Go
+// (rather than looked up by ID via template map-indexing) per the design:
+// the handler already builds a users list from ListUsers, so it attaches
+// each user's counts + last-active by user.ID directly onto the row.
+//
+// Counts/Activity default to their zero value when the underlying stats
+// query fails or a user has no data — indistinguishable from "0 items" /
+// "never active", which is the same soft-degrade discipline the existing
+// OrphanTotal block already uses.
+type dashboardUserRow struct {
+	User       *auth.User
+	Counts     store.EntityCounts
+	Activity   store.Activity
+	TotalCount int
+}
+
+// growthBarChartWidth/Height/BarWidth/BarGap size the inline-SVG
+// creation-growth chart on the dashboard. Bar coordinates are precomputed in
+// Go (buildGrowthBars) rather than computed with template arithmetic, since
+// html/template has no built-in math helpers.
+const (
+	growthBarChartHeight = 60
+	growthBarWidth       = 8
+	growthBarGap         = 2
+)
+
+// growthBar is one day's pre-scaled bar for the creation-growth SVG panel.
+type growthBar struct {
+	Date   string
+	Count  int
+	X      int
+	Y      int
+	Height int
+}
+
+// buildGrowthBars scales CreationGrowth's zero-filled day buckets into SVG
+// rect coordinates. Guards the divide-by-zero case where every bucket is
+// empty (max == 0): every bar then renders at zero height instead of
+// panicking or producing NaN/Inf.
+func buildGrowthBars(buckets []store.DayBucket) []growthBar {
+	max := 0
+	for _, b := range buckets {
+		if b.Count > max {
+			max = b.Count
+		}
+	}
+
+	bars := make([]growthBar, len(buckets))
+	for i, b := range buckets {
+		h := 0
+		if max > 0 {
+			h = b.Count * growthBarChartHeight / max
+			if h == 0 && b.Count > 0 {
+				h = 2 // keep a visible sliver for a nonzero day
+			}
+		}
+		bars[i] = growthBar{
+			Date:   b.Date,
+			Count:  b.Count,
+			X:      i * (growthBarWidth + growthBarGap),
+			Y:      growthBarChartHeight - h,
+			Height: h,
+		}
+	}
+	return bars
+}
+
+// Dashboard shows the user count, system/per-user statistics, a
+// creation-growth chart, a recent-activity feed, a user table, and (Task 22)
+// an orphaned-data warning banner (GET /admin/).
+//
+// Every statistics query is independently non-fatal: on error it logs via
+// slog and the dashboard simply omits that one panel (or, for the merged
+// per-user row fields, leaves them at their zero value) — mirroring the
+// existing orphan-count discipline immediately below. A stats failure must
+// never turn into a 500 or a blank dashboard.
 func (h *AdminHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	users, total, err := h.auth.ListUsers("", 1, 100)
 	if err != nil {
 		http.Error(w, "failed to list users", http.StatusInternalServerError)
@@ -167,7 +253,7 @@ func (h *AdminHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// — it only degrades to omitting the banner.
 	var orphanTotal int
 	if h.db != nil {
-		counts, oerr := store.OrphanCounts(r.Context(), h.db.DB)
+		counts, oerr := store.OrphanCounts(ctx, h.db.DB)
 		if oerr != nil {
 			slog.Error("orphan check failed", "err", oerr)
 		} else {
@@ -175,11 +261,60 @@ func (h *AdminHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.render(w, "dashboard.html", map[string]any{
+	data := map[string]any{
 		"UserCount":   total,
-		"Users":       users,
 		"OrphanTotal": orphanTotal,
-	})
+	}
+
+	var perUserCounts map[string]store.EntityCounts
+	var userActivity map[string]store.Activity
+	if h.db != nil {
+		if pc, pcErr := store.PerUserCounts(ctx, h.db.DB); pcErr != nil {
+			slog.Error("per-user counts failed", "err", pcErr)
+		} else {
+			perUserCounts = pc
+		}
+
+		if ua, uaErr := store.UserActivity(ctx, h.db.DB); uaErr != nil {
+			slog.Error("user activity failed", "err", uaErr)
+		} else {
+			userActivity = ua
+		}
+	}
+
+	rows := make([]dashboardUserRow, 0, len(users))
+	for _, u := range users {
+		row := dashboardUserRow{User: u}
+		row.Counts = perUserCounts[u.ID]  // zero value if missing/failed
+		row.Activity = userActivity[u.ID] // zero value if missing/failed
+		row.TotalCount = row.Counts.Tasks + row.Counts.Projects + row.Counts.Areas + row.Counts.Tags
+		rows = append(rows, row)
+	}
+	data["UserRows"] = rows
+
+	if h.db != nil {
+		if sys, sErr := store.SystemStats(ctx, h.db.DB); sErr != nil {
+			slog.Error("system stats failed", "err", sErr)
+		} else {
+			data["SystemStats"] = sys
+		}
+
+		if events, eErr := store.RecentEvents(ctx, h.db.DB, adminRecentEventsLimit); eErr != nil {
+			slog.Error("recent events failed", "err", eErr)
+		} else {
+			data["RecentEvents"] = events
+		}
+
+		if growth, gErr := store.CreationGrowth(ctx, h.db.DB, adminGrowthDays); gErr != nil {
+			slog.Error("creation growth failed", "err", gErr)
+		} else {
+			data["GrowthBars"] = buildGrowthBars(growth)
+			data["GrowthChartWidth"] = len(growth) * (growthBarWidth + growthBarGap)
+			data["GrowthChartHeight"] = growthBarChartHeight
+		}
+	}
+
+	h.render(w, "dashboard.html", data)
 }
 
 // ListUsers renders the full user list (GET /admin/users).
@@ -230,6 +365,41 @@ func (h *AdminHandler) renderUserForm(w http.ResponseWriter, r *http.Request, er
 	h.render(w, "user_form.html", data)
 }
 
+// addUserOverview attaches the per-account statistics overview (entity
+// counts, activity summary, recent events) to the edit-user page data, keyed
+// by userID. Counts/Activity are always set to a zero value first so the
+// template can access nested fields (e.g. `.Counts.Tasks`) unconditionally
+// even when h.db is nil or a stats query fails — each query is independently
+// non-fatal: a failure logs via slog and leaves that piece at its zero
+// value/omitted, mirroring the Dashboard discipline. Join date is not part of
+// this: it comes from the already-loaded auth.User.CreatedAt, which cannot
+// fail once FindUserByID has succeeded.
+func (h *AdminHandler) addUserOverview(ctx context.Context, data map[string]any, userID string) {
+	data["Counts"] = store.EntityCounts{}
+	data["Activity"] = store.Activity{}
+	if h.db == nil {
+		return
+	}
+
+	if counts, err := store.PerUserCounts(ctx, h.db.DB); err != nil {
+		slog.Error("per-user counts failed", "err", err)
+	} else {
+		data["Counts"] = counts[userID]
+	}
+
+	if activity, err := store.UserActivity(ctx, h.db.DB); err != nil {
+		slog.Error("user activity failed", "err", err)
+	} else {
+		data["Activity"] = activity[userID]
+	}
+
+	if events, err := store.RecentEventsByUser(ctx, h.db.DB, userID, adminRecentEventsLimit); err != nil {
+		slog.Error("recent events by user failed", "err", err)
+	} else {
+		data["RecentEvents"] = events
+	}
+}
+
 // EditUser renders the edit form for a single user (GET) and applies updates
 // (POST) at /admin/users/{id}.
 func (h *AdminHandler) EditUser(w http.ResponseWriter, r *http.Request) {
@@ -241,10 +411,12 @@ func (h *AdminHandler) EditUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
 		}
-		h.render(w, "user_edit.html", map[string]any{
+		data := map[string]any{
 			"CSRFToken": h.sessionCSRF(r),
 			"User":      user,
-		})
+		}
+		h.addUserOverview(r.Context(), data, id)
+		h.render(w, "user_edit.html", data)
 		return
 	}
 
@@ -275,19 +447,24 @@ func (h *AdminHandler) EditUser(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 }
 
-// renderEditError re-renders the edit form with a fresh CSRF token and an error.
+// renderEditError re-renders the edit form with a fresh CSRF token and an
+// error. It rebuilds the overview data too (addUserOverview), since
+// user_edit.html unconditionally reads .Counts/.Activity — leaving them
+// unset here would panic the template on the error-repaint path.
 func (h *AdminHandler) renderEditError(w http.ResponseWriter, r *http.Request, id, errMsg string) {
 	user, err := h.auth.FindUserByID(id)
 	if err != nil {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	w.WriteHeader(http.StatusUnprocessableEntity)
-	h.render(w, "user_edit.html", map[string]any{
+	data := map[string]any{
 		"CSRFToken": h.sessionCSRF(r),
 		"User":      user,
 		"Error":     errMsg,
-	})
+	}
+	h.addUserOverview(r.Context(), data, id)
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	h.render(w, "user_edit.html", data)
 }
 
 // requireAdmin gates the protected admin routes. It resolves the session cookie

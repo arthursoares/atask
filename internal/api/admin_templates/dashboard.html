@@ -11,23 +11,64 @@
         <code>atask admin assign-data --to &lt;user-id&gt;</code> to claim it.
     </div>
     {{end}}
-    <p class="stat">{{.UserCount}}</p>
-    <p class="muted">total users</p>
 
+    <div class="tiles">
+        <div class="tile"><p class="stat">{{.UserCount}}</p><p class="muted">users</p></div>
+        {{if .SystemStats}}
+        <div class="tile"><p class="stat">{{.SystemStats.Tasks}}</p><p class="muted">tasks</p></div>
+        <div class="tile"><p class="stat">{{.SystemStats.Projects}}</p><p class="muted">projects</p></div>
+        <div class="tile"><p class="stat">{{.SystemStats.Areas}}</p><p class="muted">areas</p></div>
+        <div class="tile"><p class="stat">{{.SystemStats.Events}}</p><p class="muted">events</p></div>
+        {{end}}
+    </div>
+
+    {{if .GrowthBars}}
+    <div class="panel">
+        <h2>Creation activity (last {{len .GrowthBars}} days)</h2>
+        <svg class="growth-chart" viewBox="0 0 {{.GrowthChartWidth}} {{.GrowthChartHeight}}" preserveAspectRatio="none" role="img" aria-label="Entity creation over time">
+            {{range .GrowthBars}}
+            <rect x="{{.X}}" y="{{.Y}}" width="8" height="{{.Height}}"><title>{{.Date}}: {{.Count}}</title></rect>
+            {{end}}
+        </svg>
+    </div>
+    {{end}}
+
+    {{if .RecentEvents}}
+    <div class="panel">
+        <h2>Recent activity</h2>
+        <table>
+            <thead><tr><th>Actor</th><th>Action</th><th>Entity</th><th>Time</th></tr></thead>
+            <tbody>
+                {{range .RecentEvents}}
+                <tr>
+                    <td>{{.ActorID}}</td>
+                    <td>{{.Type}}</td>
+                    <td>{{.EntityType}}</td>
+                    <td>{{if .Timestamp.IsZero}}&mdash;{{else}}{{.Timestamp.Format "2006-01-02 15:04:05"}}{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+
+    <h2>Users</h2>
     <table>
         <thead>
-            <tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr>
+            <tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Items</th><th>Last active</th></tr>
         </thead>
         <tbody>
-            {{range .Users}}
+            {{range .UserRows}}
             <tr>
-                <td><a href="/admin/users/{{.ID}}">{{.Email}}</a></td>
-                <td>{{.Name}}</td>
-                <td>{{.Role}}</td>
-                <td>{{if .Disabled}}disabled{{else}}active{{end}}</td>
+                <td><a href="/admin/users/{{.User.ID}}">{{.User.Email}}</a></td>
+                <td>{{.User.Name}}</td>
+                <td>{{.User.Role}}</td>
+                <td>{{if .User.Disabled}}disabled{{else}}active{{end}}</td>
+                <td>{{.TotalCount}}</td>
+                <td>{{if .Activity.LastActiveAt}}{{.Activity.LastActiveAt.Format "2006-01-02 15:04"}}{{else}}never{{end}}</td>
             </tr>
             {{else}}
-            <tr><td colspan="4" class="muted">No users yet.</td></tr>
+            <tr><td colspan="6" class="muted">No users yet.</td></tr>
             {{end}}
         </tbody>
     </table>
