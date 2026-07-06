@@ -50,6 +50,8 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 
 	"github.com/atask/atask/internal/api"
+	"github.com/atask/atask/internal/auth"
+	"github.com/atask/atask/internal/config"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/service"
 	"github.com/atask/atask/internal/store"
@@ -72,6 +74,14 @@ func startRealPBServer(t *testing.T) *httptest.Server {
 	}
 	t.Cleanup(app.Cleanup)
 
+	// Give the test app's `users` collection the role/disabled fields the
+	// real boot path adds (cmd/atask/main.go), so a fresh read after Save
+	// (e.g. AuthWithPassword's FindAuthRecordByEmail during Login) doesn't
+	// silently lose them — see auth.EnsureUserFields's doc comment.
+	if err := auth.EnsureUserFields(app); err != nil {
+		t.Fatalf("auth.EnsureUserFields: %v", err)
+	}
+
 	pbRouter, err := apis.NewRouter(app)
 	if err != nil {
 		t.Fatalf("apis.NewRouter: %v", err)
@@ -92,7 +102,9 @@ func startRealPBServer(t *testing.T) *httptest.Server {
 	se := &core.ServeEvent{App: app, Router: pbRouter}
 	api.RegisterRoutes(se, api.RoutesDeps{
 		DB:            db,
+		AuthProvider:  auth.NewPBAdapterFromApp(app),
 		AuthService:   service.NewAuthService(db, "test-secret"),
+		Config:        &config.Config{},
 		EventStore:    es,
 		Bus:           bus,
 		StreamManager: event.NewStreamManager(bus),
@@ -125,12 +137,11 @@ func startRealPBServer(t *testing.T) *httptest.Server {
 // reproduced live via
 // `curl -X POST localhost:8091/auth/register -d '{"email":"probe@test.com","password":"secret123","name":"Probe"}'`.
 //
-// /auth/register's CreateUser is still a Phase-1 stub (legacy local user
-// creation was removed in migration 006; Task 12 rewrites it against
-// AuthProvider), so the *correct* post-fix response is 422
-// "legacy auth removed; use AuthProvider" — a real auth-layer response, not
-// the transport-layer 400 the bug produced. That distinction is exactly the
-// point: the bug fired before the handler ever got to run business logic.
+// /auth/register now creates a real account via the AuthProvider (Task 12),
+// so the *correct* post-fix response is 201 with the created user's profile —
+// a real auth-layer response, not the transport-layer 400 the bug produced.
+// That distinction is exactly the point: the bug fired before the handler
+// ever got to run business logic.
 func TestRealPBRouter_ValidBody_NotRejectedAsTrailingData(t *testing.T) {
 	srv := startRealPBServer(t)
 
@@ -147,11 +158,11 @@ func TestRealPBRouter_ValidBody_NotRejectedAsTrailingData(t *testing.T) {
 		t.Fatalf("regression: valid single-object body rejected as trailing data through PocketBase's real router over a real connection (bridge() body-rewind bug): %d %s", resp.StatusCode, respBody)
 	}
 
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 (legacy auth stub) once the transport-layer bug is fixed, got %d: %s", resp.StatusCode, respBody)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 (real AuthProvider-backed registration) once the transport-layer bug is fixed, got %d: %s", resp.StatusCode, respBody)
 	}
-	if !strings.Contains(respBody, "legacy auth removed") {
-		t.Errorf("expected legacy-auth-removed error body, got: %s", respBody)
+	if !strings.Contains(respBody, `"email":"probe@test.com"`) {
+		t.Errorf("expected the created user's email in the response body, got: %s", respBody)
 	}
 }
 

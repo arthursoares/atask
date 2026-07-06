@@ -41,7 +41,51 @@ type PBAdapter struct {
 // NewPBAdapter builds an adapter around a running PocketBase app.
 // It accepts *pocketbase.PocketBase (which embeds core.App).
 func NewPBAdapter(app *pocketbase.PocketBase) *PBAdapter {
+	return NewPBAdapterFromApp(app)
+}
+
+// NewPBAdapterFromApp builds an adapter around any core.App. This is the same
+// construction NewPBAdapter delegates to, exposed for callers that only have
+// a core.App — notably *tests.TestApp (github.com/pocketbase/pocketbase/tests),
+// which embeds *core.BaseApp rather than *pocketbase.PocketBase. Task 12's
+// internal/api tests use this to exercise the real AuthProvider end to end
+// (register/login/refresh/me) against a real PocketBase test app.
+func NewPBAdapterFromApp(app core.App) *PBAdapter {
 	return &PBAdapter{app: app}
+}
+
+// EnsureUserFields adds the custom `role` (text) and `disabled` (bool) fields
+// to PocketBase's `users` auth collection if they are missing (name + avatar
+// ship on the collection by default). Idempotent: safe to call on every serve.
+//
+// This matters beyond the initial Save: Record.Set on a key that has no
+// matching collection field only stores the value in memory (see
+// Record.Set/SetIfFieldExists in pocketbase/core) — it is never persisted as
+// a DB column. Without this field present on the collection, CreateUser's
+// role/disabled values would look correct on the record returned from the
+// same Save call, but silently vanish on any subsequent fresh read (e.g. the
+// FindAuthRecordByEmail a later Login performs). The production boot path
+// (cmd/atask/main.go) calls this once per serve; tests that spin up their own
+// PocketBase test app (internal/api's auth tests) call it too for parity.
+func EnsureUserFields(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		return err
+	}
+
+	changed := false
+	if collection.Fields.GetByName("role") == nil {
+		collection.Fields.Add(&core.TextField{Name: "role"})
+		changed = true
+	}
+	if collection.Fields.GetByName("disabled") == nil {
+		collection.Fields.Add(&core.BoolField{Name: "disabled"})
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return app.Save(collection)
 }
 
 func (a *PBAdapter) ValidateToken(token string) (string, error) {
@@ -182,7 +226,11 @@ func (a *PBAdapter) ListUsers(filter string, page, perPage int) ([]*User, int, e
 }
 
 func (a *PBAdapter) EnabledProviders() []string {
-	// Populated from config in the wiring layer (Task 11+); nil here.
+	// Vestigial: Task 12 wires GET /auth/providers directly from
+	// config.Config.EnabledProviders() (which knows about configured OAuth
+	// client IDs), not from the AuthProvider — PBAdapter has no config access
+	// and this method is never called by the handler. Kept only to satisfy
+	// the AuthProvider interface.
 	return nil
 }
 

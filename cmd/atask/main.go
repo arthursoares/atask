@@ -74,7 +74,7 @@ func main() {
 
 		// Ensure PocketBase's users auth collection carries the role/disabled
 		// fields the auth adapter reads/writes (name + avatar ship by default).
-		if err := ensureUserFields(se.App); err != nil {
+		if err := auth.EnsureUserFields(se.App); err != nil {
 			return err
 		}
 
@@ -97,12 +97,13 @@ func main() {
 		checklistSvc := service.NewChecklistService(db, eventStore, bus)
 		activitySvc := service.NewActivityService(db, eventStore, bus)
 
-		// Register the domain routes on PocketBase's router (thin Task 10 stub —
-		// Task 11 restructures this and swaps AuthService for AuthProvider).
+		// Register the domain routes on PocketBase's router with per-route auth
+		// (Task 11) and the AuthProvider-backed /auth handlers (Task 12).
 		api.RegisterRoutes(se, api.RoutesDeps{
 			DB:            db,
 			AuthProvider:  authProvider,
 			AuthService:   authService,
+			Config:        cfg,
 			EventStore:    eventStore,
 			Bus:           bus,
 			StreamManager: streamManager,
@@ -122,30 +123,6 @@ func main() {
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
-}
-
-// ensureUserFields adds the custom `role` (text) and `disabled` (bool) fields to
-// PocketBase's default "users" auth collection if they are missing. Idempotent:
-// safe to run on every serve.
-func ensureUserFields(app core.App) error {
-	collection, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
-		return err
-	}
-
-	changed := false
-	if collection.Fields.GetByName("role") == nil {
-		collection.Fields.Add(&core.TextField{Name: "role"})
-		changed = true
-	}
-	if collection.Fields.GetByName("disabled") == nil {
-		collection.Fields.Add(&core.BoolField{Name: "disabled"})
-		changed = true
-	}
-	if !changed {
-		return nil
-	}
-	return app.Save(collection)
 }
 
 // hasSubcommand reports whether the provided args contain a non-flag token
@@ -168,9 +145,11 @@ func normalizeAddr(addr string) string {
 	return addr
 }
 
-// jwtSecret is retained for the legacy JWT AuthService that still backs the
-// domain /auth routes in Phase 1. Task 11 replaces this path with the PocketBase
-// AuthProvider.
+// jwtSecret is retained for AuthService's constructor signature. AuthService's
+// JWT-signing methods (CreateUser/Login/ValidateToken) are dead code as of
+// Task 12 — /auth/register, /auth/login, and Bearer-token validation all go
+// through the PocketBase AuthProvider now; AuthService only backs API-key
+// management (which does not use the JWT secret).
 func jwtSecret() string {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
 		return s

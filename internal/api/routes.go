@@ -9,6 +9,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/atask/atask/internal/auth"
+	"github.com/atask/atask/internal/config"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/service"
 	"github.com/atask/atask/internal/store"
@@ -17,14 +18,16 @@ import (
 // RoutesDeps carries everything RegisterRoutes needs to build the domain HTTP
 // handlers and wire authentication.
 //
-//   - AuthProvider resolves Bearer tokens and user records (PocketBase-backed).
-//   - AuthService still backs the legacy JWT /auth/login + /auth/register routes
-//     (Task 12 replaces these with AuthProvider) and satisfies APIKeyValidator
-//     for the ApiKey auth path.
+//   - AuthProvider resolves Bearer tokens and user records, and backs
+//     register/login/refresh/me (PocketBase-backed; Task 12).
+//   - AuthService backs API-key management (/auth/api-keys/*) and satisfies
+//     APIKeyValidator for the ApiKey auth path.
+//   - Config backs GET /auth/providers (config.EnabledProviders()).
 type RoutesDeps struct {
 	DB            *store.DB
 	AuthProvider  auth.AuthProvider
 	AuthService   *service.AuthService
+	Config        *config.Config
 	EventStore    *event.EventStore
 	Bus           *event.Bus
 	StreamManager *event.StreamManager
@@ -114,7 +117,7 @@ func bufferBody(r *http.Request) error {
 // paths (/health, /auth/*, /tasks, …), so the two route sets coexist without
 // conflict.
 func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
-	authHandler := NewAuthHandler(deps.AuthService)
+	authHandler := NewAuthHandler(deps.AuthProvider, deps.AuthService, deps.Config)
 	areaHandler := NewAreaHandler(deps.AreaSvc)
 	taskHandler := NewTaskHandler(deps.TaskSvc, deps.ProjectSvc, deps.SectionSvc, deps.AreaSvc)
 	projectHandler := NewProjectHandler(deps.ProjectSvc, deps.AreaSvc)
@@ -151,8 +154,8 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 	se.Router.GET("/health", public(handleHealth))
 	se.Router.POST("/auth/register", public(authHandler.Register))
 	se.Router.POST("/auth/login", public(authHandler.Login))
-	// NOTE: /auth/refresh and /auth/providers are added by Task 12 (handlers do
-	// not exist yet).
+	se.Router.POST("/auth/refresh", public(authHandler.Refresh))
+	se.Router.GET("/auth/providers", public(authHandler.Providers))
 
 	// --- Auth (protected) ---
 	se.Router.GET("/auth/me", protect(authHandler.GetMe))
