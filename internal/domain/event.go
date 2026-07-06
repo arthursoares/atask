@@ -149,6 +149,7 @@ type DomainEvent struct {
 	EntityType string         `json:"entityType"`
 	EntityID   string         `json:"entityId"`
 	ActorID    string         `json:"actorId"`
+	UserID     string         `json:"userId"`
 	Payload    map[string]any `json:"payload,omitempty"`
 	Timestamp  time.Time      `json:"timestamp"`
 }

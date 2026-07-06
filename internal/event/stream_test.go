@@ -35,7 +35,7 @@ func TestStreamManager_SSE(t *testing.T) {
 		bus.Publish(&e)
 	}()
 
-	sm.ServeHTTP(rr, req)
+	sm.ServeHTTP(rr, req, "")
 
 	body := rr.Body.String()
 
@@ -45,6 +45,15 @@ func TestStreamManager_SSE(t *testing.T) {
 	if !strings.Contains(body, "id: 42") {
 		t.Errorf("expected body to contain 'id: 42', got:\n%s", body)
 	}
+}
+
+// serveAsUser adapts a StreamManager (whose ServeHTTP takes an explicit
+// userID) into a plain http.Handler for use with httptest.NewServer, as if
+// the given userID had been extracted from an authenticated request context.
+func serveAsUser(sm *StreamManager, userID string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sm.ServeHTTP(w, r, userID)
+	})
 }
 
 // sseEvent represents a parsed Server-Sent Event.
@@ -105,7 +114,7 @@ func TestStreamManager_SSE_Integration(t *testing.T) {
 	bus := NewBus()
 	sm := NewStreamManager(bus)
 
-	server := httptest.NewServer(sm)
+	server := httptest.NewServer(serveAsUser(sm, ""))
 	defer server.Close()
 
 	ctx := t.Context()
@@ -201,7 +210,7 @@ func TestStreamManager_SSE_TopicFiltering(t *testing.T) {
 	bus := NewBus()
 	sm := NewStreamManager(bus)
 
-	server := httptest.NewServer(sm)
+	server := httptest.NewServer(serveAsUser(sm, ""))
 	defer server.Close()
 
 	ctx := t.Context()
@@ -252,7 +261,7 @@ func TestStreamManager_SSE_ClientDisconnect(t *testing.T) {
 	bus := NewBus()
 	sm := NewStreamManager(bus)
 
-	server := httptest.NewServer(sm)
+	server := httptest.NewServer(serveAsUser(sm, ""))
 	defer server.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -278,4 +287,66 @@ func TestStreamManager_SSE_ClientDisconnect(t *testing.T) {
 	bus.Publish(&e)
 
 	time.Sleep(50 * time.Millisecond)
+}
+
+// TestStreamManager_SSE_UserFiltering verifies that a connection scoped to
+// userID "user-a" only receives events owned by "user-a" — events owned by
+// "user-b" are dropped, and events with no owner (UserID == "") are
+// delivered to everyone (pre-multi-user / system events).
+func TestStreamManager_SSE_UserFiltering(t *testing.T) {
+	bus := NewBus()
+	sm := NewStreamManager(bus)
+
+	server := httptest.NewServer(serveAsUser(sm, "user-a"))
+	defer server.Close()
+
+	ctx := t.Context()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"?topics=task.*", nil)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("SSE connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+
+		// user-b's event — must NOT be received by the user-a connection.
+		eB := domain.NewDomainEvent(domain.TaskCreated, "task", "task-b", "actor-b", nil)
+		eB.ID = 1
+		eB.UserID = "user-b"
+		bus.Publish(&eB)
+
+		time.Sleep(20 * time.Millisecond)
+
+		// Unattributed event (no UserID) — delivered to everyone.
+		eSystem := domain.NewDomainEvent(domain.TaskCreated, "task", "task-system", "actor-system", nil)
+		eSystem.ID = 2
+		bus.Publish(&eSystem)
+
+		time.Sleep(20 * time.Millisecond)
+
+		// user-a's own event — must be received.
+		eA := domain.NewDomainEvent(domain.TaskCreated, "task", "task-a", "actor-a", nil)
+		eA.ID = 3
+		eA.UserID = "user-a"
+		bus.Publish(&eA)
+	}()
+
+	events := readSSEEvents(t, resp, 2, 2*time.Second)
+
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events (user-a's + unattributed), got %d: %+v", len(events), events)
+	}
+	if events[0].Data["entity_id"] != "task-system" {
+		t.Errorf("event[0]: expected unattributed task-system event, got %v", events[0].Data["entity_id"])
+	}
+	if events[1].Data["entity_id"] != "task-a" {
+		t.Errorf("event[1]: expected user-a's task-a event, got %v", events[1].Data["entity_id"])
+	}
 }

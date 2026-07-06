@@ -151,6 +151,7 @@ func (s *TaskService) publishEvent(
 		EntityType: "task",
 		EntityID:   taskID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

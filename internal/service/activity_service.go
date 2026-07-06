@@ -106,6 +106,7 @@ func (s *ActivityService) Add(ctx context.Context, userID, taskID, actorID strin
 		EntityType: "activity",
 		EntityID:   activity.ID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

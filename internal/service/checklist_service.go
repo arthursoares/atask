@@ -93,6 +93,7 @@ func (s *ChecklistService) publishChecklistEvent(
 		EntityType: "checklist_item",
 		EntityID:   itemID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

@@ -114,7 +114,8 @@ func viewTaskFromRow(row sqlc.Task) *domain.Task {
 
 // Inbox handles GET /views/inbox — returns tasks with schedule=0, status=0, not deleted.
 func (h *ViewHandler) Inbox(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.ViewInbox(r.Context())
+	userID := UserIDFromContext(r.Context())
+	rows, err := h.queries.ViewInbox(r.Context(), userID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -129,8 +130,12 @@ func (h *ViewHandler) Inbox(w http.ResponseWriter, r *http.Request) {
 
 // Today handles GET /views/today — returns tasks with schedule=1, status=0, start_date IS NULL OR <= today.
 func (h *ViewHandler) Today(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	today := time.Now().Format("2006-01-02")
-	rows, err := h.queries.ViewToday(r.Context(), sql.NullString{String: today, Valid: true})
+	rows, err := h.queries.ViewToday(r.Context(), sqlc.ViewTodayParams{
+		UserID:    userID,
+		StartDate: sql.NullString{String: today, Valid: true},
+	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -145,8 +150,12 @@ func (h *ViewHandler) Today(w http.ResponseWriter, r *http.Request) {
 
 // Upcoming handles GET /views/upcoming — returns tasks with start_date > today.
 func (h *ViewHandler) Upcoming(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	today := time.Now().Format("2006-01-02")
-	rows, err := h.queries.ViewUpcoming(r.Context(), sql.NullString{String: today, Valid: true})
+	rows, err := h.queries.ViewUpcoming(r.Context(), sqlc.ViewUpcomingParams{
+		StartDate: sql.NullString{String: today, Valid: true},
+		UserID:    userID,
+	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -161,7 +170,8 @@ func (h *ViewHandler) Upcoming(w http.ResponseWriter, r *http.Request) {
 
 // Someday handles GET /views/someday — returns tasks with schedule=2, status=0.
 func (h *ViewHandler) Someday(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.ViewSomeday(r.Context())
+	userID := UserIDFromContext(r.Context())
+	rows, err := h.queries.ViewSomeday(r.Context(), userID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -176,7 +186,8 @@ func (h *ViewHandler) Someday(w http.ResponseWriter, r *http.Request) {
 
 // Logbook handles GET /views/logbook — returns tasks with status IN (1,2).
 func (h *ViewHandler) Logbook(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.ViewLogbook(r.Context())
+	userID := UserIDFromContext(r.Context())
+	rows, err := h.queries.ViewLogbook(r.Context(), userID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

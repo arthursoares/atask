@@ -107,6 +107,7 @@ func (s *AreaService) Create(ctx context.Context, userID, title, actorID string,
 		EntityType: "area",
 		EntityID:   area.ID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	}
@@ -195,6 +196,7 @@ func (s *AreaService) Rename(ctx context.Context, userID, id, title, actorID str
 		EntityType: "area",
 		EntityID:   id,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
@@ -241,6 +243,7 @@ func (s *AreaService) Archive(ctx context.Context, userID, id, actorID string) e
 		EntityType: "area",
 		EntityID:   id,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
@@ -287,6 +290,7 @@ func (s *AreaService) Unarchive(ctx context.Context, userID, id, actorID string)
 		EntityType: "area",
 		EntityID:   id,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
@@ -375,6 +379,7 @@ func (s *AreaService) Delete(ctx context.Context, userID, id, actorID string, ca
 		EntityType: "area",
 		EntityID:   id,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

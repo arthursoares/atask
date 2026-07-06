@@ -97,6 +97,7 @@ func (s *TagService) publishTagEvent(
 		EntityType: "tag",
 		EntityID:   tagID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

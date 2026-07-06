@@ -13,7 +13,7 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
-func setupSyncServer(t *testing.T) (*http.ServeMux, *event.EventStore) {
+func setupSyncServer(t *testing.T) (http.Handler, *event.EventStore) {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -30,13 +30,15 @@ func setupSyncServer(t *testing.T) (*http.ServeMux, *event.EventStore) {
 
 	mux := http.NewServeMux()
 	syncHandler.RegisterRoutes(mux)
-	return mux, es
+	return api.WithTestUser(testUserID)(mux), es
 }
 
 func TestSyncHandler_Deltas(t *testing.T) {
 	mux, es := setupSyncServer(t)
 
-	// Insert a delta event into the store.
+	// Insert a delta event into the store, owned by the same test user the
+	// mux is authenticated as (see setupSyncServer / WithTestUser), so the
+	// scoped GET /sync/deltas below actually returns it.
 	field := "title"
 	err := es.AppendDelta(t.Context(), domain.DeltaEvent{
 		EntityType: "task",
@@ -45,6 +47,7 @@ func TestSyncHandler_Deltas(t *testing.T) {
 		Field:      &field,
 		NewValue:   []byte(`"Buy milk"`),
 		ActorID:    "user-1",
+		UserID:     testUserID,
 		Timestamp:  time.Now(),
 	})
 	if err != nil {

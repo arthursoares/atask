@@ -13,8 +13,13 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
+// testUserID is the default authenticated user injected by the test-server
+// setup helpers in this package. Tests exercising cross-user isolation
+// construct their own per-request user context instead of relying on this.
+const testUserID = "test-user-1"
+
 // setupPatchTestServer creates an in-memory DB with all handlers needed for PATCH tests.
-func setupPatchTestServer(t *testing.T) *http.ServeMux {
+func setupPatchTestServer(t *testing.T) http.Handler {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -39,11 +44,11 @@ func setupPatchTestServer(t *testing.T) *http.ServeMux {
 	api.NewProjectHandler(projectSvc, areaSvc).RegisterRoutes(mux)
 	api.NewAreaHandler(areaSvc).RegisterRoutes(mux)
 	api.NewSectionHandler(sectionSvc).RegisterRoutes(mux)
-	return mux
+	return api.WithTestUser(testUserID)(mux)
 }
 
 // createSection is a helper that POSTs a section under the given project and returns its ID.
-func createSection(t *testing.T, mux *http.ServeMux, projectID, title string) string {
+func createSection(t *testing.T, mux http.Handler, projectID, title string) string {
 	t.Helper()
 	body := bytes.NewBufferString(`{"title":"` + title + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/projects/"+projectID+"/sections", body)
@@ -65,7 +70,7 @@ func createSection(t *testing.T, mux *http.ServeMux, projectID, title string) st
 }
 
 // createTask is a helper that POSTs a task and returns its ID.
-func createTask(t *testing.T, mux *http.ServeMux, title string) string {
+func createTask(t *testing.T, mux http.Handler, title string) string {
 	t.Helper()
 	body := bytes.NewBufferString(`{"title":"` + title + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/tasks", body)
@@ -87,7 +92,7 @@ func createTask(t *testing.T, mux *http.ServeMux, title string) string {
 }
 
 // createProject is a helper that POSTs a project and returns its ID.
-func createProject(t *testing.T, mux *http.ServeMux, title string) string {
+func createProject(t *testing.T, mux http.Handler, title string) string {
 	t.Helper()
 	body := bytes.NewBufferString(`{"title":"` + title + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/projects", body)
@@ -109,7 +114,7 @@ func createProject(t *testing.T, mux *http.ServeMux, title string) string {
 }
 
 // createArea is a helper that POSTs an area and returns its ID.
-func createArea(t *testing.T, mux *http.ServeMux, title string) string {
+func createArea(t *testing.T, mux http.Handler, title string) string {
 	t.Helper()
 	body := bytes.NewBufferString(`{"title":"` + title + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/areas", body)
@@ -131,7 +136,7 @@ func createArea(t *testing.T, mux *http.ServeMux, title string) string {
 }
 
 // patchJSON sends a PATCH request and returns the recorder.
-func patchJSON(t *testing.T, mux *http.ServeMux, path string, jsonBody string) *httptest.ResponseRecorder {
+func patchJSON(t *testing.T, mux http.Handler, path string, jsonBody string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewBufferString(jsonBody))
 	req.Header.Set("Content-Type", "application/json")

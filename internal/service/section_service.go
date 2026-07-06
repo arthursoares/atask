@@ -94,6 +94,7 @@ func (s *SectionService) publishSectionEvent(
 		EntityType: "section",
 		EntityID:   sectionID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

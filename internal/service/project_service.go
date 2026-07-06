@@ -122,6 +122,7 @@ func (s *ProjectService) publishProjectEvent(
 		EntityType: "project",
 		EntityID:   projectID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})

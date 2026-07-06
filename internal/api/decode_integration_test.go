@@ -13,7 +13,7 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
-func setupTaskAndAuthTestServer(t *testing.T) *http.ServeMux {
+func setupTaskAndAuthTestServer(t *testing.T) http.Handler {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -40,7 +40,7 @@ func setupTaskAndAuthTestServer(t *testing.T) *http.ServeMux {
 	mux := http.NewServeMux()
 	taskHandler.RegisterRoutes(mux)
 	authHandler.RegisterRoutes(mux)
-	return mux
+	return api.WithTestUser(testUserID)(mux)
 }
 
 func TestTaskHandler_Create_UnknownField(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 // handler we want to exercise — locations, links, etc. Lives in this file
 // rather than patch_test.go so the existing PATCH-focused setup stays
 // minimal.
-func setupFullTestServer(t *testing.T) *http.ServeMux {
+func setupFullTestServer(t *testing.T) http.Handler {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -45,10 +45,10 @@ func setupFullTestServer(t *testing.T) *http.ServeMux {
 	api.NewAreaHandler(areaSvc).RegisterRoutes(mux)
 	api.NewSectionHandler(sectionSvc).RegisterRoutes(mux)
 	api.NewLocationHandler(locationSvc).RegisterRoutes(mux)
-	return mux
+	return api.WithTestUser(testUserID)(mux)
 }
 
-func doJSON(t *testing.T, mux *http.ServeMux, method, path, body string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, mux http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

@@ -104,6 +104,7 @@ func (s *LocationService) publishLocationEvent(
 		EntityType: "location",
 		EntityID:   locationID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
