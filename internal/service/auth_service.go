@@ -154,13 +154,14 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID, name string) (st
 }
 
 // ValidateAPIKey looks up the key by its SHA256 hash, updates last_used_at, and returns the
-// owning user ID and key ID.
-func (s *AuthService) ValidateAPIKey(ctx context.Context, key string) (string, string, error) {
+// owning user ID, the key ID (for actor attribution), and the key's scope (e.g. "read_write",
+// "read_only"). Rows created before migration 006 default to "read_write".
+func (s *AuthService) ValidateAPIKey(ctx context.Context, key string) (userID, keyID, scope string, err error) {
 	keyHash := hashAPIKey(key)
 
 	row, err := s.queries.GetAPIKeyByHash(ctx, sql.NullString{String: keyHash, Valid: true})
 	if err != nil {
-		return "", "", errors.New("invalid api key")
+		return "", "", "", errors.New("invalid api key")
 	}
 
 	now := timeNow()
@@ -168,10 +169,10 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, key string) (string, s
 		LastUsedAt: sql.NullTime{Time: now, Valid: true},
 		ID:         row.ID,
 	}); err != nil {
-		return "", "", fmt.Errorf("update last_used_at: %w", err)
+		return "", "", "", fmt.Errorf("update last_used_at: %w", err)
 	}
 
-	return row.UserID, row.ID, nil
+	return row.UserID, row.ID, row.Scope, nil
 }
 
 // ListAPIKeys returns the API key metadata for the given user (no hashes).

@@ -7,9 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atask/atask/internal/service"
+	"github.com/atask/atask/internal/auth"
 	"github.com/google/uuid"
 )
+
+// APIKeyValidator is the subset of AuthService that requireAuth depends on.
+// ValidateAPIKey returns the owning user ID, the key ID (for actor attribution),
+// and the key's scope. *service.AuthService satisfies this interface.
+type APIKeyValidator interface {
+	ValidateAPIKey(ctx context.Context, key string) (userID, keyID, scope string, err error)
+}
 
 // responseWriter wraps http.ResponseWriter to capture the written status code.
 type responseWriter struct {
@@ -95,45 +102,72 @@ func KeyIDFromContext(ctx context.Context) string {
 	return id
 }
 
-// Auth is middleware that validates Bearer JWT tokens and ApiKey credentials.
-// It expects an Authorization header of the form "Bearer {token}" or
-// "ApiKey {key}". Requests without valid credentials receive a 401 response.
-func Auth(authService *service.AuthService) func(http.Handler) http.Handler {
+// requireAuth is middleware that validates Bearer tokens (PocketBase auth tokens,
+// resolved via the AuthProvider) and ApiKey credentials (resolved via the local
+// api_keys table). It expects an Authorization header of the form "Bearer {token}"
+// or "ApiKey {key}".
+//
+// Security invariants (each covered by a test in middleware_test.go):
+//   - Missing/unsupported scheme or invalid credentials → 401.
+//   - An empty resolved userID → 401. An empty subject must never become an
+//     implicit owner of the pre-migration ” data pool.
+//   - After resolving a userID, the user record is loaded from the identity
+//     backend. A missing record (orphaned API key, deleted user) → 401; a
+//     record with Disabled=true → 403.
+//
+// On the ApiKey path the key ID is stored in the request context so that
+// actorFromRequest can attribute mutations to the agent's key rather than the
+// owning user.
+func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
-			if header == "" {
+
+			ctx := r.Context()
+			var userID, keyID string
+			var err error
+
+			switch {
+			case strings.HasPrefix(header, "ApiKey "):
+				key := strings.TrimPrefix(header, "ApiKey ")
+				userID, keyID, _, err = apiKeySvc.ValidateAPIKey(ctx, key)
+			case strings.HasPrefix(header, "Bearer "):
+				token := strings.TrimPrefix(header, "Bearer ")
+				userID, err = authProvider.ValidateToken(token)
+			default:
 				RespondError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
-			ctx := r.Context()
-
-			switch {
-			case strings.HasPrefix(header, "Bearer "):
-				token := strings.TrimPrefix(header, "Bearer ")
-				userID, err := authService.ValidateToken(token)
-				if err != nil {
-					RespondError(w, http.StatusUnauthorized, "invalid token")
-					return
-				}
-				ctx = context.WithValue(ctx, ctxUserID, userID)
-
-			case strings.HasPrefix(header, "ApiKey "):
-				key := strings.TrimPrefix(header, "ApiKey ")
-				userID, keyID, err := authService.ValidateAPIKey(ctx, key)
-				if err != nil {
-					RespondError(w, http.StatusUnauthorized, "invalid api key")
-					return
-				}
-				ctx = context.WithValue(ctx, ctxUserID, userID)
-				ctx = context.WithValue(ctx, ctxKeyID, keyID)
-
-			default:
-				RespondError(w, http.StatusUnauthorized, "unsupported authorization scheme")
+			if err != nil {
+				RespondError(w, http.StatusUnauthorized, "invalid credentials")
 				return
 			}
 
+			// Reject an empty resolved subject before it can masquerade as an owner.
+			if userID == "" {
+				RespondError(w, http.StatusUnauthorized, "invalid credentials")
+				return
+			}
+
+			// Load the user record from the identity backend. A missing record
+			// (deleted user / orphaned API key) is a 401 — safer than 403 and
+			// consistent with the empty-userID rejection above. A disabled but
+			// existing account is a 403.
+			user, ferr := authProvider.FindUserByID(userID)
+			if ferr != nil {
+				RespondError(w, http.StatusUnauthorized, "invalid credentials")
+				return
+			}
+			if user.Disabled {
+				RespondError(w, http.StatusForbidden, "account disabled")
+				return
+			}
+
+			ctx = context.WithValue(ctx, ctxUserID, userID)
+			if keyID != "" {
+				ctx = context.WithValue(ctx, ctxKeyID, keyID)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

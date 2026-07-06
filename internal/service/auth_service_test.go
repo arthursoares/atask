@@ -78,7 +78,7 @@ func TestAuthService_CreateAndValidateAPIKey(t *testing.T) {
 		t.Errorf("expected userID %q, got %q", userID, apiKey.UserID)
 	}
 
-	gotUserID, gotKeyID, err := svc.ValidateAPIKey(ctx, plainKey)
+	gotUserID, gotKeyID, gotScope, err := svc.ValidateAPIKey(ctx, plainKey)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey: %v", err)
 	}
@@ -87,6 +87,9 @@ func TestAuthService_CreateAndValidateAPIKey(t *testing.T) {
 	}
 	if gotKeyID != apiKey.ID {
 		t.Errorf("expected keyID %q, got %q", apiKey.ID, gotKeyID)
+	}
+	if gotScope != "read_write" {
+		t.Errorf("expected scope %q, got %q", "read_write", gotScope)
 	}
 }
 

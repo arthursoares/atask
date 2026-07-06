@@ -62,6 +62,16 @@ func main() {
 			return err
 		}
 
+		// Close the domain database when PocketBase shuts down. The DB is opened
+		// here in OnServe (not at construction), so its close hook is bound here
+		// too. OnTerminate fires on graceful shutdown (SIGINT/SIGTERM).
+		app.OnTerminate().BindFunc(func(te *core.TerminateEvent) error {
+			if cerr := db.Close(); cerr != nil {
+				log.Printf("closing domain db: %v", cerr)
+			}
+			return te.Next()
+		})
+
 		// Ensure PocketBase's users auth collection carries the role/disabled
 		// fields the auth adapter reads/writes (name + avatar ship by default).
 		if err := ensureUserFields(se.App); err != nil {
