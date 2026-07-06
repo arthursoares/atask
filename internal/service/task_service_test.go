@@ -32,7 +32,7 @@ func TestTaskService_Create(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Buy groceries", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Buy groceries", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestTaskService_Create(t *testing.T) {
 	}
 
 	// Verify it can be retrieved
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestTaskService_Create_EmptyTitle(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	_, err := svc.Create(ctx, "", "user-1")
+	_, err := svc.Create(ctx, testUserID, "", "user-1")
 	if err == nil {
 		t.Fatal("expected error for empty title, got nil")
 	}
@@ -76,16 +76,16 @@ func TestTaskService_Complete(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Finish report", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Finish report", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Complete(ctx, task.ID, "user-1"); err != nil {
+	if err := svc.Complete(ctx, testUserID, task.ID, "user-1"); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after Complete: %v", err)
 	}
@@ -101,16 +101,16 @@ func TestTaskService_Cancel(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Draft email", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Draft email", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Cancel(ctx, task.ID, "user-1"); err != nil {
+	if err := svc.Cancel(ctx, testUserID, task.ID, "user-1"); err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after Cancel: %v", err)
 	}
@@ -123,16 +123,16 @@ func TestTaskService_UpdateTitle(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Original title", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Original title", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.UpdateTitle(ctx, task.ID, "Updated title", "user-1"); err != nil {
+	if err := svc.UpdateTitle(ctx, testUserID, task.ID, "Updated title", "user-1"); err != nil {
 		t.Fatalf("UpdateTitle: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after UpdateTitle: %v", err)
 	}
@@ -145,12 +145,12 @@ func TestTaskService_UpdateTitle_Empty(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Some task", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Some task", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = svc.UpdateTitle(ctx, task.ID, "", "user-1")
+	err = svc.UpdateTitle(ctx, testUserID, task.ID, "", "user-1")
 	if err == nil {
 		t.Fatal("expected error for empty title, got nil")
 	}
@@ -160,16 +160,16 @@ func TestTaskService_UpdateSchedule(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Plan week", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Plan week", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.UpdateSchedule(ctx, task.ID, domain.ScheduleAnytime, "user-1"); err != nil {
+	if err := svc.UpdateSchedule(ctx, testUserID, task.ID, domain.ScheduleAnytime, "user-1"); err != nil {
 		t.Fatalf("UpdateSchedule: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after UpdateSchedule: %v", err)
 	}
@@ -182,16 +182,16 @@ func TestTaskService_UpdateNotes(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Take notes", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Take notes", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.UpdateNotes(ctx, task.ID, "Some important notes", "user-1"); err != nil {
+	if err := svc.UpdateNotes(ctx, testUserID, task.ID, "Some important notes", "user-1"); err != nil {
 		t.Fatalf("UpdateNotes: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after UpdateNotes: %v", err)
 	}
@@ -204,16 +204,16 @@ func TestTaskService_List(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	_, err := svc.Create(ctx, "Task 1", "user-1")
+	_, err := svc.Create(ctx, testUserID, "Task 1", "user-1")
 	if err != nil {
 		t.Fatalf("Create task 1: %v", err)
 	}
-	_, err = svc.Create(ctx, "Task 2", "user-1")
+	_, err = svc.Create(ctx, testUserID, "Task 2", "user-1")
 	if err != nil {
 		t.Fatalf("Create task 2: %v", err)
 	}
 
-	tasks, err := svc.List(ctx)
+	tasks, err := svc.List(ctx, testUserID)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -226,17 +226,17 @@ func TestTaskService_Delete(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Task to delete", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Task to delete", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Delete(ctx, task.ID, "user-1"); err != nil {
+	if err := svc.Delete(ctx, testUserID, task.ID, "user-1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
 	// Get should return error since the task is soft-deleted
-	_, err = svc.Get(ctx, task.ID)
+	_, err = svc.Get(ctx, testUserID, task.ID)
 	if err == nil {
 		t.Fatal("expected error for deleted task, got nil")
 	}
@@ -246,16 +246,16 @@ func TestTaskService_Delete_NotInList(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Task to delete", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Task to delete", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Delete(ctx, task.ID, "user-1"); err != nil {
+	if err := svc.Delete(ctx, testUserID, task.ID, "user-1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	tasks, err := svc.List(ctx)
+	tasks, err := svc.List(ctx, testUserID)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -270,17 +270,22 @@ func TestTaskService_MoveToArea(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Area task", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Area task", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	areaID := "area-abc"
-	if err := svc.MoveToArea(ctx, task.ID, &areaID, "user-1"); err != nil {
+	areaSvc := &AreaService{queries: svc.queries, events: svc.events, bus: svc.bus}
+	area, err := areaSvc.Create(ctx, testUserID, "Test area", "user-1")
+	if err != nil {
+		t.Fatalf("Create area: %v", err)
+	}
+	areaID := area.ID
+	if err := svc.MoveToArea(ctx, testUserID, task.ID, &areaID, "user-1"); err != nil {
 		t.Fatalf("MoveToArea: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after MoveToArea: %v", err)
 	}
@@ -289,11 +294,11 @@ func TestTaskService_MoveToArea(t *testing.T) {
 	}
 
 	// Remove from area
-	if err := svc.MoveToArea(ctx, task.ID, nil, "user-1"); err != nil {
+	if err := svc.MoveToArea(ctx, testUserID, task.ID, nil, "user-1"); err != nil {
 		t.Fatalf("MoveToArea (remove): %v", err)
 	}
 
-	got, err = svc.Get(ctx, task.ID)
+	got, err = svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after MoveToArea (remove): %v", err)
 	}
@@ -306,7 +311,7 @@ func TestTaskService_SetRecurrence(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Recurring task", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Recurring task", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -317,11 +322,11 @@ func TestTaskService_SetRecurrence(t *testing.T) {
 		Unit:     domain.RecurrenceUnitWeek,
 	}
 
-	if err := svc.SetRecurrence(ctx, task.ID, rule, "user-1"); err != nil {
+	if err := svc.SetRecurrence(ctx, testUserID, task.ID, rule, "user-1"); err != nil {
 		t.Fatalf("SetRecurrence: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after SetRecurrence: %v", err)
 	}
@@ -336,11 +341,11 @@ func TestTaskService_SetRecurrence(t *testing.T) {
 	}
 
 	// Remove recurrence
-	if err := svc.SetRecurrence(ctx, task.ID, nil, "user-1"); err != nil {
+	if err := svc.SetRecurrence(ctx, testUserID, task.ID, nil, "user-1"); err != nil {
 		t.Fatalf("SetRecurrence (remove): %v", err)
 	}
 
-	got, err = svc.Get(ctx, task.ID)
+	got, err = svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after SetRecurrence (remove): %v", err)
 	}
@@ -353,21 +358,27 @@ func TestTaskService_ListByProject(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task1, err := svc.Create(ctx, "Task in project", "user-1")
+	task1, err := svc.Create(ctx, testUserID, "Task in project", "user-1")
 	if err != nil {
 		t.Fatalf("Create task 1: %v", err)
 	}
-	projectID := "project-1"
-	if err := svc.MoveToProject(ctx, task1.ID, &projectID, "user-1"); err != nil {
+
+	projectSvc := &ProjectService{queries: svc.queries, events: svc.events, bus: svc.bus}
+	project, err := projectSvc.Create(ctx, testUserID, "Test project", "user-1")
+	if err != nil {
+		t.Fatalf("Create project: %v", err)
+	}
+	projectID := project.ID
+	if err := svc.MoveToProject(ctx, testUserID, task1.ID, &projectID, "user-1"); err != nil {
 		t.Fatalf("MoveToProject: %v", err)
 	}
 
 	// Create a task NOT in the project
-	if _, err := svc.Create(ctx, "Task without project", "user-1"); err != nil {
+	if _, err := svc.Create(ctx, testUserID, "Task without project", "user-1"); err != nil {
 		t.Fatalf("Create task 2: %v", err)
 	}
 
-	tasks, err := svc.ListByProject(ctx, projectID)
+	tasks, err := svc.ListByProject(ctx, testUserID, projectID)
 	if err != nil {
 		t.Fatalf("ListByProject: %v", err)
 	}
@@ -383,20 +394,20 @@ func TestTaskService_ListBySchedule(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task1, err := svc.Create(ctx, "Someday task", "user-1")
+	task1, err := svc.Create(ctx, testUserID, "Someday task", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := svc.UpdateSchedule(ctx, task1.ID, domain.ScheduleSomeday, "user-1"); err != nil {
+	if err := svc.UpdateSchedule(ctx, testUserID, task1.ID, domain.ScheduleSomeday, "user-1"); err != nil {
 		t.Fatalf("UpdateSchedule: %v", err)
 	}
 
 	// task2 stays in inbox (default)
-	if _, err := svc.Create(ctx, "Inbox task", "user-1"); err != nil {
+	if _, err := svc.Create(ctx, testUserID, "Inbox task", "user-1"); err != nil {
 		t.Fatalf("Create task 2: %v", err)
 	}
 
-	tasks, err := svc.ListBySchedule(ctx, domain.ScheduleSomeday)
+	tasks, err := svc.ListBySchedule(ctx, testUserID, domain.ScheduleSomeday)
 	if err != nil {
 		t.Fatalf("ListBySchedule: %v", err)
 	}
@@ -409,16 +420,16 @@ func TestTaskService_Reorder(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	task, err := svc.Create(ctx, "Reorderable task", "user-1")
+	task, err := svc.Create(ctx, testUserID, "Reorderable task", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Reorder(ctx, task.ID, 5, "user-1"); err != nil {
+	if err := svc.Reorder(ctx, testUserID, task.ID, 5, "user-1"); err != nil {
 		t.Fatalf("Reorder: %v", err)
 	}
 
-	got, err := svc.Get(ctx, task.ID)
+	got, err := svc.Get(ctx, testUserID, task.ID)
 	if err != nil {
 		t.Fatalf("Get after Reorder: %v", err)
 	}
@@ -436,24 +447,24 @@ func TestTaskService_AddLink_IsBidirectional(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	a, err := svc.Create(ctx, "A", "user-1")
+	a, err := svc.Create(ctx, testUserID, "A", "user-1")
 	if err != nil {
 		t.Fatalf("Create A: %v", err)
 	}
-	b, err := svc.Create(ctx, "B", "user-1")
+	b, err := svc.Create(ctx, testUserID, "B", "user-1")
 	if err != nil {
 		t.Fatalf("Create B: %v", err)
 	}
 
-	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+	if err := svc.AddLink(ctx, testUserID, a.ID, b.ID, "user-1"); err != nil {
 		t.Fatalf("AddLink: %v", err)
 	}
 
-	gotA, err := svc.Get(ctx, a.ID)
+	gotA, err := svc.Get(ctx, testUserID, a.ID)
 	if err != nil {
 		t.Fatalf("Get A: %v", err)
 	}
-	gotB, err := svc.Get(ctx, b.ID)
+	gotB, err := svc.Get(ctx, testUserID, b.ID)
 	if err != nil {
 		t.Fatalf("Get B: %v", err)
 	}
@@ -471,18 +482,18 @@ func TestTaskService_RemoveLink_RemovesBothDirections(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	a, _ := svc.Create(ctx, "A", "user-1")
-	b, _ := svc.Create(ctx, "B", "user-1")
+	a, _ := svc.Create(ctx, testUserID, "A", "user-1")
+	b, _ := svc.Create(ctx, testUserID, "B", "user-1")
 
-	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+	if err := svc.AddLink(ctx, testUserID, a.ID, b.ID, "user-1"); err != nil {
 		t.Fatalf("AddLink: %v", err)
 	}
-	if err := svc.RemoveLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+	if err := svc.RemoveLink(ctx, testUserID, a.ID, b.ID, "user-1"); err != nil {
 		t.Fatalf("RemoveLink: %v", err)
 	}
 
-	gotA, _ := svc.Get(ctx, a.ID)
-	gotB, _ := svc.Get(ctx, b.ID)
+	gotA, _ := svc.Get(ctx, testUserID, a.ID)
+	gotB, _ := svc.Get(ctx, testUserID, b.ID)
 
 	if len(gotA.LinkedTaskIDs) != 0 {
 		t.Errorf("A.LinkedTaskIDs = %v, want []", gotA.LinkedTaskIDs)
@@ -498,8 +509,8 @@ func TestTaskService_AddLink_RejectsSelfLink(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	a, _ := svc.Create(ctx, "A", "user-1")
-	if err := svc.AddLink(ctx, a.ID, a.ID, "user-1"); err == nil {
+	a, _ := svc.Create(ctx, testUserID, "A", "user-1")
+	if err := svc.AddLink(ctx, testUserID, a.ID, a.ID, "user-1"); err == nil {
 		t.Fatal("expected error when linking task to itself, got nil")
 	}
 }
@@ -509,17 +520,17 @@ func TestTaskService_AddLink_Idempotent(t *testing.T) {
 	svc := newTestTaskService(t)
 	ctx := context.Background()
 
-	a, _ := svc.Create(ctx, "A", "user-1")
-	b, _ := svc.Create(ctx, "B", "user-1")
+	a, _ := svc.Create(ctx, testUserID, "A", "user-1")
+	b, _ := svc.Create(ctx, testUserID, "B", "user-1")
 
-	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+	if err := svc.AddLink(ctx, testUserID, a.ID, b.ID, "user-1"); err != nil {
 		t.Fatalf("AddLink 1: %v", err)
 	}
-	if err := svc.AddLink(ctx, a.ID, b.ID, "user-1"); err != nil {
+	if err := svc.AddLink(ctx, testUserID, a.ID, b.ID, "user-1"); err != nil {
 		t.Fatalf("AddLink 2: %v", err)
 	}
 
-	gotA, _ := svc.Get(ctx, a.ID)
+	gotA, _ := svc.Get(ctx, testUserID, a.ID)
 	if len(gotA.LinkedTaskIDs) != 1 {
 		t.Errorf("expected exactly 1 link after 2 adds, got %v", gotA.LinkedTaskIDs)
 	}

@@ -61,7 +61,7 @@ func checklistItemFromRow(row sqlc.ChecklistItem) *domain.ChecklistItem {
 func (s *ChecklistService) publishChecklistEvent(
 	ctx context.Context,
 	eventType domain.EventType,
-	itemID, actorID string,
+	itemID, actorID, userID string,
 	now time.Time,
 	payload map[string]any,
 	deltaAction domain.DeltaAction,
@@ -75,13 +75,14 @@ func (s *ChecklistService) publishChecklistEvent(
 		Field:      field,
 		NewValue:   newValue,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "checklist_item", itemID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "checklist_item", itemID, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -100,12 +101,18 @@ func (s *ChecklistService) publishChecklistEvent(
 }
 
 // AddItem creates a new checklist item for a task and emits checklist.item_added.
-func (s *ChecklistService) AddItem(ctx context.Context, title, taskID, actorID string) (*domain.ChecklistItem, error) {
+// Verifies the task belongs to userID (spec §2.4) before creating the item, returning
+// domain.ErrNotFound if it does not.
+func (s *ChecklistService) AddItem(ctx context.Context, userID, title, taskID, actorID string) (*domain.ChecklistItem, error) {
 	if title == "" {
 		return nil, errors.New("checklist item title must not be empty")
 	}
 	if taskID == "" {
 		return nil, errors.New("checklist item taskID must not be empty")
+	}
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: taskID, UserID: userID}); err != nil {
+		return nil, mapNotFound(err)
 	}
 
 	now := timeNow()
@@ -119,6 +126,7 @@ func (s *ChecklistService) AddItem(ctx context.Context, title, taskID, actorID s
 		Index:     0,
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -127,7 +135,7 @@ func (s *ChecklistService) AddItem(ctx context.Context, title, taskID, actorID s
 	item := checklistItemFromRow(row)
 
 	payload := map[string]any{"title": title, "task_id": taskID}
-	if err := s.publishChecklistEvent(ctx, domain.ChecklistItemAdded, item.ID, actorID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
+	if err := s.publishChecklistEvent(ctx, domain.ChecklistItemAdded, item.ID, actorID, userID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -135,8 +143,8 @@ func (s *ChecklistService) AddItem(ctx context.Context, title, taskID, actorID s
 }
 
 // GetItem fetches a checklist item by ID.
-func (s *ChecklistService) GetItem(ctx context.Context, id string) (*domain.ChecklistItem, error) {
-	row, err := s.queries.GetChecklistItem(ctx, id)
+func (s *ChecklistService) GetItem(ctx context.Context, userID, id string) (*domain.ChecklistItem, error) {
+	row, err := s.queries.GetChecklistItem(ctx, sqlc.GetChecklistItemParams{ID: id, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +152,11 @@ func (s *ChecklistService) GetItem(ctx context.Context, id string) (*domain.Chec
 }
 
 // ListByTask returns all non-deleted checklist items for a task.
-func (s *ChecklistService) ListByTask(ctx context.Context, taskID string) ([]*domain.ChecklistItem, error) {
-	rows, err := s.queries.ListChecklistItemsByTask(ctx, sql.NullString{String: taskID, Valid: true})
+func (s *ChecklistService) ListByTask(ctx context.Context, userID, taskID string) ([]*domain.ChecklistItem, error) {
+	rows, err := s.queries.ListChecklistItemsByTask(ctx, sqlc.ListChecklistItemsByTaskParams{
+		TaskID: sql.NullString{String: taskID, Valid: true},
+		UserID: userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +168,7 @@ func (s *ChecklistService) ListByTask(ctx context.Context, taskID string) ([]*do
 }
 
 // UpdateTitle validates and updates the checklist item title, then emits checklist.item_title_changed.
-func (s *ChecklistService) UpdateTitle(ctx context.Context, id, title, actorID string) error {
+func (s *ChecklistService) UpdateTitle(ctx context.Context, userID, id, title, actorID string) error {
 	if title == "" {
 		return errors.New("checklist item title must not be empty")
 	}
@@ -167,6 +178,7 @@ func (s *ChecklistService) UpdateTitle(ctx context.Context, id, title, actorID s
 		Title:     sql.NullString{String: title, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -174,48 +186,51 @@ func (s *ChecklistService) UpdateTitle(ctx context.Context, id, title, actorID s
 
 	payload := map[string]any{"title": title}
 	titleJSON, _ := json.Marshal(title)
-	return s.publishChecklistEvent(ctx, domain.ChecklistItemTitleChanged, id, actorID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemTitleChanged, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
 }
 
 // CompleteItem marks a checklist item as completed and emits checklist.item_completed.
-func (s *ChecklistService) CompleteItem(ctx context.Context, id, actorID string) error {
+func (s *ChecklistService) CompleteItem(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateChecklistItemStatus(ctx, sqlc.UpdateChecklistItemStatusParams{
 		Status:    int64(domain.ChecklistCompleted),
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishChecklistEvent(ctx, domain.ChecklistItemCompleted, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"completed"`))
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemCompleted, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"completed"`))
 }
 
 // UncompleteItem marks a checklist item as pending and emits checklist.item_uncompleted.
-func (s *ChecklistService) UncompleteItem(ctx context.Context, id, actorID string) error {
+func (s *ChecklistService) UncompleteItem(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateChecklistItemStatus(ctx, sqlc.UpdateChecklistItemStatusParams{
 		Status:    int64(domain.ChecklistPending),
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishChecklistEvent(ctx, domain.ChecklistItemUncompleted, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemUncompleted, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
 }
 
 // ReorderItem updates the index of a checklist item and emits checklist.item_reordered.
-func (s *ChecklistService) ReorderItem(ctx context.Context, id string, newIndex int, actorID string) error {
+func (s *ChecklistService) ReorderItem(ctx context.Context, userID, id string, newIndex int, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateChecklistItemIndex(ctx, sqlc.UpdateChecklistItemIndexParams{
 		Index:     int64(newIndex),
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -223,21 +238,22 @@ func (s *ChecklistService) ReorderItem(ctx context.Context, id string, newIndex 
 
 	payload := map[string]any{"index": newIndex}
 	indexJSON, _ := json.Marshal(newIndex)
-	return s.publishChecklistEvent(ctx, domain.ChecklistItemReordered, id, actorID, now, payload, domain.DeltaModified, strPtr("index"), indexJSON)
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemReordered, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("index"), indexJSON)
 }
 
 // RemoveItem soft-deletes a checklist item and emits checklist.item_removed.
-func (s *ChecklistService) RemoveItem(ctx context.Context, id, actorID string) error {
+func (s *ChecklistService) RemoveItem(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 
 	if err := s.queries.SoftDeleteChecklistItem(ctx, sqlc.SoftDeleteChecklistItemParams{
 		DeletedAt: sql.NullTime{Time: now, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishChecklistEvent(ctx, domain.ChecklistItemRemoved, id, actorID, now, payload, domain.DeltaDeleted, nil, nil)
+	return s.publishChecklistEvent(ctx, domain.ChecklistItemRemoved, id, actorID, userID, now, payload, domain.DeltaDeleted, nil, nil)
 }

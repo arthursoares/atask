@@ -22,7 +22,9 @@ func NewEventStore(db *store.DB) *EventStore {
 	}
 }
 
-// AppendDelta inserts a delta event into the store.
+// AppendDelta inserts a delta event into the store. ev.UserID identifies the
+// owner of the entity the delta describes and is required for scoped delta
+// pulls (DeltasSince).
 func (s *EventStore) AppendDelta(ctx context.Context, ev domain.DeltaEvent) error {
 	var field sql.NullString
 	if ev.Field != nil {
@@ -48,16 +50,20 @@ func (s *EventStore) AppendDelta(ctx context.Context, ev domain.DeltaEvent) erro
 		NewValue:   newValue,
 		ActorID:    sql.NullString{String: ev.ActorID, Valid: true},
 		Timestamp:  sql.NullTime{Time: ev.Timestamp, Valid: !ev.Timestamp.IsZero()},
+		UserID:     ev.UserID,
 	})
 }
 
-// DeltasSince returns all delta events with ID > cursor, ordered by ID.
-func (s *EventStore) DeltasSince(ctx context.Context, cursor int64) ([]sqlc.DeltaEvent, error) {
-	return s.queries.ListDeltaEventsSince(ctx, cursor)
+// DeltasSince returns all delta events owned by userID with ID > cursor, ordered by ID.
+func (s *EventStore) DeltasSince(ctx context.Context, userID string, cursor int64) ([]sqlc.DeltaEvent, error) {
+	return s.queries.ListDeltaEventsSince(ctx, sqlc.ListDeltaEventsSinceParams{
+		ID:     cursor,
+		UserID: userID,
+	})
 }
 
-// AppendDomainEvent inserts a domain event and returns its auto-generated ID.
-func (s *EventStore) AppendDomainEvent(ctx context.Context, eventType domain.EventType, entityType, entityID, actorID string, payload []byte) (int64, error) {
+// AppendDomainEvent inserts a domain event owned by userID and returns its auto-generated ID.
+func (s *EventStore) AppendDomainEvent(ctx context.Context, eventType domain.EventType, entityType, entityID, actorID, userID string, payload []byte) (int64, error) {
 	return s.queries.InsertDomainEvent(ctx, sqlc.InsertDomainEventParams{
 		Type:       sql.NullString{String: string(eventType), Valid: true},
 		EntityType: sql.NullString{String: entityType, Valid: true},
@@ -65,10 +71,14 @@ func (s *EventStore) AppendDomainEvent(ctx context.Context, eventType domain.Eve
 		ActorID:    sql.NullString{String: actorID, Valid: true},
 		Payload:    string(payload),
 		Timestamp:  sql.NullTime{Time: time.Now(), Valid: true},
+		UserID:     userID,
 	})
 }
 
-// DomainEventsSince returns all domain events with ID > cursor, ordered by ID.
-func (s *EventStore) DomainEventsSince(ctx context.Context, cursor int64) ([]sqlc.DomainEvent, error) {
-	return s.queries.ListDomainEventsSince(ctx, cursor)
+// DomainEventsSince returns all domain events owned by userID with ID > cursor, ordered by ID.
+func (s *EventStore) DomainEventsSince(ctx context.Context, userID string, cursor int64) ([]sqlc.DomainEvent, error) {
+	return s.queries.ListDomainEventsSince(ctx, sqlc.ListDomainEventsSinceParams{
+		ID:     cursor,
+		UserID: userID,
+	})
 }

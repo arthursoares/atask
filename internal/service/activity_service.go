@@ -55,7 +55,7 @@ func activityFromRow(row sqlc.Activity) *domain.Activity {
 }
 
 // Add creates a new activity record for a task and emits activity.added.
-func (s *ActivityService) Add(ctx context.Context, taskID, actorID string, actorType domain.ActorType, activityType domain.ActivityType, content string) (*domain.Activity, error) {
+func (s *ActivityService) Add(ctx context.Context, userID, taskID, actorID string, actorType domain.ActorType, activityType domain.ActivityType, content string) (*domain.Activity, error) {
 	now := timeNow()
 	id := uuid.New().String()
 
@@ -67,6 +67,7 @@ func (s *ActivityService) Add(ctx context.Context, taskID, actorID string, actor
 		Type:      sql.NullString{String: string(activityType), Valid: true},
 		Content:   sql.NullString{String: content, Valid: true},
 		CreatedAt: sql.NullTime{Time: now, Valid: true},
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -80,6 +81,7 @@ func (s *ActivityService) Add(ctx context.Context, taskID, actorID string, actor
 		EntityID:   activity.ID,
 		Action:     domain.DeltaCreated,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return nil, err
@@ -93,7 +95,7 @@ func (s *ActivityService) Add(ctx context.Context, taskID, actorID string, actor
 		"content":    content,
 	}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.ActivityAdded, "activity", activity.ID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.ActivityAdded, "activity", activity.ID, actorID, userID, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +114,11 @@ func (s *ActivityService) Add(ctx context.Context, taskID, actorID string, actor
 }
 
 // ListByTask returns all activities for a task ordered by created_at desc.
-func (s *ActivityService) ListByTask(ctx context.Context, taskID string) ([]*domain.Activity, error) {
-	rows, err := s.queries.ListActivitiesByTask(ctx, sql.NullString{String: taskID, Valid: true})
+func (s *ActivityService) ListByTask(ctx context.Context, userID, taskID string) ([]*domain.Activity, error) {
+	rows, err := s.queries.ListActivitiesByTask(ctx, sqlc.ListActivitiesByTaskParams{
+		TaskID: sql.NullString{String: taskID, Valid: true},
+		UserID: userID,
+	})
 	if err != nil {
 		return nil, err
 	}

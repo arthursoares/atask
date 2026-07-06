@@ -55,7 +55,7 @@ func areaFromRow(row sqlc.Area) *domain.Area {
 
 // Create validates, persists, emits delta and domain events, then publishes to the bus.
 // An optional client-provided ID can be passed as opts[0]; if empty or omitted, a new UUID is generated.
-func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Area, error) {
+func (s *AreaService) Create(ctx context.Context, userID, title, actorID string, opts ...string) (*domain.Area, error) {
 	if title == "" {
 		return nil, errors.New("area title must not be empty")
 	}
@@ -72,6 +72,7 @@ func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ..
 		Index:     0,
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -85,6 +86,7 @@ func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ..
 		EntityID:   area.ID,
 		Action:     domain.DeltaCreated,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return nil, err
@@ -93,7 +95,7 @@ func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ..
 	// Emit domain event
 	payload := map[string]any{"title": title}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaCreated, "area", area.ID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaCreated, "area", area.ID, actorID, userID, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +116,8 @@ func (s *AreaService) Create(ctx context.Context, title, actorID string, opts ..
 }
 
 // Get fetches an area by ID.
-func (s *AreaService) Get(ctx context.Context, id string) (*domain.Area, error) {
-	row, err := s.queries.GetArea(ctx, id)
+func (s *AreaService) Get(ctx context.Context, userID, id string) (*domain.Area, error) {
+	row, err := s.queries.GetArea(ctx, sqlc.GetAreaParams{ID: id, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +125,8 @@ func (s *AreaService) Get(ctx context.Context, id string) (*domain.Area, error) 
 }
 
 // List returns all non-archived, non-deleted areas.
-func (s *AreaService) List(ctx context.Context) ([]*domain.Area, error) {
-	rows, err := s.queries.ListAreas(ctx)
+func (s *AreaService) List(ctx context.Context, userID string) ([]*domain.Area, error) {
+	rows, err := s.queries.ListAreas(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +138,8 @@ func (s *AreaService) List(ctx context.Context) ([]*domain.Area, error) {
 }
 
 // ListAll returns all non-deleted areas including archived ones.
-func (s *AreaService) ListAll(ctx context.Context) ([]*domain.Area, error) {
-	rows, err := s.queries.ListAllAreas(ctx)
+func (s *AreaService) ListAll(ctx context.Context, userID string) ([]*domain.Area, error) {
+	rows, err := s.queries.ListAllAreas(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +151,7 @@ func (s *AreaService) ListAll(ctx context.Context) ([]*domain.Area, error) {
 }
 
 // Rename validates and updates the area title, then emits events.
-func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) error {
+func (s *AreaService) Rename(ctx context.Context, userID, id, title, actorID string) error {
 	if title == "" {
 		return errors.New("area title must not be empty")
 	}
@@ -159,6 +161,7 @@ func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) err
 		Title:     sql.NullString{String: title, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -172,6 +175,7 @@ func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) err
 		Field:      strPtr("title"),
 		NewValue:   json.RawMessage(`"` + title + `"`),
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
@@ -180,7 +184,7 @@ func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) err
 	// Emit domain event
 	payload := map[string]any{"title": title}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaRenamed, "area", id, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaRenamed, "area", id, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -199,12 +203,13 @@ func (s *AreaService) Rename(ctx context.Context, id, title, actorID string) err
 }
 
 // Archive sets archived=1 on the area and emits events.
-func (s *AreaService) Archive(ctx context.Context, id, actorID string) error {
+func (s *AreaService) Archive(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	row, err := s.queries.UpdateAreaArchived(ctx, sqlc.UpdateAreaArchivedParams{
 		Archived:  1,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -217,6 +222,7 @@ func (s *AreaService) Archive(ctx context.Context, id, actorID string) error {
 		Field:      strPtr("archived"),
 		NewValue:   json.RawMessage(`true`),
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
@@ -224,7 +230,7 @@ func (s *AreaService) Archive(ctx context.Context, id, actorID string) error {
 
 	payload := map[string]any{}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaArchived, "area", id, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaArchived, "area", id, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -243,12 +249,13 @@ func (s *AreaService) Archive(ctx context.Context, id, actorID string) error {
 }
 
 // Unarchive sets archived=0 on the area and emits events.
-func (s *AreaService) Unarchive(ctx context.Context, id, actorID string) error {
+func (s *AreaService) Unarchive(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	row, err := s.queries.UpdateAreaArchived(ctx, sqlc.UpdateAreaArchivedParams{
 		Archived:  0,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -261,6 +268,7 @@ func (s *AreaService) Unarchive(ctx context.Context, id, actorID string) error {
 		Field:      strPtr("archived"),
 		NewValue:   json.RawMessage(`false`),
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
@@ -268,7 +276,7 @@ func (s *AreaService) Unarchive(ctx context.Context, id, actorID string) error {
 
 	payload := map[string]any{}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaUnarchived, "area", id, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaUnarchived, "area", id, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -288,7 +296,7 @@ func (s *AreaService) Unarchive(ctx context.Context, id, actorID string) error {
 
 // Delete soft-deletes the area. If cascade is true, it also tombstones all projects and tasks
 // in the area. Otherwise it orphans them. Emits area.deleted.
-func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bool) error {
+func (s *AreaService) Delete(ctx context.Context, userID, id, actorID string, cascade bool) error {
 	now := timeNow()
 	deletedAt := sql.NullTime{Time: now, Valid: true}
 	areaIDNull := sql.NullString{String: id, Valid: true}
@@ -299,6 +307,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 			DeletedAt: deletedAt,
 			UpdatedAt: now,
 			AreaID:    areaIDNull,
+			UserID:    userID,
 		}); err != nil {
 			return err
 		}
@@ -307,6 +316,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 			DeletedAt: deletedAt,
 			UpdatedAt: now,
 			AreaID:    areaIDNull,
+			UserID:    userID,
 		}); err != nil {
 			return err
 		}
@@ -315,6 +325,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 		if err := s.queries.OrphanTasksByArea(ctx, sqlc.OrphanTasksByAreaParams{
 			UpdatedAt: now,
 			AreaID:    areaIDNull,
+			UserID:    userID,
 		}); err != nil {
 			return err
 		}
@@ -322,6 +333,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 		if err := s.queries.OrphanProjectsByArea(ctx, sqlc.OrphanProjectsByAreaParams{
 			UpdatedAt: now,
 			AreaID:    areaIDNull,
+			UserID:    userID,
 		}); err != nil {
 			return err
 		}
@@ -332,6 +344,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 		DeletedAt: deletedAt,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	}); err != nil {
 		return err
 	}
@@ -342,6 +355,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 		EntityID:   id,
 		Action:     domain.DeltaDeleted,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
@@ -350,7 +364,7 @@ func (s *AreaService) Delete(ctx context.Context, id, actorID string, cascade bo
 	// Emit domain event
 	payload := map[string]any{"cascade": cascade}
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaDeleted, "area", id, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, domain.AreaDeleted, "area", id, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}

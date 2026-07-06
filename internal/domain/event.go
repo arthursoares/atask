@@ -38,6 +38,7 @@ type DeltaEvent struct {
 	OldValue   json.RawMessage `json:"oldValue,omitempty"`
 	NewValue   json.RawMessage `json:"newValue,omitempty"`
 	ActorID    string          `json:"actorId"`
+	UserID     string          `json:"userId"`
 	Timestamp  time.Time       `json:"timestamp"`
 }
 

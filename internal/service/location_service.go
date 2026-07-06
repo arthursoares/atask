@@ -72,7 +72,7 @@ func locationFromRow(row sqlc.Location) *domain.Location {
 func (s *LocationService) publishLocationEvent(
 	ctx context.Context,
 	eventType domain.EventType,
-	locationID, actorID string,
+	locationID, actorID, userID string,
 	now time.Time,
 	payload map[string]any,
 	deltaAction domain.DeltaAction,
@@ -86,13 +86,14 @@ func (s *LocationService) publishLocationEvent(
 		Field:      field,
 		NewValue:   newValue,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "location", locationID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "location", locationID, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -115,7 +116,7 @@ func (s *LocationService) publishLocationEvent(
 // pattern used by TaskService.Create / ProjectService.Create / AreaService.Create).
 // Offline clients rely on the server preserving their UUID so that subsequent
 // references (e.g. PUT /tasks/{id}/location with the client id) resolve correctly.
-func (s *LocationService) Create(ctx context.Context, name, actorID string, opts ...string) (*domain.Location, error) {
+func (s *LocationService) Create(ctx context.Context, userID, name, actorID string, opts ...string) (*domain.Location, error) {
 	if name == "" {
 		return nil, errors.New("location name must not be empty")
 	}
@@ -133,6 +134,7 @@ func (s *LocationService) Create(ctx context.Context, name, actorID string, opts
 		Name:      sql.NullString{String: name, Valid: true},
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -141,7 +143,7 @@ func (s *LocationService) Create(ctx context.Context, name, actorID string, opts
 	loc := locationFromRow(row)
 
 	payload := map[string]any{"name": name}
-	if err := s.publishLocationEvent(ctx, domain.LocationCreated, loc.ID, actorID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
+	if err := s.publishLocationEvent(ctx, domain.LocationCreated, loc.ID, actorID, userID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -149,8 +151,8 @@ func (s *LocationService) Create(ctx context.Context, name, actorID string, opts
 }
 
 // Get fetches a location by ID.
-func (s *LocationService) Get(ctx context.Context, id string) (*domain.Location, error) {
-	row, err := s.queries.GetLocation(ctx, id)
+func (s *LocationService) Get(ctx context.Context, userID, id string) (*domain.Location, error) {
+	row, err := s.queries.GetLocation(ctx, sqlc.GetLocationParams{ID: id, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +160,8 @@ func (s *LocationService) Get(ctx context.Context, id string) (*domain.Location,
 }
 
 // List returns all non-deleted locations.
-func (s *LocationService) List(ctx context.Context) ([]*domain.Location, error) {
-	rows, err := s.queries.ListLocations(ctx)
+func (s *LocationService) List(ctx context.Context, userID string) ([]*domain.Location, error) {
+	rows, err := s.queries.ListLocations(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func (s *LocationService) List(ctx context.Context) ([]*domain.Location, error) 
 }
 
 // Rename validates and updates the location name, then emits location.renamed.
-func (s *LocationService) Rename(ctx context.Context, id, name, actorID string) error {
+func (s *LocationService) Rename(ctx context.Context, userID, id, name, actorID string) error {
 	if name == "" {
 		return errors.New("location name must not be empty")
 	}
@@ -181,6 +183,7 @@ func (s *LocationService) Rename(ctx context.Context, id, name, actorID string) 
 		Name:      sql.NullString{String: name, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -188,17 +191,18 @@ func (s *LocationService) Rename(ctx context.Context, id, name, actorID string) 
 
 	payload := map[string]any{"name": name}
 	nameJSON, _ := json.Marshal(name)
-	return s.publishLocationEvent(ctx, domain.LocationRenamed, id, actorID, now, payload, domain.DeltaModified, strPtr("name"), nameJSON)
+	return s.publishLocationEvent(ctx, domain.LocationRenamed, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("name"), nameJSON)
 }
 
 // Delete clears the location from all tasks, soft-deletes the location, and emits location.deleted.
-func (s *LocationService) Delete(ctx context.Context, id, actorID string) error {
+func (s *LocationService) Delete(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 
 	// Clear location from all tasks
 	if err := s.queries.ClearLocationFromTasks(ctx, sqlc.ClearLocationFromTasksParams{
 		UpdatedAt:  now,
 		LocationID: sql.NullString{String: id, Valid: true},
+		UserID:     userID,
 	}); err != nil {
 		return err
 	}
@@ -208,10 +212,11 @@ func (s *LocationService) Delete(ctx context.Context, id, actorID string) error 
 		DeletedAt: sql.NullTime{Time: now, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishLocationEvent(ctx, domain.LocationDeleted, id, actorID, now, payload, domain.DeltaDeleted, nil, nil)
+	return s.publishLocationEvent(ctx, domain.LocationDeleted, id, actorID, userID, now, payload, domain.DeltaDeleted, nil, nil)
 }

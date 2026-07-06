@@ -37,6 +37,7 @@ func TestEventStore_AppendAndQuery(t *testing.T) {
 		OldValue:   nil,
 		NewValue:   json.RawMessage(`"Buy milk"`),
 		ActorID:    "user-1",
+		UserID:     "user-1",
 		Timestamp:  time.Now(),
 	}
 
@@ -44,7 +45,7 @@ func TestEventStore_AppendAndQuery(t *testing.T) {
 		t.Fatalf("AppendDelta error: %v", err)
 	}
 
-	events, err := es.DeltasSince(ctx, 0)
+	events, err := es.DeltasSince(ctx, "user-1", 0)
 	if err != nil {
 		t.Fatalf("DeltasSince error: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestEventStore_AppendDomainEvent(t *testing.T) {
 		t.Fatalf("json.Marshal error: %v", err)
 	}
 
-	id, err := es.AppendDomainEvent(ctx, domain.TaskCreated, "task", "task-xyz", "user-1", payload)
+	id, err := es.AppendDomainEvent(ctx, domain.TaskCreated, "task", "task-xyz", "user-1", "user-1", payload)
 	if err != nil {
 		t.Fatalf("AppendDomainEvent error: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestEventStore_AppendDomainEvent(t *testing.T) {
 		t.Fatal("expected non-zero ID from AppendDomainEvent")
 	}
 
-	events, err := es.DomainEventsSince(ctx, 0)
+	events, err := es.DomainEventsSince(ctx, "user-1", 0)
 	if err != nil {
 		t.Fatalf("DomainEventsSince error: %v", err)
 	}
