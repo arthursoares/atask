@@ -159,6 +159,17 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 		return bridge(common(authMW(http.HandlerFunc(h))))
 	}
 
+	// adminAPIProtect wraps a handler with the common middleware, requireAuth
+	// (resolves Bearer/ApiKey identity), and requireAdminAPI (requires
+	// Role=="admin"). Distinct from adminProtect below, which gates the
+	// session-cookie-based HTML admin UI (Task 14) — this is the equivalent
+	// gate for JSON API endpoints. Task 17's POST /auth/invites is the first
+	// consumer; see requireAdminAPI's doc comment (middleware.go) for why
+	// there's no earlier admin-API precedent to follow instead.
+	adminAPIProtect := func(h http.HandlerFunc) func(*core.RequestEvent) error {
+		return bridge(common(authMW(requireAdminAPI(deps.AuthProvider)(http.HandlerFunc(h)))))
+	}
+
 	// --- Admin UI (Task 14) ---
 	// The CSRF + session stores are process-memory and must be the SAME
 	// instances the AdminHandler and its middleware share. main.go passes them
@@ -211,6 +222,7 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 	se.Router.POST("/auth/login", public(authHandler.Login))
 	se.Router.POST("/auth/refresh", public(authHandler.Refresh))
 	se.Router.GET("/auth/providers", public(authHandler.Providers))
+	se.Router.POST("/auth/invites/claim", public(authHandler.ClaimInvite))
 
 	// --- Auth (protected) ---
 	se.Router.GET("/auth/me", protect(authHandler.GetMe))
@@ -219,6 +231,9 @@ func RegisterRoutes(se *core.ServeEvent, deps RoutesDeps) {
 	se.Router.POST("/auth/api-keys", protect(authHandler.CreateAPIKey))
 	se.Router.PUT("/auth/api-keys/{id}", protect(authHandler.UpdateAPIKey))
 	se.Router.DELETE("/auth/api-keys/{id}", protect(authHandler.DeleteAPIKey))
+
+	// --- Auth (admin-only, Task 17) ---
+	se.Router.POST("/auth/invites", adminAPIProtect(authHandler.CreateInvite))
 
 	// --- Tasks ---
 	se.Router.POST("/tasks", protect(taskHandler.Create))

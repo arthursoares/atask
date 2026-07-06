@@ -76,7 +76,26 @@ func startRealPBServer(t *testing.T) *httptest.Server {
 // PocketBase's seeded auth collections (e.g. a _superusers token — see
 // TestAuth_Refresh_RejectsSuperuserToken in auth_test.go) rather than only
 // through the HTTP-facing register/login flow.
+//
+// RegistrationOpen defaults to true here so every pre-Task-17 test in this
+// package — which all assume POST /auth/register succeeds openly — keeps
+// working unchanged. Task 17's invite-flow tests need the opposite
+// (RegistrationOpen: false, invite required) and use
+// startRealPBServerWithConfig directly instead.
 func startRealPBServerWithApp(t *testing.T) (*httptest.Server, *tests.TestApp) {
+	t.Helper()
+	srv, app, _ := startRealPBServerWithConfig(t, &config.Config{RegistrationOpen: true})
+	return srv, app
+}
+
+// startRealPBServerWithConfig is startRealPBServerWithApp, additionally
+// taking the *config.Config to wire as RoutesDeps.Config and returning the
+// underlying *store.DB — so callers can exercise RegistrationOpen=false
+// (invite-gated registration, invite_test.go), a non-default BaseURL (invite
+// URL assertions), or reach into the invites table directly (e.g. to
+// backdate expires_at for an expired-invite test) without touching the
+// common-case helper every other test in this package relies on.
+func startRealPBServerWithConfig(t *testing.T, cfg *config.Config) (*httptest.Server, *tests.TestApp, *store.DB) {
 	t.Helper()
 
 	app, err := tests.NewTestApp()
@@ -115,7 +134,7 @@ func startRealPBServerWithApp(t *testing.T) (*httptest.Server, *tests.TestApp) {
 		DB:            db,
 		AuthProvider:  auth.NewPBAdapterFromApp(app),
 		AuthService:   service.NewAuthService(db, "test-secret"),
-		Config:        &config.Config{},
+		Config:        cfg,
 		EventStore:    es,
 		Bus:           bus,
 		StreamManager: event.NewStreamManager(bus),
@@ -136,7 +155,7 @@ func startRealPBServerWithApp(t *testing.T) (*httptest.Server, *tests.TestApp) {
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv, app
+	return srv, app, db
 }
 
 // TestRealPBRouter_ValidBody_NotRejectedAsTrailingData is the regression

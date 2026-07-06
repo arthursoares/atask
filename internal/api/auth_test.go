@@ -336,7 +336,8 @@ func TestAuth_Register_RejectsRoleInjection(t *testing.T) {
 
 // TestAuth_ProvidersShape asserts GET /auth/providers is public and reports
 // email always enabled with the OAuth providers disabled when no client IDs
-// are configured (startRealPBServer wires RoutesDeps.Config as &config.Config{}).
+// are configured (startRealPBServer wires RoutesDeps.Config with no OAuth
+// client IDs set — see startRealPBServerWithApp in pb_router_bridge_test.go).
 func TestAuth_ProvidersShape(t *testing.T) {
 	srv := startRealPBServer(t)
 

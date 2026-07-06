@@ -197,3 +197,41 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 		})
 	}
 }
+
+// requireAdminAPI gates admin-only JSON API endpoints (as opposed to the
+// Task 14 web admin UI, which uses session cookies and requireAdmin in
+// admin.go). It must run AFTER requireAuth — which resolves the Bearer/ApiKey
+// credential and populates ctxUserID — and re-loads the user record via
+// FindUserByID to check Role == "admin", mirroring requireAdmin's own
+// re-check of the role rather than trusting a stale claim.
+//
+// There is no prior admin-API pattern in this codebase to follow (Task 14's
+// admin surface is entirely session/cookie-based); this is a new, minimal
+// convention introduced for Task 17's POST /auth/invites and intended to be
+// reused by any future admin-only JSON endpoint rather than re-derived.
+//
+// An unauthenticated caller (ctxUserID empty) is rejected with 401 — this
+// only happens if requireAdminAPI is ever wired without requireAuth ahead of
+// it, since requireAuth itself already 401s before ctxUserID would be unset.
+// A missing user record is 401; an authenticated non-admin is 403.
+func requireAdminAPI(authProvider auth.AuthProvider) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := UserIDFromContext(r.Context())
+			if userID == "" {
+				RespondError(w, http.StatusUnauthorized, "not authenticated")
+				return
+			}
+			user, err := authProvider.FindUserByID(userID)
+			if err != nil {
+				RespondError(w, http.StatusUnauthorized, "invalid credentials")
+				return
+			}
+			if user.Role != "admin" {
+				RespondError(w, http.StatusForbidden, "admin role required")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}

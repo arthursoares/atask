@@ -66,17 +66,43 @@ func extractBearerToken(r *http.Request) string {
 }
 
 // Register handles POST /auth/register — creates a new user account via the
-// AuthProvider. Registration is open in Phase 1: every account is created
-// with role "user". Task 17 gates this behind config.RegistrationOpen /
-// invites; until then this endpoint is intentionally permissive.
+// AuthProvider.
+//
+// When config.RegistrationOpen is true (the default in Phase 1), every
+// account is created openly with role "user" from body.Email/Password/Name.
+//
+// When config.RegistrationOpen is false, an invite token is required:
+// body.InviteToken must name a valid (unclaimed, unexpired) invite, and the
+// account is created via claimInvite — the same helper ClaimInvite (Task 17,
+// invite.go) uses — so the two paths share identical single-use/expiry
+// enforcement. In that path the created account's email and role come from
+// the invite record itself, not from body.Email; body.Email is accepted (the
+// struct field is shared with the open-registration path) but ignored, since
+// an invite is authorization to become the specific identity it was issued
+// for, not a blank check to self-assign an address or role.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		Name        string `json:"name"`
+		InviteToken string `json:"inviteToken"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		RespondDecodeError(w, err)
+		return
+	}
+
+	if !h.cfg.RegistrationOpen {
+		if body.InviteToken == "" {
+			RespondError(w, http.StatusForbidden, "registration closed — invite required")
+			return
+		}
+		user, err := h.claimInvite(r.Context(), body.InviteToken, body.Password, body.Name)
+		if err != nil {
+			respondClaimInviteError(w, err)
+			return
+		}
+		RespondJSON(w, http.StatusCreated, userJSON(user))
 		return
 	}
 
