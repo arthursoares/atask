@@ -127,10 +127,21 @@ pub fn login(
     })
 }
 
-/// On launch, re-derive the in-memory access token by refreshing the
-/// keychain-stored token. The server rotates on refresh, so the new token is
-/// persisted to the keychain BEFORE the in-memory cache (crash-safety: the
-/// keychain stays canonical if we crash between the two writes).
+/// On launch, restore the in-memory access token from the keychain with a
+/// SINGLE read — no network refresh and, crucially, no keychain WRITE. The
+/// token is used as-is until a sync request gets a 401, at which point
+/// `sync::handle_401` does a single-flight refresh (and only then rotates +
+/// rewrites the keychain). This keeps app launch to one keychain access
+/// instead of a read+write: on an unsigned/dev build every keychain touch
+/// triggers a macOS authorization prompt, and a write (ACL modification) is
+/// the one that escalates to a full password prompt — so dropping the launch
+/// write removes the most intrusive prompt. It also avoids rotating a
+/// still-valid token on every start.
+///
+/// Trade-off: a token that is already expired at launch is loaded optimistically
+/// (AuthState reports authenticated); the first sync then 401s and, since an
+/// expired token can't be refreshed, surfaces as a sync error prompting re-login
+/// — the same end state the old eager refresh reached, just discovered lazily.
 #[tauri::command]
 pub fn refresh_on_launch(
     db: State<Database>,
@@ -149,28 +160,14 @@ pub fn refresh_on_launch(
         (server_url, user_email)
     };
 
-    // Read the current token from the keychain.
+    // Single keychain read; load straight into the in-memory cache. No refresh
+    // network call, no keychain write.
     let entry = keyring::Entry::new(KEYRING_SERVICE, &user_email).map_err(|e| e.to_string())?;
-    let current_token = match entry.get_password() {
+    let token = match entry.get_password() {
         Ok(t) => t,
         Err(_) => return Ok(AuthState::default()), // not signed in
     };
-
-    let client = reqwest::blocking::Client::new();
-    let resp = client
-        .post(format!("{}/auth/refresh", server_url))
-        .header("Authorization", format!("Bearer {}", current_token))
-        .send()
-        .map_err(|e| e.to_string())?;
-
-    if !resp.status().is_success() {
-        return Ok(AuthState::default()); // surfaces "please sign in again" in UI
-    }
-    let body: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
-    let new_token = body["token"].as_str().ok_or("missing token")?.to_string();
-    // Keychain BEFORE cache.
-    entry.set_password(&new_token).map_err(|e| e.to_string())?;
-    *tokens.access_token.lock().unwrap() = Some(new_token);
+    *tokens.access_token.lock().unwrap() = Some(token);
 
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     Ok(AuthState {
