@@ -17,6 +17,12 @@ const usersCollection = "users"
 // dummyBcryptHash is a valid bcrypt hash of a random string, used to perform a
 // constant-time-ish password comparison on the user-not-found path so that
 // AuthWithPassword does not leak account existence via response timing.
+//
+// Review note: the "$2a$10$..." prefix bakes in bcrypt cost 10, matching
+// PocketBase's default cost for the `users` auth collection's password field.
+// If the users collection's password cost is ever reconfigured away from the
+// default, regenerate this hash at the new cost so the dummy comparison's
+// timing still matches a real lookup.
 const dummyBcryptHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
 // errInvalidCredentials is the single error returned for both "user not found"

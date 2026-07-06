@@ -1,6 +1,9 @@
 package api
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -44,11 +47,62 @@ type RoutesDeps struct {
 //
 // This is the single routing primitive in the codebase. Task 14's admin routes
 // reuse it with requireAdmin substituted for requireAuth.
+//
+// Critical bug fix: PocketBase's router (tools/router/router.go) unconditionally
+// wraps every request body in a RereadableReadCloser, whose Read implementation
+// auto-"rewinds" back to the start the moment it observes io.EOF from the
+// underlying reader (so PB's own multi-stage hook pipeline can read a request
+// body more than once). DecodeJSON (response.go) enforces its "single JSON
+// object" rule with a second dec.Decode(&struct{}{}) call that expects a clean
+// io.EOF; through PB's rewinding body, that second decode silently re-reads the
+// same JSON object from the top and DecodeJSON mistakes it for trailing data —
+// every valid body-carrying request (POST /auth/login, POST /auth/register,
+// POST /tasks, all PATCHes, ...) would fail with 400 "request body must
+// contain a single JSON object". We drain the body exactly once here and
+// replace it with a plain io.NopCloser, restoring standard EOF semantics
+// before the request ever reaches DecodeJSON.
 func bridge(h http.Handler) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		if err := bufferBody(e.Request); err != nil {
+			RespondError(e.Response, http.StatusRequestEntityTooLarge, err.Error())
+			return nil
+		}
 		h.ServeHTTP(e.Response, e.Request)
 		return nil
 	}
+}
+
+// bufferBody drains r.Body exactly once and replaces it with a plain
+// io.NopCloser wrapping the buffered bytes, undoing PocketBase's
+// auto-rewinding RereadableReadCloser (see bridge's doc comment) so downstream
+// handlers — via DecodeJSON — observe standard single-read io.EOF semantics.
+//
+// Requests with no body (GET/HEAD/DELETE without a body, and the SSE stream
+// route which is itself a bodyless GET) are left untouched: r.Body is either
+// http.NoBody or ContentLength is 0, so there is nothing to rewind and no
+// reason to buffer.
+//
+// PocketBase's own BodyLimit middleware (apis.DefaultMaxBodySize, 32MiB) is
+// bound on the root router and already applies to every route mounted here,
+// so an attacker cannot force an unbounded read through this function. This
+// guard additionally enforces our own, smaller maxJSONBodyBytes cap (the same
+// constant DecodeJSON uses) so we never buffer more than our API is willing to
+// accept, returning 413 if the body is larger.
+func bufferBody(r *http.Request) error {
+	if r.Body == nil || r.Body == http.NoBody || r.ContentLength == 0 {
+		return nil
+	}
+
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxJSONBodyBytes+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) > maxJSONBodyBytes {
+		return fmt.Errorf("request body exceeds %d bytes", maxJSONBodyBytes)
+	}
+
+	r.Body = io.NopCloser(bytes.NewReader(data))
+	return nil
 }
 
 // RegisterRoutes mounts every domain route directly on PocketBase's router with
