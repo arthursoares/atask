@@ -157,15 +157,14 @@ func main() {
 	}
 }
 
-// hasSubcommand reports whether the provided args contain a non-flag token
-// (i.e. a cobra subcommand the user wants to run instead of the default serve).
+// hasSubcommand reports whether the provided args start with a non-flag
+// token (i.e. a cobra subcommand the user wants to run instead of the
+// default serve). A cobra subcommand, if present, is always the *first*
+// token — checking every arg (rather than just args[0]) previously
+// misclassified flag *values* as subcommands, e.g. `atask --http :9000`
+// saw ":9000" and skipped injecting the default `serve` + its --http flag.
 func hasSubcommand(args []string) bool {
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			return true
-		}
-	}
-	return false
+	return len(args) > 0 && !strings.HasPrefix(args[0], "-")
 }
 
 // normalizeAddr adapts a bare ":8080" style ADDR into a host:port PocketBase's
