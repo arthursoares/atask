@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -126,7 +127,7 @@ func registerAdminCommands(app *pocketbase.PocketBase) {
 			}
 
 			cfg := config.Load()
-			if err := assignOrphanedData(cfg.DataDir+"/atask.db", userID); err != nil {
+			if err := assignOrphanedData(cfg.DataDir+"/atask.db", userID, adapter); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -179,10 +180,20 @@ func validateUserExists(adapter auth.AuthProvider, userID string) error {
 // assignOrphanedData opens the domain SQLite database at dbPath and, inside
 // a single transaction, sets user_id = userID on every row across
 // store.OrphanableTables that currently carries user_id = '' (pre-multi-user
-// data). store.OrphanableTables is the single canonical table list, shared
-// with the Task 22 startup guard (internal/store/orphan_check.go), so the two
-// can never silently drift apart.
-func assignOrphanedData(dbPath, userID string) error {
+// data), then additionally reassigns any orphaned api_keys rows via
+// reassignOrphanedAPIKeys. store.OrphanableTables is the single canonical
+// table list, shared with the Task 22 startup guard
+// (internal/store/orphan_check.go), so the two can never silently drift
+// apart.
+//
+// api_keys needs its own pass rather than a plain `WHERE user_id = ''`
+// (Codex P1 follow-up): migration 006 preserved every pre-existing key's
+// user_id as the legacy `users.id` (now a dropped table) rather than
+// clearing it to '', so those keys are "orphaned" in the sense that matters
+// (their user_id resolves to nothing) but invisible to a check that only
+// looks for the empty string. reassignOrphanedAPIKeys uses adapter to
+// distinguish a live PocketBase user_id from a dangling one.
+func assignOrphanedData(dbPath, userID string, adapter auth.AuthProvider) error {
 	db, err := store.NewDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("open domain db: %w", err)
@@ -218,10 +229,79 @@ func assignOrphanedData(dbPath, userID string) error {
 		total += n
 	}
 
+	keysReassigned, err := reassignOrphanedAPIKeys(tx, adapter, userID)
+	if err != nil {
+		return fmt.Errorf("reassign orphaned api_keys: %w", err)
+	}
+	if keysReassigned > 0 {
+		fmt.Printf("api_keys: %d rows assigned\n", keysReassigned)
+	}
+	total += int64(keysReassigned)
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	fmt.Printf("Assigned all orphaned data (%d rows) to user %s\n", total, userID)
 	return nil
+}
+
+// reassignOrphanedAPIKeys retargets every api_keys row whose user_id is
+// either empty or does not resolve to a live PocketBase user (via
+// adapter.FindUserByID) to targetID, and leaves rows already pointing at a
+// valid user untouched. It runs inside tx so it commits/rolls back atomically
+// with the rest of assignOrphanedData's work. Returns the number of rows
+// reassigned.
+//
+// Factored out of assignOrphanedData so it can be unit tested directly
+// against a real PocketBase test app (see reassign_api_keys_test.go),
+// following the same precedent as validateUserExists.
+func reassignOrphanedAPIKeys(tx *sql.Tx, adapter auth.AuthProvider, targetID string) (int, error) {
+	rows, err := tx.Query(`SELECT DISTINCT user_id FROM api_keys`)
+	if err != nil {
+		return 0, fmt.Errorf("query distinct api_keys.user_id: %w", err)
+	}
+	var userIDs []string
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan api_keys.user_id: %w", err)
+		}
+		userIDs = append(userIDs, uid)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("close api_keys.user_id rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate api_keys.user_id rows: %w", err)
+	}
+
+	total := 0
+	for _, uid := range userIDs {
+		if uid == targetID {
+			continue // already correct; skip a no-op UPDATE.
+		}
+
+		orphaned := uid == ""
+		if !orphaned {
+			if _, err := adapter.FindUserByID(uid); err != nil {
+				orphaned = true // does not resolve to a live PB user.
+			}
+		}
+		if !orphaned {
+			continue // points at a real (if different) user — leave untouched.
+		}
+
+		res, err := tx.Exec(`UPDATE api_keys SET user_id = ? WHERE user_id = ?`, targetID, uid)
+		if err != nil {
+			return total, fmt.Errorf("reassign api_keys for user_id %q: %w", uid, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return total, fmt.Errorf("rows affected reassigning api_keys for user_id %q: %w", uid, err)
+		}
+		total += int(n)
+	}
+	return total, nil
 }

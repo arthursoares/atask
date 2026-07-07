@@ -65,6 +65,7 @@ const (
 	requestIDKey contextKey = "request_id"
 	ctxUserID    contextKey = "userID"
 	ctxKeyID     contextKey = "keyID"
+	ctxAuthScope contextKey = "authScope"
 )
 
 // RequestID middleware adds a unique request ID to the request context and
@@ -100,6 +101,15 @@ func UserIDFromContext(ctx context.Context) string {
 func KeyIDFromContext(ctx context.Context) string {
 	id, _ := ctx.Value(ctxKeyID).(string)
 	return id
+}
+
+// AuthScopeFromContext returns the API key scope stored in ctx by requireAuth
+// (one of "read", "read_write", "admin"). Returns "" when the request was
+// authenticated via a Bearer token — human users are always full-access and
+// carry no scope — or when requireAuth has not run.
+func AuthScopeFromContext(ctx context.Context) string {
+	scope, _ := ctx.Value(ctxAuthScope).(string)
+	return scope
 }
 
 // requireAuth is middleware that validates Bearer tokens (PocketBase auth tokens,
@@ -180,7 +190,10 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 						return
 					}
 				case "read_write":
-					// Domain endpoints OK; no admin API endpoints exist yet.
+					// Domain endpoints OK. Admin-only JSON endpoints (e.g.
+					// POST /auth/invites) are additionally gated by
+					// requireAdminAPI's own scope check, which requires
+					// scope == "admin" — a read_write key does not qualify.
 				case "admin":
 					// All endpoints OK.
 				default:
@@ -192,6 +205,9 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 			ctx = context.WithValue(ctx, ctxUserID, userID)
 			if keyID != "" {
 				ctx = context.WithValue(ctx, ctxKeyID, keyID)
+			}
+			if isAPIKeyAuth {
+				ctx = context.WithValue(ctx, ctxAuthScope, scope)
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -214,6 +230,16 @@ func requireAuth(authProvider auth.AuthProvider, apiKeySvc APIKeyValidator) func
 // only happens if requireAdminAPI is ever wired without requireAuth ahead of
 // it, since requireAuth itself already 401s before ctxUserID would be unset.
 // A missing user record is 401; an authenticated non-admin is 403.
+//
+// Beyond the Role check, an ApiKey-authenticated caller must also carry a key
+// scoped "admin" (Codex P1 follow-up): an admin *user*'s read/read_write key
+// must not implicitly inherit access to admin-only JSON endpoints just
+// because the user's Role is "admin". requireAuth stores the resolved scope
+// in the context via ctxAuthScope — "" for Bearer auth (humans are always
+// full-access) and the key's own scope for ApiKey auth. Every persisted API
+// key has a non-empty scope (migration 006 defaults new keys to
+// "read_write"), so an empty scope here can only mean Bearer auth, never an
+// API key that slipped through unscoped.
 func requireAdminAPI(authProvider auth.AuthProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +255,10 @@ func requireAdminAPI(authProvider auth.AuthProvider) func(http.Handler) http.Han
 			}
 			if user.Role != "admin" {
 				RespondError(w, http.StatusForbidden, "admin role required")
+				return
+			}
+			if scope := AuthScopeFromContext(r.Context()); scope != "" && scope != "admin" {
+				RespondError(w, http.StatusForbidden, "admin scope required")
 				return
 			}
 			next.ServeHTTP(w, r)
