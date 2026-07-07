@@ -9,6 +9,9 @@ import "testing"
 // A cobra subcommand is always the first token, so only args[0] should be
 // consulted.
 func TestHasSubcommand(t *testing.T) {
+	// The real registered command set: PocketBase built-ins + Task 15's `admin`.
+	known := map[string]bool{"serve": true, "superuser": true, "migrate": true, "admin": true}
+
 	tests := []struct {
 		name string
 		args []string
@@ -20,11 +23,17 @@ func TestHasSubcommand(t *testing.T) {
 		{"admin create-user", []string{"admin", "create-user"}, true},
 		{"short help flag", []string{"-h"}, false},
 		{"dir flag with value", []string{"--dir", "/data"}, false},
+		// Codex PR#4 P2: a subcommand after a global flag must still be recognized
+		// (previously the args[0]-only heuristic injected `serve` and dropped it).
+		{"global flag then admin subcommand", []string{"--dir", "/data", "admin", "assign-data", "--to", "u"}, true},
+		{"global flag then serve", []string{"--dir", "/data", "serve"}, true},
+		// A flag value that is not a command name is not a subcommand.
+		{"flag value resembling a path", []string{"--http", "/tmp/x"}, false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := hasSubcommand(tc.args)
+			got := hasSubcommand(tc.args, known)
 			if got != tc.want {
 				t.Errorf("hasSubcommand(%v) = %v, want %v", tc.args, got, tc.want)
 			}

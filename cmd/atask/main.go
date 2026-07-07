@@ -33,12 +33,20 @@ func main() {
 		DefaultDataDir: cfg.DataDir,
 	})
 
+	// Register `atask admin ...` (Task 15) before dispatch so the subcommand set
+	// is complete both for the serve-default heuristic below and for cobra's own
+	// dispatch. Must happen before app.Start(): PocketBase.Execute() only
+	// bootstraps ahead of dispatch when the requested subcommand is already
+	// registered on RootCmd — see registerAdminCommands' doc in admin_commands.go.
+	registerAdminCommands(app)
+
 	// Default to `serve` only when the user passed no subcommand of their own.
-	// Real CLI subcommands (Task 15: `atask superuser ...`, `atask admin ...`,
-	// `atask migrate ...`) must still reach cobra untouched, so we only inject
-	// the serve defaults when os.Args carries nothing but flags. --http is parsed
-	// by the serve command through cobra, so SetArgs applies it correctly.
-	if !hasSubcommand(os.Args[1:]) {
+	// Real CLI subcommands (`atask serve|superuser|migrate|admin ...`) must reach
+	// cobra untouched, so we only inject the serve defaults when os.Args names no
+	// registered subcommand — matched against the actual command set rather than
+	// a positional heuristic, so neither a flag value (`atask --http :9000`) nor a
+	// subcommand after a global flag (`atask --dir /d admin ...`) is misclassified.
+	if !hasSubcommand(os.Args[1:], registeredCommandNames(app)) {
 		serveArgs := []string{
 			"serve",
 			"--http=" + normalizeAddr(cfg.Addr),
@@ -145,26 +153,43 @@ func main() {
 		return se.Next()
 	})
 
-	// Register `atask admin create-user`/`atask admin assign-data` (Task 15).
-	// Must happen before app.Start(): PocketBase.Execute() (which app.Start()
-	// calls into) only bootstraps the app ahead of dispatch when the
-	// requested subcommand is already registered on RootCmd — see
-	// registerAdminCommands' doc comment in admin_commands.go.
-	registerAdminCommands(app)
-
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// hasSubcommand reports whether the provided args start with a non-flag
-// token (i.e. a cobra subcommand the user wants to run instead of the
-// default serve). A cobra subcommand, if present, is always the *first*
-// token — checking every arg (rather than just args[0]) previously
-// misclassified flag *values* as subcommands, e.g. `atask --http :9000`
-// saw ":9000" and skipped injecting the default `serve` + its --http flag.
-func hasSubcommand(args []string) bool {
-	return len(args) > 0 && !strings.HasPrefix(args[0], "-")
+// registeredCommandNames returns the set of top-level subcommand names (and
+// aliases) registered on the root command — e.g. serve, superuser, migrate
+// (PocketBase built-ins) and admin (Task 15). registerAdminCommands must run
+// before this is called so `admin` is included.
+func registeredCommandNames(app *pocketbase.PocketBase) map[string]bool {
+	names := make(map[string]bool)
+	for _, c := range app.RootCmd.Commands() {
+		names[c.Name()] = true
+		for _, alias := range c.Aliases {
+			names[alias] = true
+		}
+	}
+	return names
+}
+
+// hasSubcommand reports whether the user explicitly invoked one of the
+// registered subcommands (rather than expecting the default `serve`). It
+// matches each argument against the known command set instead of a positional
+// heuristic, so neither a flag value (`atask --http :9000` — ":9000" is not a
+// command) nor a subcommand preceded by a global flag (`atask --dir /d admin
+// ...`) is misclassified. Cobra strips flags before selecting a command, so a
+// real subcommand may legitimately appear after flags.
+func hasSubcommand(args []string, known map[string]bool) bool {
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if known[a] {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeAddr adapts a bare ":8080" style ADDR into a host:port PocketBase's
