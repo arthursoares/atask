@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@nanostores/react";
-import { loadAll, showErrorToast, $showSidebar, $selectedTaskId, $activeView, $selectedTaskIds } from "./store/index";
+import {
+  loadAll,
+  showErrorToast,
+  $showSidebar,
+  $selectedTaskId,
+  $activeView,
+  $selectedTaskIds,
+  $authState,
+} from "./store/index";
+import { refreshOnLaunch } from "./hooks/useTauri";
 import Sidebar from "./components/Sidebar";
 import Toolbar from "./components/Toolbar";
 import InboxView from "./views/InboxView";
@@ -36,6 +45,12 @@ function App() {
         setLoadState("error");
         showErrorToast(`Couldn't load your data: ${String(err)}`);
       });
+    // Re-derive the in-memory session from the keychain-stored token (if
+    // any) on every app launch. Silently leaves $authState unauthenticated
+    // if there's no prior session or the refresh fails.
+    refreshOnLaunch()
+      .then((state) => $authState.set(state))
+      .catch(() => {});
   }, []);
 
   // Most mutations are fired from event handlers without awaiting; a failed

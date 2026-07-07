@@ -24,6 +24,7 @@ func (h *SyncHandler) RegisterRoutes(mux *http.ServeMux) {
 
 // Deltas returns all delta events with ID > since cursor.
 func (h *SyncHandler) Deltas(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	var cursor int64
 	if s := r.URL.Query().Get("since"); s != "" {
 		var err error
@@ -34,7 +35,7 @@ func (h *SyncHandler) Deltas(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	deltas, err := h.events.DeltasSince(r.Context(), cursor)
+	deltas, err := h.events.DeltasSince(r.Context(), userID, cursor)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

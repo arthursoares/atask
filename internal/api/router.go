@@ -5,85 +5,20 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/atask/atask/internal/service"
 )
 
-// NewRouter constructs and returns the fully wired HTTP handler.
-// Public routes (/health and /auth/*) bypass the Auth middleware.
-func NewRouter(
-	areaHandler *AreaHandler,
-	taskHandler *TaskHandler,
-	projectHandler *ProjectHandler,
-	sectionHandler *SectionHandler,
-	tagHandler *TagHandler,
-	locationHandler *LocationHandler,
-	checklistHandler *ChecklistHandler,
-	activityHandler *ActivityHandler,
-	viewHandler *ViewHandler,
-	eventsHandler *EventsHandler,
-	syncHandler *SyncHandler,
-	authHandler *AuthHandler,
-	authService *service.AuthService,
-) http.Handler {
-	mux := http.NewServeMux()
-
-	// Health endpoint (no auth required)
-	mux.HandleFunc("GET /health", handleHealth)
-
-	// Auth routes (register/login are public; protected auth routes skip via path check in middleware)
-	authHandler.RegisterRoutes(mux)
-
-	// All other routes — auth is enforced by the Auth middleware
-	areaHandler.RegisterRoutes(mux)
-	taskHandler.RegisterRoutes(mux)
-	projectHandler.RegisterRoutes(mux)
-	sectionHandler.RegisterRoutes(mux)
-	tagHandler.RegisterRoutes(mux)
-	locationHandler.RegisterRoutes(mux)
-	checklistHandler.RegisterRoutes(mux)
-	activityHandler.RegisterRoutes(mux)
-	viewHandler.RegisterRoutes(mux)
-	eventsHandler.RegisterRoutes(mux)
-	syncHandler.RegisterRoutes(mux)
-
-	// Middleware stack: RequestID → Logging → Auth → mux
-	// Auth skips /health and /auth/* paths automatically.
-	var handler http.Handler = mux
-	handler = authMiddleware(authService)(handler)
-	handler = Logging(handler)
-	handler = RequestID(handler)
-
-	return handler
-}
-
-// authMiddleware wraps the Auth middleware but skips public paths.
-// Only /health, /auth/login, and /auth/register are public.
-// /auth/me and /auth/api-keys require authentication.
-func authMiddleware(authService *service.AuthService) func(http.Handler) http.Handler {
-	inner := Auth(authService)
-	publicPaths := map[string]bool{
-		"/health":        true,
-		"/auth/login":    true,
-		"/auth/register": true,
-	}
-	return func(next http.Handler) http.Handler {
-		protected := inner(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if publicPaths[r.URL.Path] {
-				next.ServeHTTP(w, r)
-				return
-			}
-			protected.ServeHTTP(w, r)
-		})
-	}
-}
+// NewRouter and the legacy *http.ServeMux stack were removed in Task 11. Routing
+// now lives in RegisterRoutes (routes.go), which registers each handler directly
+// on PocketBase's router with per-route auth. The per-handler RegisterRoutes(mux)
+// methods are retained solely for the mux-based test fixtures in internal/api.
 
 type healthResponse struct {
 	Status string `json:"status"`
 	Time   string `json:"time"`
 }
 
+// handleHealth serves GET /health with a 200 and a small JSON body. It is a
+// public endpoint (no auth middleware).
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := healthResponse{
 		Status: "ok",

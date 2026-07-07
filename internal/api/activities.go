@@ -24,6 +24,7 @@ func (h *ActivityHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ActivityHandler) Add(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	taskID := r.PathValue("id")
 	var body struct {
 		ActorType string `json:"actor_type"`
@@ -38,7 +39,7 @@ func (h *ActivityHandler) Add(w http.ResponseWriter, r *http.Request) {
 	actorType := domain.ActorType(body.ActorType)
 	activityType := domain.ActivityType(body.Type)
 
-	activity, err := h.activities.Add(r.Context(), taskID, actorFromRequest(r), actorType, activityType, body.Content)
+	activity, err := h.activities.Add(r.Context(), userID, taskID, actorFromRequest(r), actorType, activityType, body.Content)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -48,9 +49,10 @@ func (h *ActivityHandler) Add(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ActivityHandler) ListByTask(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	taskID := r.PathValue("id")
 
-	activities, err := h.activities.ListByTask(r.Context(), taskID)
+	activities, err := h.activities.ListByTask(r.Context(), userID, taskID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { getSettings, updateSettings, testConnection } from '../hooks/useTauri';
+import { useStore } from '@nanostores/react';
+import { getSettings, updateSettings, testConnection, logout } from '../hooks/useTauri';
 import type { Settings } from '../types';
 import InitialSyncDialog from '../components/InitialSyncDialog';
-import { $showShortcuts } from '../store';
+import LoginPanel from '../components/LoginPanel';
+import { $showShortcuts, loadAll, $authState, UNAUTHENTICATED_STATE } from '../store';
 import { Button, Field } from '../ui';
 
 export default function SettingsView() {
+  const authState = useStore($authState);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [serverUrl, setServerUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -15,6 +18,7 @@ export default function SettingsView() {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [dirty, setDirty] = useState(false);
   const [showInitialSync, setShowInitialSync] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -24,6 +28,14 @@ export default function SettingsView() {
       setSyncEnabled(s.syncEnabled);
     });
   }, []);
+
+  // Keep the shared Server URL field in sync with whatever login just wrote
+  // to the settings table (login() persists server_url itself).
+  useEffect(() => {
+    if (authState.serverUrl) {
+      setServerUrl(authState.serverUrl);
+    }
+  }, [authState.serverUrl]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -43,6 +55,19 @@ export default function SettingsView() {
     }
   };
 
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+      $authState.set({ ...UNAUTHENTICATED_STATE });
+      // logout() wipes all local domain data (Task 19) — reload so the UI
+      // reflects the now-empty local store rather than showing stale rows.
+      await loadAll();
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   if (!settings) {
     return <div className="settings-loading">Loading settings...</div>;
   }
@@ -50,6 +75,43 @@ export default function SettingsView() {
   return (
     <div className="settings-view">
       <h2 className="settings-title">Settings</h2>
+
+      <div className="settings-section">
+        <div className="detail-field-label settings-section-label">Account</div>
+
+        {authState.authenticated ? (
+          <div className="settings-auth-profile">
+            <div className="settings-auth-identity">
+              <div className="settings-auth-name">{authState.userName || authState.userEmail}</div>
+              {authState.userName && (
+                <div className="settings-about-subtle">{authState.userEmail}</div>
+              )}
+              <div className="settings-about-subtle">{authState.serverUrl}</div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? 'Signing out...' : 'Sign Out'}
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="settings-auth-hint settings-about-subtle">
+              Sign in to sync your tasks with your atask account — the recommended
+              way to connect. The API key below is a fallback for local or agent
+              integrations only.
+            </div>
+            <div className="settings-field-group">
+              <Field
+                label="Server URL"
+                type="url"
+                value={serverUrl}
+                onChange={e => { setServerUrl(e.target.value); setDirty(true); }}
+                placeholder="https://api.atask.app"
+              />
+            </div>
+            <LoginPanel serverUrl={serverUrl} />
+          </>
+        )}
+      </div>
 
       <div className="settings-section">
         <div className="detail-field-label settings-section-label">Sync</div>
@@ -67,18 +129,6 @@ export default function SettingsView() {
         </label>
 
         <div className="settings-field-group">
-          <Field
-            label="Server URL"
-            type="url"
-            value={serverUrl}
-            onChange={e => { setServerUrl(e.target.value); setDirty(true); }}
-            placeholder="https://api.atask.app"
-            disabled={!syncEnabled}
-            className={!syncEnabled ? 'settings-field-disabled' : undefined}
-          />
-        </div>
-
-        <div className="settings-field-group">
           <label className="ui-field-block">
             <span className="ui-field-label">API Key</span>
             <div className="settings-inline-field">
@@ -86,13 +136,13 @@ export default function SettingsView() {
                 className={[
                   'ui-field',
                   'settings-api-key',
-                  !syncEnabled ? 'settings-field-disabled' : '',
+                  (!syncEnabled || authState.authenticated) ? 'settings-field-disabled' : '',
                 ].filter(Boolean).join(' ')}
               type={showApiKey ? 'text' : 'password'}
               value={apiKey}
               onChange={e => { setApiKey(e.target.value); setDirty(true); }}
               placeholder="ak_..."
-              disabled={!syncEnabled}
+              disabled={!syncEnabled || authState.authenticated}
               />
               <Button
                 variant="secondary"
@@ -102,6 +152,11 @@ export default function SettingsView() {
                 {showApiKey ? 'Hide' : 'Show'}
               </Button>
             </div>
+            {authState.authenticated && (
+              <span className="ui-field-meta">
+                Ignored while signed in — the account session takes precedence.
+              </span>
+            )}
           </label>
         </div>
 

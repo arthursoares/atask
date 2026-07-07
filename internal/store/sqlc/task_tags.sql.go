@@ -10,42 +10,49 @@ import (
 )
 
 const addProjectTag = `-- name: AddProjectTag :exec
-INSERT OR IGNORE INTO project_tags (project_id, tag_id) VALUES (?, ?)
+INSERT OR IGNORE INTO project_tags (project_id, tag_id, user_id) VALUES (?, ?, ?)
 `
 
 type AddProjectTagParams struct {
 	ProjectID string `json:"project_id"`
 	TagID     string `json:"tag_id"`
+	UserID    string `json:"user_id"`
 }
 
 func (q *Queries) AddProjectTag(ctx context.Context, arg AddProjectTagParams) error {
-	_, err := q.db.ExecContext(ctx, addProjectTag, arg.ProjectID, arg.TagID)
+	_, err := q.db.ExecContext(ctx, addProjectTag, arg.ProjectID, arg.TagID, arg.UserID)
 	return err
 }
 
 const addTaskTag = `-- name: AddTaskTag :exec
-INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)
+INSERT OR IGNORE INTO task_tags (task_id, tag_id, user_id) VALUES (?, ?, ?)
 `
 
 type AddTaskTagParams struct {
 	TaskID string `json:"task_id"`
 	TagID  string `json:"tag_id"`
+	UserID string `json:"user_id"`
 }
 
 func (q *Queries) AddTaskTag(ctx context.Context, arg AddTaskTagParams) error {
-	_, err := q.db.ExecContext(ctx, addTaskTag, arg.TaskID, arg.TagID)
+	_, err := q.db.ExecContext(ctx, addTaskTag, arg.TaskID, arg.TagID, arg.UserID)
 	return err
 }
 
 const listProjectTags = `-- name: ListProjectTags :many
-SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at FROM tags t
+SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at, t.user_id FROM tags t
 INNER JOIN project_tags pt ON pt.tag_id = t.id
-WHERE pt.project_id = ? AND t.deleted = 0
+WHERE pt.project_id = ? AND pt.user_id = ? AND t.deleted = 0
 ORDER BY t."index"
 `
 
-func (q *Queries) ListProjectTags(ctx context.Context, projectID string) ([]Tag, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectTags, projectID)
+type ListProjectTagsParams struct {
+	ProjectID string `json:"project_id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) ListProjectTags(ctx context.Context, arg ListProjectTagsParams) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectTags, arg.ProjectID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +70,7 @@ func (q *Queries) ListProjectTags(ctx context.Context, projectID string) ([]Tag,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -78,14 +86,19 @@ func (q *Queries) ListProjectTags(ctx context.Context, projectID string) ([]Tag,
 }
 
 const listTaskTags = `-- name: ListTaskTags :many
-SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at FROM tags t
+SELECT t.id, t.title, t.parent_id, t.shortcut, t."index", t.deleted, t.deleted_at, t.created_at, t.updated_at, t.user_id FROM tags t
 INNER JOIN task_tags tt ON tt.tag_id = t.id
-WHERE tt.task_id = ? AND t.deleted = 0
+WHERE tt.task_id = ? AND tt.user_id = ? AND t.deleted = 0
 ORDER BY t."index"
 `
 
-func (q *Queries) ListTaskTags(ctx context.Context, taskID string) ([]Tag, error) {
-	rows, err := q.db.QueryContext(ctx, listTaskTags, taskID)
+type ListTaskTagsParams struct {
+	TaskID string `json:"task_id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ListTaskTags(ctx context.Context, arg ListTaskTagsParams) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskTags, arg.TaskID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +116,7 @@ func (q *Queries) ListTaskTags(ctx context.Context, taskID string) ([]Tag, error
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -118,47 +132,59 @@ func (q *Queries) ListTaskTags(ctx context.Context, taskID string) ([]Tag, error
 }
 
 const removeAllProjectTagReferences = `-- name: RemoveAllProjectTagReferences :exec
-DELETE FROM project_tags WHERE tag_id = ?
+DELETE FROM project_tags WHERE tag_id = ? AND user_id = ?
 `
 
-func (q *Queries) RemoveAllProjectTagReferences(ctx context.Context, tagID string) error {
-	_, err := q.db.ExecContext(ctx, removeAllProjectTagReferences, tagID)
+type RemoveAllProjectTagReferencesParams struct {
+	TagID  string `json:"tag_id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) RemoveAllProjectTagReferences(ctx context.Context, arg RemoveAllProjectTagReferencesParams) error {
+	_, err := q.db.ExecContext(ctx, removeAllProjectTagReferences, arg.TagID, arg.UserID)
 	return err
 }
 
 const removeAllTagReferences = `-- name: RemoveAllTagReferences :exec
-DELETE FROM task_tags WHERE tag_id = ?
+DELETE FROM task_tags WHERE tag_id = ? AND user_id = ?
 `
 
-func (q *Queries) RemoveAllTagReferences(ctx context.Context, tagID string) error {
-	_, err := q.db.ExecContext(ctx, removeAllTagReferences, tagID)
+type RemoveAllTagReferencesParams struct {
+	TagID  string `json:"tag_id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) RemoveAllTagReferences(ctx context.Context, arg RemoveAllTagReferencesParams) error {
+	_, err := q.db.ExecContext(ctx, removeAllTagReferences, arg.TagID, arg.UserID)
 	return err
 }
 
 const removeProjectTag = `-- name: RemoveProjectTag :exec
-DELETE FROM project_tags WHERE project_id = ? AND tag_id = ?
+DELETE FROM project_tags WHERE project_id = ? AND tag_id = ? AND user_id = ?
 `
 
 type RemoveProjectTagParams struct {
 	ProjectID string `json:"project_id"`
 	TagID     string `json:"tag_id"`
+	UserID    string `json:"user_id"`
 }
 
 func (q *Queries) RemoveProjectTag(ctx context.Context, arg RemoveProjectTagParams) error {
-	_, err := q.db.ExecContext(ctx, removeProjectTag, arg.ProjectID, arg.TagID)
+	_, err := q.db.ExecContext(ctx, removeProjectTag, arg.ProjectID, arg.TagID, arg.UserID)
 	return err
 }
 
 const removeTaskTag = `-- name: RemoveTaskTag :exec
-DELETE FROM task_tags WHERE task_id = ? AND tag_id = ?
+DELETE FROM task_tags WHERE task_id = ? AND tag_id = ? AND user_id = ?
 `
 
 type RemoveTaskTagParams struct {
 	TaskID string `json:"task_id"`
 	TagID  string `json:"tag_id"`
+	UserID string `json:"user_id"`
 }
 
 func (q *Queries) RemoveTaskTag(ctx context.Context, arg RemoveTaskTagParams) error {
-	_, err := q.db.ExecContext(ctx, removeTaskTag, arg.TaskID, arg.TagID)
+	_, err := q.db.ExecContext(ctx, removeTaskTag, arg.TaskID, arg.TagID, arg.UserID)
 	return err
 }

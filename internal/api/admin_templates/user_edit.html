@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+    {{template "nav" .}}
+    <h1>Edit user</h1>
+
+    <div class="panel">
+        <h2>Overview</h2>
+        <p class="muted">Joined {{.User.CreatedAt.Format "2006-01-02"}}</p>
+        <div class="tiles">
+            <div class="tile"><p class="stat">{{.Counts.Tasks}}</p><p class="muted">tasks</p></div>
+            <div class="tile"><p class="stat">{{.Counts.Projects}}</p><p class="muted">projects</p></div>
+            <div class="tile"><p class="stat">{{.Counts.Areas}}</p><p class="muted">areas</p></div>
+            <div class="tile"><p class="stat">{{.Counts.Tags}}</p><p class="muted">tags</p></div>
+        </div>
+        <p class="muted">
+            {{.Activity.EventCount}} total events &middot;
+            last active {{if .Activity.LastActiveAt}}{{.Activity.LastActiveAt.Format "2006-01-02 15:04"}}{{else}}never{{end}}
+        </p>
+        {{if .RecentEvents}}
+        <table>
+            <thead><tr><th>Action</th><th>Entity</th><th>Time</th></tr></thead>
+            <tbody>
+                {{range .RecentEvents}}
+                <tr>
+                    <td>{{.Type}}</td>
+                    <td>{{.EntityType}}</td>
+                    <td>{{if .Timestamp.IsZero}}&mdash;{{else}}{{.Timestamp.Format "2006-01-02 15:04:05"}}{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="muted">No recorded activity.</p>
+        {{end}}
+    </div>
+
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <form method="post" action="/admin/users/{{.User.ID}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label>Email</label>
+        <input type="email" value="{{.User.Email}}" disabled>
+        <label for="name">Name</label>
+        <input id="name" type="text" name="name" value="{{.User.Name}}">
+        <label for="role">Role</label>
+        <select id="role" name="role">
+            <option value="user" {{if eq .User.Role "user"}}selected{{end}}>user</option>
+            <option value="admin" {{if eq .User.Role "admin"}}selected{{end}}>admin</option>
+        </select>
+        <label><input type="checkbox" name="disabled" {{if .User.Disabled}}checked{{end}}>Disabled</label>
+        <p>
+            <button class="btn" type="submit">Save</button>
+            <a class="btn btn-secondary" href="/admin/users">Cancel</a>
+        </p>
+    </form>
+</body>
+</html>

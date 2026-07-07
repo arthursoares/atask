@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/atask/atask/internal/api"
+	"github.com/atask/atask/internal/config"
 	"github.com/atask/atask/internal/event"
 	"github.com/atask/atask/internal/service"
 	"github.com/atask/atask/internal/store"
 )
 
-func setupTaskAndAuthTestServer(t *testing.T) *http.ServeMux {
+func setupTaskAndAuthTestServer(t *testing.T) http.Handler {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -35,12 +36,15 @@ func setupTaskAndAuthTestServer(t *testing.T) *http.ServeMux {
 	authSvc := service.NewAuthService(db, "test-secret")
 
 	taskHandler := api.NewTaskHandler(taskSvc, projectSvc, sectionSvc, areaSvc)
-	authHandler := api.NewAuthHandler(authSvc)
+	// nil AuthProvider is safe here: both tests in this file exercise
+	// DecodeJSON's body-decode error path, which returns before the handler
+	// ever calls into the AuthProvider.
+	authHandler := api.NewAuthHandler(nil, authSvc, &config.Config{})
 
 	mux := http.NewServeMux()
 	taskHandler.RegisterRoutes(mux)
 	authHandler.RegisterRoutes(mux)
-	return mux
+	return api.WithTestUser(testUserID)(mux)
 }
 
 func TestTaskHandler_Create_UnknownField(t *testing.T) {

@@ -65,7 +65,7 @@ func tagFromRow(row sqlc.Tag) *domain.Tag {
 func (s *TagService) publishTagEvent(
 	ctx context.Context,
 	eventType domain.EventType,
-	tagID, actorID string,
+	tagID, actorID, userID string,
 	now time.Time,
 	payload map[string]any,
 	deltaAction domain.DeltaAction,
@@ -79,13 +79,14 @@ func (s *TagService) publishTagEvent(
 		Field:      field,
 		NewValue:   newValue,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "tag", tagID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "tag", tagID, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -96,6 +97,7 @@ func (s *TagService) publishTagEvent(
 		EntityType: "tag",
 		EntityID:   tagID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
@@ -105,7 +107,7 @@ func (s *TagService) publishTagEvent(
 
 // Create validates, persists, emits events, then publishes to the bus.
 // An optional client-provided ID can be passed as opts[0]; if empty or omitted, a new UUID is generated.
-func (s *TagService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Tag, error) {
+func (s *TagService) Create(ctx context.Context, userID, title, actorID string, opts ...string) (*domain.Tag, error) {
 	if title == "" {
 		return nil, errors.New("tag title must not be empty")
 	}
@@ -122,6 +124,7 @@ func (s *TagService) Create(ctx context.Context, title, actorID string, opts ...
 		Index:     0,
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -130,7 +133,7 @@ func (s *TagService) Create(ctx context.Context, title, actorID string, opts ...
 	tag := tagFromRow(row)
 
 	payload := map[string]any{"title": title}
-	if err := s.publishTagEvent(ctx, domain.TagCreated, tag.ID, actorID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
+	if err := s.publishTagEvent(ctx, domain.TagCreated, tag.ID, actorID, userID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -138,8 +141,8 @@ func (s *TagService) Create(ctx context.Context, title, actorID string, opts ...
 }
 
 // Get fetches a tag by ID.
-func (s *TagService) Get(ctx context.Context, id string) (*domain.Tag, error) {
-	row, err := s.queries.GetTag(ctx, id)
+func (s *TagService) Get(ctx context.Context, userID, id string) (*domain.Tag, error) {
+	row, err := s.queries.GetTag(ctx, sqlc.GetTagParams{ID: id, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
@@ -147,8 +150,8 @@ func (s *TagService) Get(ctx context.Context, id string) (*domain.Tag, error) {
 }
 
 // List returns all non-deleted tags.
-func (s *TagService) List(ctx context.Context) ([]*domain.Tag, error) {
-	rows, err := s.queries.ListTags(ctx)
+func (s *TagService) List(ctx context.Context, userID string) ([]*domain.Tag, error) {
+	rows, err := s.queries.ListTags(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +163,7 @@ func (s *TagService) List(ctx context.Context) ([]*domain.Tag, error) {
 }
 
 // Rename validates and updates the tag title, then emits tag.renamed.
-func (s *TagService) Rename(ctx context.Context, id, title, actorID string) error {
+func (s *TagService) Rename(ctx context.Context, userID, id, title, actorID string) error {
 	if title == "" {
 		return errors.New("tag title must not be empty")
 	}
@@ -170,6 +173,7 @@ func (s *TagService) Rename(ctx context.Context, id, title, actorID string) erro
 		Title:     sql.NullString{String: title, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -177,11 +181,11 @@ func (s *TagService) Rename(ctx context.Context, id, title, actorID string) erro
 
 	payload := map[string]any{"title": title}
 	titleJSON, _ := json.Marshal(title)
-	return s.publishTagEvent(ctx, domain.TagRenamed, id, actorID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
+	return s.publishTagEvent(ctx, domain.TagRenamed, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
 }
 
 // UpdateShortcut sets or clears the tag shortcut, then emits tag.shortcut_changed.
-func (s *TagService) UpdateShortcut(ctx context.Context, id string, shortcut *string, actorID string) error {
+func (s *TagService) UpdateShortcut(ctx context.Context, userID, id string, shortcut *string, actorID string) error {
 	now := timeNow()
 
 	var shortcutNull sql.NullString
@@ -193,6 +197,7 @@ func (s *TagService) UpdateShortcut(ctx context.Context, id string, shortcut *st
 		Shortcut:  shortcutNull,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -202,20 +207,20 @@ func (s *TagService) UpdateShortcut(ctx context.Context, id string, shortcut *st
 	if shortcut != nil {
 		payload["shortcut"] = *shortcut
 	}
-	return s.publishTagEvent(ctx, domain.TagShortcutChanged, id, actorID, now, payload, domain.DeltaModified, strPtr("shortcut"), nil)
+	return s.publishTagEvent(ctx, domain.TagShortcutChanged, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("shortcut"), nil)
 }
 
 // Delete removes all tag references, soft-deletes the tag, and emits tag.deleted.
-func (s *TagService) Delete(ctx context.Context, id, actorID string) error {
+func (s *TagService) Delete(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 
 	// Remove all task tag references
-	if err := s.queries.RemoveAllTagReferences(ctx, id); err != nil {
+	if err := s.queries.RemoveAllTagReferences(ctx, sqlc.RemoveAllTagReferencesParams{TagID: id, UserID: userID}); err != nil {
 		return err
 	}
 
 	// Remove all project tag references
-	if err := s.queries.RemoveAllProjectTagReferences(ctx, id); err != nil {
+	if err := s.queries.RemoveAllProjectTagReferences(ctx, sqlc.RemoveAllProjectTagReferencesParams{TagID: id, UserID: userID}); err != nil {
 		return err
 	}
 
@@ -224,10 +229,11 @@ func (s *TagService) Delete(ctx context.Context, id, actorID string) error {
 		DeletedAt: sql.NullTime{Time: now, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishTagEvent(ctx, domain.TagDeleted, id, actorID, now, payload, domain.DeltaDeleted, nil, nil)
+	return s.publishTagEvent(ctx, domain.TagDeleted, id, actorID, userID, now, payload, domain.DeltaDeleted, nil, nil)
 }

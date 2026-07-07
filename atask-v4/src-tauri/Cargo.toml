@@ -25,3 +25,15 @@ reqwest = { version = "0.12", features = ["json", "blocking"] }
 reqwest-eventsource = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 futures-util = "0.3"
+
+# OS keychain for auth token storage (Task 19). Native backend per platform so
+# the token lives in Keychain (macOS) / Credential Manager (Windows) / Secret
+# Service (Linux) — never in SQLite.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }

@@ -11,8 +11,8 @@ import (
 )
 
 const addTaskLink = `-- name: AddTaskLink :exec
-INSERT OR IGNORE INTO task_links (task_id, related_task_id, relationship_type, created_at)
-VALUES (?, ?, ?, ?)
+INSERT OR IGNORE INTO task_links (task_id, related_task_id, relationship_type, created_at, user_id)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type AddTaskLinkParams struct {
@@ -20,6 +20,7 @@ type AddTaskLinkParams struct {
 	RelatedTaskID    string       `json:"related_task_id"`
 	RelationshipType string       `json:"relationship_type"`
 	CreatedAt        sql.NullTime `json:"created_at"`
+	UserID           string       `json:"user_id"`
 }
 
 func (q *Queries) AddTaskLink(ctx context.Context, arg AddTaskLinkParams) error {
@@ -28,16 +29,22 @@ func (q *Queries) AddTaskLink(ctx context.Context, arg AddTaskLinkParams) error 
 		arg.RelatedTaskID,
 		arg.RelationshipType,
 		arg.CreatedAt,
+		arg.UserID,
 	)
 	return err
 }
 
 const listTaskLinks = `-- name: ListTaskLinks :many
-SELECT task_id, related_task_id, relationship_type, created_at FROM task_links WHERE task_id = ?
+SELECT task_id, related_task_id, relationship_type, created_at, user_id FROM task_links WHERE task_id = ? AND user_id = ?
 `
 
-func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]TaskLink, error) {
-	rows, err := q.db.QueryContext(ctx, listTaskLinks, taskID)
+type ListTaskLinksParams struct {
+	TaskID string `json:"task_id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ListTaskLinks(ctx context.Context, arg ListTaskLinksParams) ([]TaskLink, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskLinks, arg.TaskID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +57,7 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]TaskLink,
 			&i.RelatedTaskID,
 			&i.RelationshipType,
 			&i.CreatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -65,15 +73,16 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]TaskLink,
 }
 
 const removeTaskLink = `-- name: RemoveTaskLink :exec
-DELETE FROM task_links WHERE task_id = ? AND related_task_id = ?
+DELETE FROM task_links WHERE task_id = ? AND related_task_id = ? AND user_id = ?
 `
 
 type RemoveTaskLinkParams struct {
 	TaskID        string `json:"task_id"`
 	RelatedTaskID string `json:"related_task_id"`
+	UserID        string `json:"user_id"`
 }
 
 func (q *Queries) RemoveTaskLink(ctx context.Context, arg RemoveTaskLinkParams) error {
-	_, err := q.db.ExecContext(ctx, removeTaskLink, arg.TaskID, arg.RelatedTaskID)
+	_, err := q.db.ExecContext(ctx, removeTaskLink, arg.TaskID, arg.RelatedTaskID, arg.UserID)
 	return err
 }

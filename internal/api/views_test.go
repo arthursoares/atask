@@ -14,7 +14,7 @@ import (
 
 // setupViewTestServer creates an in-memory DB with migrations, wires up the ViewHandler
 // and TaskService, and returns the mux, TaskService, and DB for use in tests.
-func setupViewTestServer(t *testing.T) (*http.ServeMux, *service.TaskService, *store.DB) {
+func setupViewTestServer(t *testing.T) (http.Handler, *service.TaskService, *store.DB) {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -35,7 +35,7 @@ func setupViewTestServer(t *testing.T) (*http.ServeMux, *service.TaskService, *s
 	mux := http.NewServeMux()
 	viewHandler.RegisterRoutes(mux)
 
-	return mux, taskSvc, db
+	return api.WithTestUser(testUserID)(mux), taskSvc, db
 }
 
 func TestViewHandler_Inbox(t *testing.T) {
@@ -43,21 +43,21 @@ func TestViewHandler_Inbox(t *testing.T) {
 	ctx := httptest.NewRequest(http.MethodGet, "/views/inbox", nil).Context()
 
 	// Create 2 inbox tasks (inbox is default)
-	_, err := taskSvc.Create(ctx, "Inbox Task 1", "test")
+	_, err := taskSvc.Create(ctx, testUserID, "Inbox Task 1", "test")
 	if err != nil {
 		t.Fatalf("create task 1: %v", err)
 	}
-	_, err = taskSvc.Create(ctx, "Inbox Task 2", "test")
+	_, err = taskSvc.Create(ctx, testUserID, "Inbox Task 2", "test")
 	if err != nil {
 		t.Fatalf("create task 2: %v", err)
 	}
 
 	// Create 1 task and move it to anytime (schedule=1)
-	task3, err := taskSvc.Create(ctx, "Anytime Task", "test")
+	task3, err := taskSvc.Create(ctx, testUserID, "Anytime Task", "test")
 	if err != nil {
 		t.Fatalf("create task 3: %v", err)
 	}
-	if err := taskSvc.UpdateSchedule(ctx, task3.ID, 1 /* ScheduleAnytime */, "test"); err != nil {
+	if err := taskSvc.UpdateSchedule(ctx, testUserID, task3.ID, 1 /* ScheduleAnytime */, "test"); err != nil {
 		t.Fatalf("update schedule: %v", err)
 	}
 
@@ -84,11 +84,11 @@ func TestViewHandler_Today(t *testing.T) {
 	ctx := httptest.NewRequest(http.MethodGet, "/views/today", nil).Context()
 
 	// Create a task and set schedule to anytime (schedule=1, which is "today" view)
-	task, err := taskSvc.Create(ctx, "Today Task", "test")
+	task, err := taskSvc.Create(ctx, testUserID, "Today Task", "test")
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
-	if err := taskSvc.UpdateSchedule(ctx, task.ID, 1 /* ScheduleAnytime */, "test"); err != nil {
+	if err := taskSvc.UpdateSchedule(ctx, testUserID, task.ID, 1 /* ScheduleAnytime */, "test"); err != nil {
 		t.Fatalf("update schedule to anytime: %v", err)
 	}
 

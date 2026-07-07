@@ -3046,6 +3046,48 @@ button.sync-status {
     margin-top: var(--sp-3);
 }
 
+.settings-auth-hint {
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    margin-bottom: var(--sp-4);
+}
+
+.settings-auth-profile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+}
+
+.settings-auth-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-auth-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-primary);
+}
+
+.login-panel {
+    display: flex;
+    flex-direction: column;
+    margin-top: var(--sp-2);
+}
+
+.login-panel-error {
+    font-size: var(--text-xs);
+    color: var(--deadline-red);
+    margin-bottom: var(--sp-3);
+}
+
+.login-panel-actions {
+    display: flex;
+    margin-top: var(--sp-1);
+}
+
 
 .activity-mutation {
     padding: 2px 0;

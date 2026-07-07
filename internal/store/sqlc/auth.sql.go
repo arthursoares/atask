@@ -8,21 +8,22 @@ package sqlc
 import (
 	"context"
 	"database/sql"
-	"time"
 )
 
 const createAPIKey = `-- name: CreateAPIKey :one
-INSERT INTO api_keys (id, user_id, name, key_hash, permissions, created_at, last_used_at)
-VALUES (?, ?, ?, ?, ?, ?, NULL)
-RETURNING id, user_id, name, key_hash, permissions, created_at, last_used_at
+INSERT INTO api_keys (id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+RETURNING id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at
 `
 
 type CreateAPIKeyParams struct {
 	ID          string         `json:"id"`
-	UserID      sql.NullString `json:"user_id"`
+	UserID      string         `json:"user_id"`
 	Name        sql.NullString `json:"name"`
 	KeyHash     sql.NullString `json:"key_hash"`
 	Permissions string         `json:"permissions"`
+	Scope       string         `json:"scope"`
+	ExpiresAt   sql.NullTime   `json:"expires_at"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
 }
 
@@ -33,6 +34,8 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.Name,
 		arg.KeyHash,
 		arg.Permissions,
+		arg.Scope,
+		arg.ExpiresAt,
 		arg.CreatedAt,
 	)
 	var i ApiKey
@@ -42,44 +45,10 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.Name,
 		&i.KeyHash,
 		&i.Permissions,
+		&i.Scope,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.LastUsedAt,
-	)
-	return i, err
-}
-
-const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, email, password_hash, name, created_at, updated_at
-`
-
-type CreateUserParams struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	Name         string    `json:"name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
-		arg.ID,
-		arg.Email,
-		arg.PasswordHash,
-		arg.Name,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -94,7 +63,8 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, id string) error {
 }
 
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
-SELECT id, user_id, name, key_hash, permissions, created_at, last_used_at FROM api_keys WHERE key_hash = ?
+SELECT id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at FROM api_keys
+WHERE key_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
 `
 
 func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash sql.NullString) (ApiKey, error) {
@@ -106,53 +76,19 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash sql.NullString) (
 		&i.Name,
 		&i.KeyHash,
 		&i.Permissions,
+		&i.Scope,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.LastUsedAt,
 	)
 	return i, err
 }
 
-const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, name, created_at, updated_at FROM users WHERE email = ?
-`
-
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, name, created_at, updated_at FROM users WHERE id = ?
-`
-
-func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByID, id)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const listAPIKeysByUser = `-- name: ListAPIKeysByUser :many
-SELECT id, user_id, name, key_hash, permissions, created_at, last_used_at FROM api_keys WHERE user_id = ?
+SELECT id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at FROM api_keys WHERE user_id = ?
 `
 
-func (q *Queries) ListAPIKeysByUser(ctx context.Context, userID sql.NullString) ([]ApiKey, error) {
+func (q *Queries) ListAPIKeysByUser(ctx context.Context, userID string) ([]ApiKey, error) {
 	rows, err := q.db.QueryContext(ctx, listAPIKeysByUser, userID)
 	if err != nil {
 		return nil, err
@@ -167,6 +103,8 @@ func (q *Queries) ListAPIKeysByUser(ctx context.Context, userID sql.NullString) 
 			&i.Name,
 			&i.KeyHash,
 			&i.Permissions,
+			&i.Scope,
+			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.LastUsedAt,
 		); err != nil {
@@ -199,7 +137,7 @@ func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLast
 
 const updateAPIKeyName = `-- name: UpdateAPIKeyName :one
 UPDATE api_keys SET name = ? WHERE id = ?
-RETURNING id, user_id, name, key_hash, permissions, created_at, last_used_at
+RETURNING id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at
 `
 
 type UpdateAPIKeyNameParams struct {
@@ -216,42 +154,10 @@ func (q *Queries) UpdateAPIKeyName(ctx context.Context, arg UpdateAPIKeyNamePara
 		&i.Name,
 		&i.KeyHash,
 		&i.Permissions,
+		&i.Scope,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.LastUsedAt,
-	)
-	return i, err
-}
-
-const updateUser = `-- name: UpdateUser :one
-UPDATE users SET name = ?, email = ?, password_hash = ?, updated_at = ?
-WHERE id = ?
-RETURNING id, email, password_hash, name, created_at, updated_at
-`
-
-type UpdateUserParams struct {
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	ID           string    `json:"id"`
-}
-
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUser,
-		arg.Name,
-		arg.Email,
-		arg.PasswordHash,
-		arg.UpdatedAt,
-		arg.ID,
-	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }

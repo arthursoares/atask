@@ -32,6 +32,7 @@ func (h *AreaHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	var body struct {
 		Title string `json:"title"`
 		ID    string `json:"id,omitempty"`
@@ -41,7 +42,7 @@ func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	area, err := h.areas.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
+	area, err := h.areas.Create(r.Context(), userID, body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -51,13 +52,14 @@ func (h *AreaHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	var areas []*domain.Area
 	var err error
 
 	if r.URL.Query().Get("include_archived") == "true" {
-		areas, err = h.areas.ListAll(r.Context())
+		areas, err = h.areas.ListAll(r.Context(), userID)
 	} else {
-		areas, err = h.areas.List(r.Context())
+		areas, err = h.areas.List(r.Context(), userID)
 	}
 
 	if err != nil {
@@ -68,8 +70,9 @@ func (h *AreaHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
-	area, err := h.areas.Get(r.Context(), id)
+	area, err := h.areas.Get(r.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "area not found")
@@ -82,6 +85,7 @@ func (h *AreaHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Rename(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
@@ -91,7 +95,7 @@ func (h *AreaHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.areas.Rename(r.Context(), id, body.Title, actorFromRequest(r)); err != nil {
+	if err := h.areas.Rename(r.Context(), userID, id, body.Title, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "area not found")
 			return
@@ -104,10 +108,11 @@ func (h *AreaHandler) Rename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	cascade := r.URL.Query().Get("cascade") == "true"
 
-	if err := h.areas.Delete(r.Context(), id, actorFromRequest(r), cascade); err != nil {
+	if err := h.areas.Delete(r.Context(), userID, id, actorFromRequest(r), cascade); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "area not found")
 			return
@@ -120,9 +125,10 @@ func (h *AreaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Archive(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.areas.Archive(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.areas.Archive(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "area not found")
 			return
@@ -135,9 +141,10 @@ func (h *AreaHandler) Archive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Unarchive(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.areas.Unarchive(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.areas.Unarchive(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "area not found")
 			return
@@ -150,6 +157,7 @@ func (h *AreaHandler) Unarchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AreaHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Title *string `json:"title"`
@@ -162,13 +170,13 @@ func (h *AreaHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	actor := actorFromRequest(r)
 
 	if body.Title != nil {
-		if err := h.areas.Rename(r.Context(), id, *body.Title, actor); err != nil {
+		if err := h.areas.Rename(r.Context(), userID, id, *body.Title, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 
-	area, err := h.areas.Get(r.Context(), id)
+	area, err := h.areas.Get(r.Context(), userID, id)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "area not found")
 		return

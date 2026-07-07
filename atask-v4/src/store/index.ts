@@ -8,6 +8,8 @@ export { $checklistItems, useChecklistForTask, $checklistCountsByTaskId } from '
 export { $activities, useActivitiesForTask } from './activities';
 export { $locations } from './locations';
 export { $taskLinks, $linksByTaskId } from './taskLinks';
+export { $authState, $isAuthenticated, $currentUser, UNAUTHENTICATED_STATE } from './auth';
+export type { AuthState } from './auth';
 
 // UI atoms
 export {

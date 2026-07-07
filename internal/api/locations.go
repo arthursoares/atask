@@ -29,6 +29,7 @@ func (h *LocationHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	var body struct {
 		Title string `json:"title"`
 		Name  string `json:"name"`
@@ -43,7 +44,7 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		name = body.Title
 	}
 
-	loc, err := h.locations.Create(r.Context(), name, actorFromRequest(r), body.ID)
+	loc, err := h.locations.Create(r.Context(), userID, name, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -53,7 +54,8 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LocationHandler) List(w http.ResponseWriter, r *http.Request) {
-	locs, err := h.locations.List(r.Context())
+	userID := UserIDFromContext(r.Context())
+	locs, err := h.locations.List(r.Context(), userID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -62,8 +64,9 @@ func (h *LocationHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LocationHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
-	loc, err := h.locations.Get(r.Context(), id)
+	loc, err := h.locations.Get(r.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "location not found")
@@ -76,6 +79,7 @@ func (h *LocationHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LocationHandler) Rename(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
@@ -90,7 +94,7 @@ func (h *LocationHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		name = body.Title
 	}
 
-	if err := h.locations.Rename(r.Context(), id, name, actorFromRequest(r)); err != nil {
+	if err := h.locations.Rename(r.Context(), userID, id, name, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "location not found")
 			return
@@ -103,9 +107,10 @@ func (h *LocationHandler) Rename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LocationHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.locations.Delete(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.locations.Delete(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "location not found")
 			return
