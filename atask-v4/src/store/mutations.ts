@@ -118,15 +118,31 @@ function removeTagFromStores(tagId: string): void {
 
 export async function loadAll(): Promise<void> {
   const data = await tauri.loadAll();
-  $tasks.set(data.tasks);
+
+  // Tasks in an active undo-delete window are hidden from the UI but still
+  // exist in SQLite (the backend delete is deferred until the grace timer
+  // fires). A reload mid-window — a sync `store-changed` reload or the global
+  // error-reload — would otherwise resurrect them. Tombstone them here.
+  const deleting = pendingDeleteTaskIds();
+  if (deleting.size > 0) {
+    $tasks.set(data.tasks.filter((t) => !deleting.has(t.id)));
+    $taskTags.set(data.taskTags.filter((tt) => !deleting.has(tt.taskId)));
+    $taskLinks.set(
+      data.taskLinks.filter((l) => !deleting.has(l.taskId) && !deleting.has(l.linkedTaskId)),
+    );
+    $checklistItems.set(data.checklistItems.filter((c) => !deleting.has(c.taskId)));
+  } else {
+    $tasks.set(data.tasks);
+    $taskTags.set(data.taskTags);
+    $taskLinks.set(data.taskLinks);
+    $checklistItems.set(data.checklistItems);
+  }
+
   $projects.set(data.projects);
   $areas.set(data.areas);
   $sections.set(data.sections);
   $tags.set(data.tags);
-  $taskTags.set(data.taskTags);
-  $taskLinks.set(data.taskLinks);
   $projectTags.set(data.projectTags);
-  $checklistItems.set(data.checklistItems);
   $activities.set(data.activities);
   $locations.set(data.locations);
 }
@@ -221,6 +237,16 @@ interface PendingDelete {
 
 const pendingDeletes = new Map<number, PendingDelete>();
 let nextPendingDeleteKey = 1;
+
+// IDs of tasks with an in-flight undo-delete. `loadAll` uses this to keep them
+// hidden across reloads until the grace timer commits the backend delete.
+function pendingDeleteTaskIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const snapshot of pendingDeletes.values()) {
+    for (const task of snapshot.tasks) ids.add(task.id);
+  }
+  return ids;
+}
 
 export async function deleteTask(id: string): Promise<void> {
   await deleteTasksWithUndo([id]);
