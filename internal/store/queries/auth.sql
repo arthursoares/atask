@@ -1,26 +1,11 @@
--- name: CreateUser :one
-INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING *;
-
--- name: GetUserByEmail :one
-SELECT * FROM users WHERE email = ?;
-
--- name: GetUserByID :one
-SELECT * FROM users WHERE id = ?;
-
--- name: UpdateUser :one
-UPDATE users SET name = ?, email = ?, password_hash = ?, updated_at = ?
-WHERE id = ?
-RETURNING *;
-
 -- name: CreateAPIKey :one
-INSERT INTO api_keys (id, user_id, name, key_hash, permissions, created_at, last_used_at)
-VALUES (?, ?, ?, ?, ?, ?, NULL)
+INSERT INTO api_keys (id, user_id, name, key_hash, permissions, scope, expires_at, created_at, last_used_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
 RETURNING *;
 
 -- name: GetAPIKeyByHash :one
-SELECT * FROM api_keys WHERE key_hash = ?;
+SELECT * FROM api_keys
+WHERE key_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'));
 
 -- name: ListAPIKeysByUser :many
 SELECT * FROM api_keys WHERE user_id = ?;

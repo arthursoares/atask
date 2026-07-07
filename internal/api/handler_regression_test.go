@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,11 +15,12 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
-// setupFullTestServer is like setupPatchTestServer but registers every
-// handler we want to exercise — locations, links, etc. Lives in this file
-// rather than patch_test.go so the existing PATCH-focused setup stays
-// minimal.
-func setupFullTestServer(t *testing.T) *http.ServeMux {
+// buildFullTestMux wires every handler exercised by the "full" test server
+// (locations, links, etc.) but does NOT pin the mux to any user context.
+// Shared by setupFullTestServer (single fixed test user, for the bulk of
+// this file's tests) and setupCrossUserTestServer (Task 7), which needs to
+// drive the same mux as two different authenticated users.
+func buildFullTestMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -48,12 +50,43 @@ func setupFullTestServer(t *testing.T) *http.ServeMux {
 	return mux
 }
 
-func doJSON(t *testing.T, mux *http.ServeMux, method, path, body string) *httptest.ResponseRecorder {
+// setupFullTestServer is like setupPatchTestServer but registers every
+// handler we want to exercise — locations, links, etc. Lives in this file
+// rather than patch_test.go so the existing PATCH-focused setup stays
+// minimal.
+func setupFullTestServer(t *testing.T) http.Handler {
+	t.Helper()
+	return api.WithTestUser(testUserID)(buildFullTestMux(t))
+}
+
+// setupCrossUserTestServer is like setupFullTestServer but does not wrap the
+// mux with a single fixed test user. Task 7's cross-user isolation tests
+// need to authenticate as two different users against the same mux, so the
+// user context is injected per-request by doJSONAsUser instead.
+func setupCrossUserTestServer(t *testing.T) http.Handler {
+	t.Helper()
+	return buildFullTestMux(t)
+}
+
+func doJSON(t *testing.T, mux http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
+	return w
+}
+
+// doJSONAsUser is like doJSON but authenticates the request as userID via
+// api.WithTestUser, wrapped fresh per call. mux must be an *unwrapped* mux
+// (see setupCrossUserTestServer) — wrapping an already-fixed-user handler
+// here would just have the outer fixed user win again.
+func doJSONAsUser(t *testing.T, mux http.Handler, userID, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	api.WithTestUser(userID)(mux).ServeHTTP(w, req)
 	return w
 }
 
@@ -239,5 +272,140 @@ func TestAddTaskLink_RejectsSelfLink(t *testing.T) {
 	w := doJSON(t, mux, http.MethodPost, "/tasks/"+taskID+"/links/"+taskID, "")
 	if w.Code != http.StatusUnprocessableEntity && w.Code != http.StatusBadRequest {
 		t.Errorf("expected 422 (or 400) for self-link, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── Cross-user isolation (Task 7) ──────────────────────────────────────
+
+// TestCrossUserIsolation confirms that per-user scoping (Tasks 5-6) actually
+// isolates data at the HTTP layer: user A's task list must not include user
+// B's tasks, and user B must not be able to GET or PATCH user A's task by ID
+// (both should look like the resource doesn't exist — 404 — rather than
+// leaking a 200/403 that would confirm the ID's existence).
+func TestCrossUserIsolation(t *testing.T) {
+	mux := setupCrossUserTestServer(t)
+
+	// Create tasks as two different users.
+	w := doJSONAsUser(t, mux, "user-a", http.MethodPost, "/tasks", `{"title":"A's task"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create task A: %d: %s", w.Code, w.Body.String())
+	}
+	var respA struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&respA); err != nil {
+		t.Fatalf("decode create task A response: %v", err)
+	}
+
+	w = doJSONAsUser(t, mux, "user-b", http.MethodPost, "/tasks", `{"title":"B's task"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create task B: %d: %s", w.Code, w.Body.String())
+	}
+
+	// User A lists tasks — should only see their own.
+	// GET /tasks returns the task array directly (no envelope) — see
+	// TaskHandler.List's RespondJSON(w, http.StatusOK, tasks) call.
+	w = doJSONAsUser(t, mux, "user-a", http.MethodGet, "/tasks", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("list tasks A: %d: %s", w.Code, w.Body.String())
+	}
+	var listA []struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&listA); err != nil {
+		t.Fatalf("decode list A response: %v", err)
+	}
+	if len(listA) != 1 || listA[0].Title != "A's task" {
+		t.Errorf("user A should see 1 task, got %d: %+v", len(listA), listA)
+	}
+
+	// User B cannot GET user A's task by ID.
+	w = doJSONAsUser(t, mux, "user-b", http.MethodGet, "/tasks/"+respA.Data.ID, "")
+	if w.Code != http.StatusNotFound {
+		t.Errorf("user B accessing A's task: expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// User B cannot PATCH user A's task.
+	w = doJSONAsUser(t, mux, "user-b", http.MethodPatch, "/tasks/"+respA.Data.ID, `{"title":"hacked"}`)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("user B patching A's task: expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Confirm the title truly wasn't touched by the rejected PATCH.
+	w = doJSONAsUser(t, mux, "user-a", http.MethodGet, "/tasks/"+respA.Data.ID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-fetch task A: %d: %s", w.Code, w.Body.String())
+	}
+	var refetched struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&refetched); err != nil {
+		t.Fatalf("decode re-fetch response: %v", err)
+	}
+	if refetched.Title != "A's task" {
+		t.Errorf("task A title should be unchanged, got %q", refetched.Title)
+	}
+}
+
+// TestCrossUserHorizontalEscalation_TaskProject is the horizontal-escalation
+// case: User A tries to attach User B's project to their own task. SQL
+// scoping alone would pass (the task being patched is A's), so this guards
+// the service/handler-level ownership validation (Task 5 Step 10) that
+// checks the referenced project also belongs to the requesting user.
+func TestCrossUserHorizontalEscalation_TaskProject(t *testing.T) {
+	mux := setupCrossUserTestServer(t)
+
+	// User A creates a task.
+	w := doJSONAsUser(t, mux, "user-a", http.MethodPost, "/tasks", `{"title":"A's task"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create task A: %d: %s", w.Code, w.Body.String())
+	}
+	var respA struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&respA); err != nil {
+		t.Fatalf("decode create task A response: %v", err)
+	}
+
+	// User B creates a project.
+	w = doJSONAsUser(t, mux, "user-b", http.MethodPost, "/projects", `{"title":"B's project"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create project B: %d: %s", w.Code, w.Body.String())
+	}
+	var respB struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&respB); err != nil {
+		t.Fatalf("decode create project B response: %v", err)
+	}
+
+	// User A tries to PATCH their own task to point at User B's project.
+	body := fmt.Sprintf(`{"projectId":%q}`, respB.Data.ID)
+	w = doJSONAsUser(t, mux, "user-a", http.MethodPatch, "/tasks/"+respA.Data.ID, body)
+	if w.Code != http.StatusNotFound && w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("horizontal escalation via projectId: expected 404 or 422, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the task was NOT modified.
+	// GET /tasks/{id} returns the task object directly (no envelope) — see
+	// TaskHandler.Get's RespondJSON(w, http.StatusOK, task) call.
+	w = doJSONAsUser(t, mux, "user-a", http.MethodGet, "/tasks/"+respA.Data.ID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-fetch task A: %d: %s", w.Code, w.Body.String())
+	}
+	var task struct {
+		ProjectID *string `json:"projectId"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&task); err != nil {
+		t.Fatalf("decode re-fetch response: %v", err)
+	}
+	if task.ProjectID != nil {
+		t.Errorf("task projectId should remain unset after rejected escalation, got %v", *task.ProjectID)
 	}
 }

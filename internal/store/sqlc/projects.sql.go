@@ -13,29 +13,35 @@ import (
 
 const cascadeDeleteProjectsByArea = `-- name: CascadeDeleteProjectsByArea :exec
 UPDATE projects SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE area_id = ? AND deleted = 0
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 `
 
 type CascadeDeleteProjectsByAreaParams struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	AreaID    sql.NullString `json:"area_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CascadeDeleteProjectsByArea(ctx context.Context, arg CascadeDeleteProjectsByAreaParams) error {
-	_, err := q.db.ExecContext(ctx, cascadeDeleteProjectsByArea, arg.DeletedAt, arg.UpdatedAt, arg.AreaID)
+	_, err := q.db.ExecContext(ctx, cascadeDeleteProjectsByArea,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.AreaID,
+		arg.UserID,
+	)
 	return err
 }
 
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     id, title, notes, status, schedule, start_date, deadline, completed_at,
-    "index", area_id, auto_complete, color, deleted, deleted_at, created_at, updated_at
+    "index", area_id, auto_complete, color, deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, 0, NULL, ?, ?, ?
 )
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type CreateProjectParams struct {
@@ -53,6 +59,7 @@ type CreateProjectParams struct {
 	Color        string         `json:"color"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
+	UserID       string         `json:"user_id"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -71,6 +78,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Color,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Project
 	err := row.Scan(
@@ -90,17 +98,23 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
-WHERE id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
-	row := q.db.QueryRowContext(ctx, getProject, id)
+type GetProjectParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetProject(ctx context.Context, arg GetProjectParams) (Project, error) {
+	row := q.db.QueryRowContext(ctx, getProject, arg.ID, arg.UserID)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -119,18 +133,19 @@ func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
-WHERE deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
+WHERE user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := q.db.QueryContext(ctx, listProjects)
+func (q *Queries) ListProjects(ctx context.Context, userID string) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjects, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +170,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Color,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -170,13 +186,18 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 }
 
 const listProjectsByArea = `-- name: ListProjectsByArea :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color FROM projects
-WHERE area_id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id FROM projects
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListProjectsByArea(ctx context.Context, areaID sql.NullString) ([]Project, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectsByArea, areaID)
+type ListProjectsByAreaParams struct {
+	AreaID sql.NullString `json:"area_id"`
+	UserID string         `json:"user_id"`
+}
+
+func (q *Queries) ListProjectsByArea(ctx context.Context, arg ListProjectsByAreaParams) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectsByArea, arg.AreaID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +222,7 @@ func (q *Queries) ListProjectsByArea(ctx context.Context, areaID sql.NullString)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Color,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -217,49 +239,62 @@ func (q *Queries) ListProjectsByArea(ctx context.Context, areaID sql.NullString)
 
 const orphanProjectsByArea = `-- name: OrphanProjectsByArea :exec
 UPDATE projects SET area_id = NULL, updated_at = ?
-WHERE area_id = ? AND deleted = 0
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 `
 
 type OrphanProjectsByAreaParams struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	AreaID    sql.NullString `json:"area_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) OrphanProjectsByArea(ctx context.Context, arg OrphanProjectsByAreaParams) error {
-	_, err := q.db.ExecContext(ctx, orphanProjectsByArea, arg.UpdatedAt, arg.AreaID)
+	_, err := q.db.ExecContext(ctx, orphanProjectsByArea, arg.UpdatedAt, arg.AreaID, arg.UserID)
 	return err
 }
 
 const softDeleteProject = `-- name: SoftDeleteProject :exec
 UPDATE projects SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteProjectParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteProject, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteProject,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateProjectArea = `-- name: UpdateProjectArea :one
 UPDATE projects SET area_id = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectAreaParams struct {
 	AreaID    sql.NullString `json:"area_id"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectArea, arg.AreaID, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProjectArea,
+		arg.AreaID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -278,24 +313,31 @@ func (q *Queries) UpdateProjectArea(ctx context.Context, arg UpdateProjectAreaPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateProjectColor = `-- name: UpdateProjectColor :one
 UPDATE projects SET color = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectColorParams struct {
 	Color     string    `json:"color"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectColor(ctx context.Context, arg UpdateProjectColorParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectColor, arg.Color, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProjectColor,
+		arg.Color,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -314,24 +356,31 @@ func (q *Queries) UpdateProjectColor(ctx context.Context, arg UpdateProjectColor
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateProjectDeadline = `-- name: UpdateProjectDeadline :one
 UPDATE projects SET deadline = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectDeadlineParams struct {
 	Deadline  sql.NullString `json:"deadline"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDeadlineParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectDeadline, arg.Deadline, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProjectDeadline,
+		arg.Deadline,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -350,24 +399,31 @@ func (q *Queries) UpdateProjectDeadline(ctx context.Context, arg UpdateProjectDe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateProjectNotes = `-- name: UpdateProjectNotes :one
 UPDATE projects SET notes = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectNotesParams struct {
 	Notes     string    `json:"notes"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotesParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectNotes, arg.Notes, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProjectNotes,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -386,14 +442,15 @@ func (q *Queries) UpdateProjectNotes(ctx context.Context, arg UpdateProjectNotes
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateProjectStatus = `-- name: UpdateProjectStatus :one
 UPDATE projects SET status = ?, completed_at = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectStatusParams struct {
@@ -401,6 +458,7 @@ type UpdateProjectStatusParams struct {
 	CompletedAt sql.NullTime `json:"completed_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 	ID          string       `json:"id"`
+	UserID      string       `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStatusParams) (Project, error) {
@@ -409,6 +467,7 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 		arg.CompletedAt,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.UserID,
 	)
 	var i Project
 	err := row.Scan(
@@ -428,24 +487,31 @@ func (q *Queries) UpdateProjectStatus(ctx context.Context, arg UpdateProjectStat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateProjectTitle = `-- name: UpdateProjectTitle :one
 UPDATE projects SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", area_id, auto_complete, deleted, deleted_at, created_at, updated_at, color, user_id
 `
 
 type UpdateProjectTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateProjectTitle(ctx context.Context, arg UpdateProjectTitleParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProjectTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -464,6 +530,7 @@ func (q *Queries) UpdateProjectTitle(ctx context.Context, arg UpdateProjectTitle
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Color,
+		&i.UserID,
 	)
 	return i, err
 }

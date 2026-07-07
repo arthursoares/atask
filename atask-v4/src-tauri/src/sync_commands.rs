@@ -56,7 +56,10 @@ pub fn trigger_sync(
 }
 
 #[tauri::command]
-pub fn test_connection(db: tauri::State<'_, Database>) -> Result<bool, String> {
+pub fn test_connection(
+    db: tauri::State<'_, Database>,
+    tokens: tauri::State<'_, crate::auth::AuthTokens>,
+) -> Result<bool, String> {
     let (server_url, api_key) = {
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
@@ -79,15 +82,24 @@ pub fn test_connection(db: tauri::State<'_, Database>) -> Result<bool, String> {
         (server_url, api_key)
     };
 
-    if server_url.is_empty() || api_key.is_empty() {
-        return Err("server_url and api_key must be set in settings".to_string());
+    if server_url.is_empty() {
+        return Err("server_url must be set in settings".to_string());
     }
 
-    let url = format!("{}/health", server_url);
+    // Bearer (signed-in access token) is preferred; the legacy api_key is the
+    // fallback. Reuse the same resolution the delta-sync engine uses so a
+    // logged-in user with no api_key can still test/sync.
+    let token = tokens.access_token.lock().map_err(|e| e.to_string())?.clone();
+    let auth = crate::sync::auth_header(token.as_deref(), &api_key)
+        .ok_or_else(|| "sign in or set an api key first".to_string())?;
+
+    // Hit an authenticated endpoint so this actually validates the credential
+    // (the public /health route would succeed regardless of auth).
+    let url = format!("{}/tasks", server_url);
     let client = reqwest::blocking::Client::new();
     let resp = client
         .get(&url)
-        .header("Authorization", format!("ApiKey {}", api_key))
+        .header("Authorization", auth)
         .send()
         .map_err(|e| e.to_string())?;
 
@@ -99,17 +111,20 @@ pub struct InitialSyncParams {
     pub mode: String,
 }
 
+// `auth` is the fully-formed Authorization header value ("Bearer …" or
+// "ApiKey …"), resolved once by the caller via `sync::auth_header` so the
+// Bearer-preferred credential selection stays consistent with the delta path.
 fn pull_all_from_server(
     conn: &rusqlite::Connection,
     server_url: &str,
-    api_key: &str,
+    auth: &str,
 ) -> Result<(), String> {
     let client = reqwest::blocking::Client::new();
 
     // Fetch tasks
     let tasks: Vec<serde_json::Value> = client
         .get(format!("{}/tasks?status=all", server_url))
-        .header("Authorization", format!("ApiKey {}", api_key))
+        .header("Authorization", auth)
         .send()
         .map_err(|e| e.to_string())?
         .json()
@@ -122,7 +137,7 @@ fn pull_all_from_server(
     // Fetch projects
     let projects: Vec<serde_json::Value> = client
         .get(format!("{}/projects?status=all", server_url))
-        .header("Authorization", format!("ApiKey {}", api_key))
+        .header("Authorization", auth)
         .send()
         .map_err(|e| e.to_string())?
         .json()
@@ -135,7 +150,7 @@ fn pull_all_from_server(
     // Fetch areas
     let areas: Vec<serde_json::Value> = client
         .get(format!("{}/areas?include_archived=true", server_url))
-        .header("Authorization", format!("ApiKey {}", api_key))
+        .header("Authorization", auth)
         .send()
         .map_err(|e| e.to_string())?
         .json()
@@ -145,23 +160,30 @@ fn pull_all_from_server(
         crate::sync::upsert_area(conn, area)?;
     }
 
-    // Fetch sections
-    let sections: Vec<serde_json::Value> = client
-        .get(format!("{}/sections", server_url))
-        .header("Authorization", format!("ApiKey {}", api_key))
-        .send()
-        .map_err(|e| e.to_string())?
-        .json()
-        .map_err(|e| e.to_string())?;
+    // Fetch sections. There is no bare `/sections` collection route on the
+    // server — sections are nested under their project — so pull them
+    // per-project from the projects we just fetched.
+    for project in &projects {
+        let Some(project_id) = project["id"].as_str() else {
+            continue;
+        };
+        let sections: Vec<serde_json::Value> = client
+            .get(format!("{}/projects/{}/sections", server_url, project_id))
+            .header("Authorization", auth)
+            .send()
+            .map_err(|e| e.to_string())?
+            .json()
+            .map_err(|e| e.to_string())?;
 
-    for section in &sections {
-        crate::sync::upsert_section(conn, section)?;
+        for section in &sections {
+            crate::sync::upsert_section(conn, section)?;
+        }
     }
 
     // Fetch tags
     let tags: Vec<serde_json::Value> = client
         .get(format!("{}/tags", server_url))
-        .header("Authorization", format!("ApiKey {}", api_key))
+        .header("Authorization", auth)
         .send()
         .map_err(|e| e.to_string())?
         .json()
@@ -178,6 +200,7 @@ fn pull_all_from_server(
 pub fn initial_sync(
     params: InitialSyncParams,
     db: tauri::State<'_, Database>,
+    tokens: tauri::State<'_, crate::auth::AuthTokens>,
 ) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
@@ -197,9 +220,16 @@ pub fn initial_sync(
         )
         .unwrap_or_default();
 
-    if server_url.is_empty() || api_key.is_empty() {
-        return Err("server_url and api_key must be set in settings".to_string());
+    if server_url.is_empty() {
+        return Err("server_url must be set in settings".to_string());
     }
+
+    // Bearer (signed-in access token) preferred, api_key fallback — same
+    // resolution as the delta-sync engine, so a logged-in user syncs without
+    // needing an api_key.
+    let token = tokens.access_token.lock().map_err(|e| e.to_string())?.clone();
+    let auth = crate::sync::auth_header(token.as_deref(), &api_key)
+        .ok_or_else(|| "sign in or set an api key first".to_string())?;
 
     match params.mode.as_str() {
         "fresh" => {
@@ -216,11 +246,11 @@ pub fn initial_sync(
             )
             .map_err(|e| e.to_string())?;
 
-            pull_all_from_server(&conn, &server_url, &api_key)?;
+            pull_all_from_server(&conn, &server_url, &auth)?;
         }
         "merge" => {
             // Pull server entities, upsert by ID (server wins on conflict)
-            pull_all_from_server(&conn, &server_url, &api_key)?;
+            pull_all_from_server(&conn, &server_url, &auth)?;
         }
         "push" => {
             // Push logic is complex — handled by the pending ops sync worker

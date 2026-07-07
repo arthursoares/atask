@@ -22,8 +22,16 @@ func NewStreamManager(bus *Bus) *StreamManager {
 	return &StreamManager{bus: bus}
 }
 
-// ServeHTTP implements http.Handler — SSE endpoint with topic filtering.
-func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP is an SSE endpoint with topic filtering, scoped to userID.
+// Events whose UserID is set and does not match userID are not delivered to
+// this connection. Events with an empty UserID (not yet attributed to a
+// user) are delivered to everyone, matching pre-multi-user behavior.
+//
+// userID is passed in explicitly (rather than extracted from r.Context()
+// here) so this package does not need to import internal/api's context-key
+// helpers — the caller (internal/api.EventsHandler) extracts it from the
+// authenticated request context and passes it through.
+func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request, userID string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -66,6 +74,9 @@ func (sm *StreamManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	subIDs := make([]int, 0, len(topics))
 	for _, topic := range topics {
 		id := sm.bus.Subscribe(topic, func(e *domain.DomainEvent) {
+			if e.UserID != "" && e.UserID != userID {
+				return // skip events owned by other users
+			}
 			select {
 			case ch <- e:
 			default:

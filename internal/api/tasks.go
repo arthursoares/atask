@@ -52,6 +52,7 @@ func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	var body struct {
 		Title string `json:"title"`
 		ID    string `json:"id,omitempty"`
@@ -61,7 +62,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.tasks.Create(r.Context(), body.Title, actorFromRequest(r), body.ID)
+	task, err := h.tasks.Create(r.Context(), userID, body.Title, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -71,6 +72,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	q := r.URL.Query()
 
 	var (
@@ -80,22 +82,22 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case q.Get("project_id") != "":
-		tasks, err = h.tasks.ListByProject(r.Context(), q.Get("project_id"))
+		tasks, err = h.tasks.ListByProject(r.Context(), userID, q.Get("project_id"))
 	case q.Get("area_id") != "":
-		tasks, err = h.tasks.ListByArea(r.Context(), q.Get("area_id"))
+		tasks, err = h.tasks.ListByArea(r.Context(), userID, q.Get("area_id"))
 	case q.Get("section_id") != "":
-		tasks, err = h.tasks.ListBySection(r.Context(), q.Get("section_id"))
+		tasks, err = h.tasks.ListBySection(r.Context(), userID, q.Get("section_id"))
 	case q.Get("location_id") != "":
-		tasks, err = h.tasks.ListByLocation(r.Context(), q.Get("location_id"))
+		tasks, err = h.tasks.ListByLocation(r.Context(), userID, q.Get("location_id"))
 	case q.Get("schedule") != "":
 		schedule, parseErr := domain.ParseSchedule(q.Get("schedule"))
 		if parseErr != nil {
 			RespondError(w, http.StatusBadRequest, parseErr.Error())
 			return
 		}
-		tasks, err = h.tasks.ListBySchedule(r.Context(), schedule)
+		tasks, err = h.tasks.ListBySchedule(r.Context(), userID, schedule)
 	default:
-		tasks, err = h.tasks.List(r.Context())
+		tasks, err = h.tasks.List(r.Context(), userID)
 	}
 
 	if err != nil {
@@ -133,8 +135,9 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
-	task, err := h.tasks.Get(r.Context(), id)
+	task, err := h.tasks.Get(r.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
@@ -147,9 +150,10 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.tasks.Delete(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.tasks.Delete(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -162,9 +166,10 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.tasks.Complete(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.tasks.Complete(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -177,9 +182,10 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Cancel(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.tasks.Cancel(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.tasks.Cancel(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -192,6 +198,7 @@ func (h *TaskHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
@@ -201,7 +208,7 @@ func (h *TaskHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.UpdateTitle(r.Context(), id, body.Title, actorFromRequest(r)); err != nil {
+	if err := h.tasks.UpdateTitle(r.Context(), userID, id, body.Title, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -214,6 +221,7 @@ func (h *TaskHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) UpdateNotes(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Notes string `json:"notes"`
@@ -223,7 +231,7 @@ func (h *TaskHandler) UpdateNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.UpdateNotes(r.Context(), id, body.Notes, actorFromRequest(r)); err != nil {
+	if err := h.tasks.UpdateNotes(r.Context(), userID, id, body.Notes, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -236,6 +244,7 @@ func (h *TaskHandler) UpdateNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Schedule string `json:"schedule"`
@@ -251,7 +260,7 @@ func (h *TaskHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.UpdateSchedule(r.Context(), id, schedule, actorFromRequest(r)); err != nil {
+	if err := h.tasks.UpdateSchedule(r.Context(), userID, id, schedule, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -264,6 +273,7 @@ func (h *TaskHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) SetStartDate(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Date *string `json:"date"`
@@ -283,7 +293,7 @@ func (h *TaskHandler) SetStartDate(w http.ResponseWriter, r *http.Request) {
 		date = &parsed
 	}
 
-	if err := h.tasks.SetStartDate(r.Context(), id, date, actorFromRequest(r)); err != nil {
+	if err := h.tasks.SetStartDate(r.Context(), userID, id, date, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -296,6 +306,7 @@ func (h *TaskHandler) SetStartDate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Date *string `json:"date"`
@@ -315,7 +326,7 @@ func (h *TaskHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
 		date = &parsed
 	}
 
-	if err := h.tasks.SetDeadline(r.Context(), id, date, actorFromRequest(r)); err != nil {
+	if err := h.tasks.SetDeadline(r.Context(), userID, id, date, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -328,6 +339,7 @@ func (h *TaskHandler) SetDeadline(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) MoveToProject(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		ID *string `json:"id"`
@@ -337,7 +349,7 @@ func (h *TaskHandler) MoveToProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.MoveToProject(r.Context(), id, body.ID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.MoveToProject(r.Context(), userID, id, body.ID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -350,6 +362,7 @@ func (h *TaskHandler) MoveToProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) MoveToSection(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		ID *string `json:"id"`
@@ -359,7 +372,7 @@ func (h *TaskHandler) MoveToSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.MoveToSection(r.Context(), id, body.ID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.MoveToSection(r.Context(), userID, id, body.ID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -372,6 +385,7 @@ func (h *TaskHandler) MoveToSection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		ID *string `json:"id"`
@@ -381,7 +395,7 @@ func (h *TaskHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.MoveToArea(r.Context(), id, body.ID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.MoveToArea(r.Context(), userID, id, body.ID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -394,6 +408,7 @@ func (h *TaskHandler) MoveToArea(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) SetLocation(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		ID *string `json:"id"`
@@ -403,7 +418,7 @@ func (h *TaskHandler) SetLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.SetLocation(r.Context(), id, body.ID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.SetLocation(r.Context(), userID, id, body.ID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -416,6 +431,7 @@ func (h *TaskHandler) SetLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) SetRecurrence(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body *domain.RecurrenceRule
 	if err := DecodeJSON(r, &body); err != nil {
@@ -423,7 +439,7 @@ func (h *TaskHandler) SetRecurrence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.SetRecurrence(r.Context(), id, body, actorFromRequest(r)); err != nil {
+	if err := h.tasks.SetRecurrence(r.Context(), userID, id, body, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -436,10 +452,11 @@ func (h *TaskHandler) SetRecurrence(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) AddTag(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	tagID := r.PathValue("tagId")
 
-	if err := h.tasks.AddTag(r.Context(), id, tagID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.AddTag(r.Context(), userID, id, tagID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -452,10 +469,11 @@ func (h *TaskHandler) AddTag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	tagID := r.PathValue("tagId")
 
-	if err := h.tasks.RemoveTag(r.Context(), id, tagID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.RemoveTag(r.Context(), userID, id, tagID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -468,10 +486,11 @@ func (h *TaskHandler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) AddLink(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	taskID := r.PathValue("taskId")
 
-	if err := h.tasks.AddLink(r.Context(), id, taskID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.AddLink(r.Context(), userID, id, taskID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -493,10 +512,11 @@ func (h *TaskHandler) AddLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) RemoveLink(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	taskID := r.PathValue("taskId")
 
-	if err := h.tasks.RemoveLink(r.Context(), id, taskID, actorFromRequest(r)); err != nil {
+	if err := h.tasks.RemoveLink(r.Context(), userID, id, taskID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -509,6 +529,7 @@ func (h *TaskHandler) RemoveLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Index int `json:"index"`
@@ -518,7 +539,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.Reorder(r.Context(), id, body.Index, actorFromRequest(r)); err != nil {
+	if err := h.tasks.Reorder(r.Context(), userID, id, body.Index, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -531,6 +552,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) SetTodayIndex(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Index *int `json:"index"`
@@ -540,7 +562,7 @@ func (h *TaskHandler) SetTodayIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tasks.SetTodayIndex(r.Context(), id, body.Index, actorFromRequest(r)); err != nil {
+	if err := h.tasks.SetTodayIndex(r.Context(), userID, id, body.Index, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -553,9 +575,10 @@ func (h *TaskHandler) SetTodayIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Reopen(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 
-	if err := h.tasks.Reopen(r.Context(), id, actorFromRequest(r)); err != nil {
+	if err := h.tasks.Reopen(r.Context(), userID, id, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
 			return
@@ -568,6 +591,7 @@ func (h *TaskHandler) Reopen(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	id := r.PathValue("id")
 	var body struct {
 		Title     *string `json:"title"`
@@ -587,7 +611,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	actor := actorFromRequest(r)
 
 	// --- Pre-validate: task exists ---
-	current, err := h.tasks.Get(r.Context(), id)
+	current, err := h.tasks.Get(r.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "task not found")
@@ -619,7 +643,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	// --- Pre-validate: referenced entities exist ---
 	if body.ProjectID != nil && *body.ProjectID != "" {
-		if _, err := h.projects.Get(r.Context(), *body.ProjectID); err != nil {
+		if _, err := h.projects.Get(r.Context(), userID, *body.ProjectID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				RespondError(w, http.StatusUnprocessableEntity, "project not found")
 				return
@@ -629,7 +653,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.SectionID != nil && *body.SectionID != "" {
-		if _, err := h.sections.Get(r.Context(), *body.SectionID); err != nil {
+		if _, err := h.sections.Get(r.Context(), userID, *body.SectionID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				RespondError(w, http.StatusUnprocessableEntity, "section not found")
 				return
@@ -639,7 +663,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.AreaID != nil && *body.AreaID != "" {
-		if _, err := h.areas.Get(r.Context(), *body.AreaID); err != nil {
+		if _, err := h.areas.Get(r.Context(), userID, *body.AreaID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				RespondError(w, http.StatusUnprocessableEntity, "area not found")
 				return
@@ -692,31 +716,31 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	// --- Apply mutations (all pre-validations passed) ---
 	if body.Title != nil {
-		if err := h.tasks.UpdateTitle(r.Context(), id, *body.Title, actor); err != nil {
+		if err := h.tasks.UpdateTitle(r.Context(), userID, id, *body.Title, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 	if body.Notes != nil {
-		if err := h.tasks.UpdateNotes(r.Context(), id, *body.Notes, actor); err != nil {
+		if err := h.tasks.UpdateNotes(r.Context(), userID, id, *body.Notes, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 	if body.Schedule != nil {
-		if err := h.tasks.UpdateSchedule(r.Context(), id, domain.Schedule(*body.Schedule), actor); err != nil {
+		if err := h.tasks.UpdateSchedule(r.Context(), userID, id, domain.Schedule(*body.Schedule), actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 	if body.StartDate != nil {
-		if err := h.tasks.SetStartDate(r.Context(), id, startDate, actor); err != nil {
+		if err := h.tasks.SetStartDate(r.Context(), userID, id, startDate, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 	if body.Deadline != nil {
-		if err := h.tasks.SetDeadline(r.Context(), id, deadline, actor); err != nil {
+		if err := h.tasks.SetDeadline(r.Context(), userID, id, deadline, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -726,7 +750,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		if *pid == "" {
 			pid = nil
 		}
-		if err := h.tasks.MoveToProject(r.Context(), id, pid, actor); err != nil {
+		if err := h.tasks.MoveToProject(r.Context(), userID, id, pid, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -736,7 +760,7 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		if *sid == "" {
 			sid = nil
 		}
-		if err := h.tasks.MoveToSection(r.Context(), id, sid, actor); err != nil {
+		if err := h.tasks.MoveToSection(r.Context(), userID, id, sid, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -746,13 +770,13 @@ func (h *TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		if *aid == "" {
 			aid = nil
 		}
-		if err := h.tasks.MoveToArea(r.Context(), id, aid, actor); err != nil {
+		if err := h.tasks.MoveToArea(r.Context(), userID, id, aid, actor); err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 	}
 
-	task, err := h.tasks.Get(r.Context(), id)
+	task, err := h.tasks.Get(r.Context(), userID, id)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

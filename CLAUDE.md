@@ -32,15 +32,34 @@ npm run storybook       # Design system explorer (port 6006)
 
 ### Go Backend
 ```
-cmd/atask/main.go       → entry point, wires everything
+cmd/atask/main.go       → entry point; embeds PocketBase, wires services + `admin` CLI
 internal/
+  config/               → typed env config (DATA_DIR, BASE_URL, REGISTRATION_OPEN, OAuth…)
+  auth/                 → AuthProvider interface + PocketBase adapter (users, tokens, OAuth)
   domain/               → pure Go types (all with json tags for camelCase), validation, zero deps
-  store/                → SQLite, migrations (001-004), sqlc-generated queries
-  event/                → delta events, domain events, pub/sub bus, SSE
-  service/              → business logic (validate → persist → emit events)
-  api/                  → HTTP handlers, middleware, response helpers
+  store/                → SQLite, migrations (001-008), sqlc queries, stats.go, orphan_check.go
+  event/                → delta events, domain events, pub/sub bus, SSE (all user-scoped)
+  service/              → business logic (validate → persist → emit); every method takes userID
+  api/                  → HTTP handlers, dual-auth middleware, web admin UI (admin.go + templates)
                           PATCH endpoints for tasks/projects/areas (pre-validated, atomic)
 ```
+
+**Multi-user (PocketBase hybrid).** PocketBase is embedded as the auth engine and
+owns `${DATA_DIR}/pb_data/data.db` (users, tokens, OAuth). The domain layer keeps
+its own `${DATA_DIR}/atask.db` — side by side, never a shared connection. Every
+domain table has a denormalized `user_id` (the PocketBase record ID); all
+queries/services/handlers/sync/SSE filter by it. The `AuthProvider` interface
+(`internal/auth`) isolates PocketBase internals from the rest of the code. Auth
+middleware accepts `Bearer <pb-token>` or `ApiKey <key>` (keys carry a
+read/read_write/admin scope + optional expiry). Web admin UI at `/admin` (cookie
+session, role=admin, CSRF-protected). Bootstrap the first admin with
+`atask admin create-user`. Design: `docs/superpowers/specs/2026-04-10-multi-user-design.md`.
+
+**modernc.org/sqlite gotcha:** the driver does NOT round-trip a bound `time.Time`
+through SQLite date functions (`date()`, `datetime()`), and `MAX(timestamp)`
+aggregates break scanning into `time.Time`. Do date bucketing / max-timestamp
+work in Go over raw rows (see `store/stats.go`), and enforce API-key expiry in Go
+(see `service/auth_service.go`), not via SQL predicates.
 
 ### Tauri Desktop App
 ```
@@ -48,8 +67,9 @@ atask-v4/
   src-tauri/src/
     commands.rs         → Tauri IPC commands (all CRUD + queue_pending_op for sync)
     sync.rs             → Sync worker (pending ops flush + delta pull + relationship sync)
-    sync_commands.rs    → Sync Tauri commands (trigger_sync, test_connection)
-    db.rs               → Database struct (Arc<Mutex<Connection>>), migrations (001-006)
+    sync_commands.rs    → Sync Tauri commands (trigger_sync, test_connection, initial_sync)
+    auth.rs             → Login/logout/refresh; access token in OS keychain (never SQLite)
+    db.rs               → Database struct (Arc<Mutex<Connection>>), migrations (001-007)
     models.rs           → Rust model structs (Task, Project, Area, Section, Tag, Activity,
                           Location, TaskLink, TaskTag, ProjectTag, ChecklistItem)
     lib.rs              → App setup, plugin registration, system menus
@@ -128,8 +148,9 @@ $activeView.set('inbox');                    // Direct write
 - `createMutationActivity` does NOT call `notifySync()` — called from within mutations that already do
 
 ### Auth (Go)
-- JWT: `Authorization: Bearer <token>` / API keys: `Authorization: ApiKey <key>`
-- Only `/health`, `/auth/login`, `/auth/register` are public
+- Dual auth: `Authorization: Bearer <pb-token>` (PocketBase) or `ApiKey <key>`. Middleware rejects empty/disabled/expired principals; API-key scope (read/read_write/admin) is enforced per request. `ValidateToken`/`RefreshToken` only accept the `users` collection (a `_superusers` token is rejected).
+- Public routes: `/health`, `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/providers`, and the admin login page. Everything else is protected. `/admin/*` uses a separate cookie session + CSRF (not Bearer).
+- `AuthWithPassword` returns an identical error for unknown-email vs wrong-password (no user enumeration). Registration is invite-gated unless `REGISTRATION_OPEN=true`.
 
 ## Testing
 
@@ -140,7 +161,7 @@ $activeView.set('inbox');                    // Direct write
 ### Tauri E2E: `npx wdio run wdio.conf.ts` (from `atask-v4/`)
 - Uses `browser.execute()` with raw DOM queries
 - `resetDatabase()` Tauri command clears all tables between tests
-- Sync integration tests need running Go server: `DB_PATH=/tmp/test.db ./bin/atask`
+- Sync integration tests need running Go server: `DATA_DIR=/tmp/atask-test ./bin/atask` (then `atask admin create-user` to make an account, and sign in from the client)
 
 ### Rust: `cargo test --manifest-path atask-v4/src-tauri/Cargo.toml`
 - Delta planning tests in sync.rs

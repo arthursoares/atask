@@ -1,6 +1,14 @@
 import { useEffect } from "react";
 import { useStore } from "@nanostores/react";
-import { loadAll, $showSidebar, $selectedTaskId, $activeView, $selectedTaskIds } from "./store/index";
+import {
+  loadAll,
+  $showSidebar,
+  $selectedTaskId,
+  $activeView,
+  $selectedTaskIds,
+  $authState,
+} from "./store/index";
+import { refreshOnLaunch } from "./hooks/useTauri";
 import Sidebar from "./components/Sidebar";
 import Toolbar from "./components/Toolbar";
 import InboxView from "./views/InboxView";
@@ -28,6 +36,12 @@ function App() {
 
   useEffect(() => {
     loadAll();
+    // Re-derive the in-memory session from the keychain-stored token (if
+    // any) on every app launch. Silently leaves $authState unauthenticated
+    // if there's no prior session or the refresh fails.
+    refreshOnLaunch()
+      .then((state) => $authState.set(state))
+      .catch(() => {});
   }, []);
 
   useKeyboard();

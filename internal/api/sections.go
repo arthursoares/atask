@@ -29,6 +29,7 @@ func (h *SectionHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *SectionHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	projectID := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
@@ -39,7 +40,7 @@ func (h *SectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	section, err := h.sections.Create(r.Context(), body.Title, projectID, actorFromRequest(r), body.ID)
+	section, err := h.sections.Create(r.Context(), userID, body.Title, projectID, actorFromRequest(r), body.ID)
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -49,9 +50,10 @@ func (h *SectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SectionHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	projectID := r.PathValue("id")
 
-	sections, err := h.sections.ListByProject(r.Context(), projectID)
+	sections, err := h.sections.ListByProject(r.Context(), userID, projectID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -60,6 +62,7 @@ func (h *SectionHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SectionHandler) Rename(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	sid := r.PathValue("sid")
 	var body struct {
 		Title string `json:"title"`
@@ -69,7 +72,7 @@ func (h *SectionHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.sections.Rename(r.Context(), sid, body.Title, actorFromRequest(r)); err != nil {
+	if err := h.sections.Rename(r.Context(), userID, sid, body.Title, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "section not found")
 			return
@@ -82,6 +85,7 @@ func (h *SectionHandler) Rename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SectionHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	sid := r.PathValue("sid")
 	var body struct {
 		Index int `json:"index"`
@@ -91,7 +95,7 @@ func (h *SectionHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.sections.Reorder(r.Context(), sid, body.Index, actorFromRequest(r)); err != nil {
+	if err := h.sections.Reorder(r.Context(), userID, sid, body.Index, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "section not found")
 			return
@@ -104,10 +108,11 @@ func (h *SectionHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SectionHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	sid := r.PathValue("sid")
 	cascade := r.URL.Query().Get("cascade") == "true"
 
-	if err := h.sections.Delete(r.Context(), sid, actorFromRequest(r), cascade); err != nil {
+	if err := h.sections.Delete(r.Context(), userID, sid, actorFromRequest(r), cascade); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "section not found")
 			return

@@ -15,11 +15,16 @@ Good software in the AI era is software built for agents to operate on. Cheap fo
 
 ## Quick Start
 
+atask is multi-user. Authentication and user accounts are handled by an
+embedded [PocketBase](https://pocketbase.io) instance; the task domain data
+lives in its own SQLite database beside it. Both live under `DATA_DIR`
+(`data.db` for auth, `atask.db` for domain data) — never a shared connection.
+
 ### Run locally
 
 ```bash
 go build -o atask ./cmd/atask
-./atask
+./atask                 # no subcommand → serves (same as: ./atask serve)
 ```
 
 The server starts on `:8080` by default. Configure with environment variables:
@@ -27,32 +32,54 @@ The server starts on `:8080` by default. Configure with environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ADDR` | `:8080` | Server listen address |
-| `DB_PATH` | `atask.db` | SQLite database file path |
-| `JWT_SECRET` | `change-me-in-production` | Secret for JWT signing |
+| `DATA_DIR` | `./pb_data` | Directory holding `data.db` (auth) + `atask.db` (domain) |
+| `BASE_URL` | `http://localhost:8080` | Public base URL (OAuth redirects, invite links) |
+| `REGISTRATION_OPEN` | `false` | When `false`, self-registration requires an invite |
+| `POCKETBASE_ADMIN_UI` | `false` | Enable PocketBase's own `/_/` admin dashboard |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | Enable Google OAuth (optional) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | — | Enable GitHub OAuth (optional) |
+
+PocketBase manages its own token signing keys — there is no `JWT_SECRET` to set.
+
+### Bootstrap the first admin
+
+A fresh server has no accounts. Create the first one from the CLI (it prompts
+for a password):
+
+```bash
+./atask admin create-user --email admin@example.com --name Admin --role admin
+```
+
+This account can sign in to the API, the desktop client, and the web admin UI
+at `/admin`. Use `--role user` for a regular account.
 
 ### Run with Docker
 
 ```bash
+cp .env.example .env    # edit as needed
 docker compose up -d
+
+# create the first admin inside the running container
+docker compose exec app /app/atask admin create-user \
+  --email admin@example.com --name Admin --role admin
 ```
+
+The container runs as a non-root user and persists `DATA_DIR` in a named
+volume. (If you bind-mount a host directory over `/app/data` instead, make sure
+it is writable by the container's `appuser`.)
 
 ### Verify it works
 
 ```bash
-# Health check
+# Health check (public)
 curl http://localhost:8080/health
 
-# Register a user
-curl -X POST http://localhost:8080/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"secret","name":"Your Name"}'
-
-# Login
+# Log in as the admin you created → Bearer token
 TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"secret"}' | jq -r .token)
+  -d '{"email":"admin@example.com","password":"<password>"}' | jq -r .token)
 
-# Create a task
+# Create a task (scoped to your user — nobody else can see it)
 curl -X POST http://localhost:8080/tasks \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
@@ -66,14 +93,22 @@ curl http://localhost:8080/views/inbox \
 ## Architecture
 
 ```
-cmd/atask/main.go       → entry point, wiring
+cmd/atask/main.go       → entry point; embeds PocketBase, wires services + CLI
 internal/
+  config/                     → typed env configuration
+  auth/                       → AuthProvider interface + PocketBase adapter
   domain/                     → entities, validation, constraints (zero deps)
-  store/                      → SQLite persistence, sqlc-generated queries
-  event/                      → dual-stream events, pub/sub bus, SSE
+  store/                      → SQLite persistence, sqlc queries, stats + orphan checks
+  event/                      → dual-stream events, pub/sub bus, SSE (user-scoped)
   service/                    → business operations (validate → persist → emit)
-  api/                        → HTTP handlers, middleware, response helpers
+  api/                        → HTTP handlers, dual-auth middleware, web admin UI
 ```
+
+**Multi-user data isolation.** Every domain row carries a `user_id` (the
+PocketBase user record ID). Queries, services, handlers, sync deltas, and the
+SSE stream are all scoped to the authenticated user — one user can never read or
+write another's data. Cross-entity references (e.g. attaching a project to a
+task) are ownership-validated so a user can't reference another user's objects.
 
 ### Key Design Decisions
 
@@ -96,11 +131,22 @@ These produce computed views: inbox, today, upcoming, someday, logbook.
 
 ### Authentication
 
+Auth is backed by embedded PocketBase. Two credential types are accepted on
+every protected route:
+
+- `Authorization: Bearer <token>` — a PocketBase auth token from `/auth/login`
+  (used by humans and the desktop client; the token is short-lived and
+  refreshable).
+- `Authorization: ApiKey <key>` — a long-lived, per-user, revocable key (used by
+  agents).
+
 ```
-POST /auth/register              Register a new user
-POST /auth/login                 Login, returns JWT token
+POST /auth/register              Register (requires an invite unless REGISTRATION_OPEN=true)
+POST /auth/login                 Log in → { token, user }
+POST /auth/refresh               Rotate the current Bearer token
+GET  /auth/providers             Which auth providers are enabled (email/google/github)
 GET  /auth/me                    Current user profile
-PUT  /auth/me                    Update profile
+PUT  /auth/me                    Update own profile (name only)
 ```
 
 **Agent API keys:**
@@ -112,7 +158,29 @@ PUT    /auth/api-keys/{id}       Rename key
 DELETE /auth/api-keys/{id}       Revoke key
 ```
 
-Authenticate with `Authorization: Bearer <jwt>` or `Authorization: ApiKey <key>`.
+API keys carry a **scope** enforced by the middleware: `read` (GET only),
+`read_write` (default — full domain access), or `admin`. Keys may also carry an
+expiry.
+
+**Invites (closed registration).** When `REGISTRATION_OPEN=false`, an admin
+mints invites; the invitee registers against the token.
+
+```
+POST /auth/invites               Admin-only: create an invite → { url }
+POST /auth/register              Public: register with { ..., inviteToken }
+```
+
+**Web admin UI** — `GET /admin` (cookie session, `role=admin` required):
+a dashboard with per-user statistics, a creation/activity log, growth charts,
+user management (create / enable / disable / role), an orphaned-data banner, and
+a per-account overview. CSRF-protected, session-fixation-hardened.
+
+**CLI** (operator bootstrap / migration):
+
+```
+atask admin create-user --email <e> --name <n> --role <user|admin>
+atask admin assign-data  --to <userID>    # claim pre-multi-user rows (user_id='')
+```
 
 ### Tasks
 
@@ -292,22 +360,25 @@ atask is designed to be consumed by any client. The API is the product.
 
 ### For TUI / CLI clients
 
-1. Authenticate once, store the JWT token
+1. Log in once, store the Bearer token securely (the Tauri desktop client keeps
+   it in the OS keychain, never on disk); refresh via `/auth/refresh`
 2. Use `/views/*` endpoints for the main screens
 3. Use semantic mutation endpoints for actions
 4. Optionally subscribe to SSE for live updates
 
 ### For AI agents
 
-1. Create an API key via `/auth/api-keys` — each agent gets its own key
-2. Use `Authorization: ApiKey <key>` for all requests
+1. Create an API key via `/auth/api-keys` — each agent gets its own per-user key
+2. Use `Authorization: ApiKey <key>` for all requests (scope it to `read` if the
+   agent only observes)
 3. Subscribe to relevant domain events via SSE (`/events/stream?topics=task.*`)
 4. Use the activity stream to collaborate on tasks
 5. Every action you take is attributed to your API key in the audit trail
 
 ### For web / mobile clients
 
-1. Use JWT auth flow (login → token → Bearer header)
+1. Use the login flow (`/auth/login` → Bearer token → `Authorization` header),
+   refresh with `/auth/refresh`
 2. `/views/*` endpoints map directly to UI screens
 3. SSE for real-time updates
 4. Location entities support geofencing (lat/lng/radius)
@@ -330,13 +401,12 @@ make docker-up      # Start with docker compose
 ## Tech Stack
 
 - **Go 1.25** with standard library HTTP routing
+- **PocketBase** (embedded) for authentication, users, tokens, and OAuth
 - **SQLite** via modernc.org/sqlite (pure Go, no CGo)
 - **sqlc** for type-safe SQL query generation
 - **goose** for database migrations
 - **log/slog** for structured logging
-- **bcrypt** for password hashing
-- **JWT** for user authentication
-- **SHA256** for API key hashing
+- **SHA256** for API key hashing (PocketBase handles password hashing)
 
 ## License
 

@@ -17,14 +17,17 @@ type Activity struct {
 	Type      sql.NullString `json:"type"`
 	Content   sql.NullString `json:"content"`
 	CreatedAt sql.NullTime   `json:"created_at"`
+	UserID    string         `json:"user_id"`
 }
 
 type ApiKey struct {
 	ID          string         `json:"id"`
-	UserID      sql.NullString `json:"user_id"`
+	UserID      string         `json:"user_id"`
 	Name        sql.NullString `json:"name"`
 	KeyHash     sql.NullString `json:"key_hash"`
 	Permissions string         `json:"permissions"`
+	Scope       string         `json:"scope"`
+	ExpiresAt   sql.NullTime   `json:"expires_at"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
 	LastUsedAt  sql.NullTime   `json:"last_used_at"`
 }
@@ -38,6 +41,7 @@ type Area struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 type ChecklistItem struct {
@@ -50,6 +54,7 @@ type ChecklistItem struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 type DeltaEvent struct {
@@ -62,6 +67,7 @@ type DeltaEvent struct {
 	NewValue   sql.NullString `json:"new_value"`
 	ActorID    sql.NullString `json:"actor_id"`
 	Timestamp  sql.NullTime   `json:"timestamp"`
+	UserID     string         `json:"user_id"`
 }
 
 type DomainEvent struct {
@@ -72,6 +78,18 @@ type DomainEvent struct {
 	ActorID    sql.NullString `json:"actor_id"`
 	Payload    string         `json:"payload"`
 	Timestamp  sql.NullTime   `json:"timestamp"`
+	UserID     string         `json:"user_id"`
+}
+
+type Invite struct {
+	ID        string       `json:"id"`
+	Email     string       `json:"email"`
+	Role      string       `json:"role"`
+	Token     string       `json:"token"`
+	CreatedBy string       `json:"created_by"`
+	CreatedAt time.Time    `json:"created_at"`
+	ClaimedAt sql.NullTime `json:"claimed_at"`
+	ExpiresAt time.Time    `json:"expires_at"`
 }
 
 type Location struct {
@@ -85,6 +103,7 @@ type Location struct {
 	DeletedAt sql.NullTime    `json:"deleted_at"`
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
+	UserID    string          `json:"user_id"`
 }
 
 type Project struct {
@@ -104,11 +123,13 @@ type Project struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	Color        string         `json:"color"`
+	UserID       string         `json:"user_id"`
 }
 
 type ProjectTag struct {
 	ProjectID string `json:"project_id"`
 	TagID     string `json:"tag_id"`
+	UserID    string `json:"user_id"`
 }
 
 type Section struct {
@@ -122,6 +143,7 @@ type Section struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	Archived  int64          `json:"archived"`
 	Collapsed int64          `json:"collapsed"`
+	UserID    string         `json:"user_id"`
 }
 
 type Tag struct {
@@ -134,6 +156,7 @@ type Tag struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 type Task struct {
@@ -157,6 +180,7 @@ type Task struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	TimeSlot       sql.NullString `json:"time_slot"`
+	UserID         string         `json:"user_id"`
 }
 
 type TaskLink struct {
@@ -164,18 +188,11 @@ type TaskLink struct {
 	RelatedTaskID    string       `json:"related_task_id"`
 	RelationshipType string       `json:"relationship_type"`
 	CreatedAt        sql.NullTime `json:"created_at"`
+	UserID           string       `json:"user_id"`
 }
 
 type TaskTag struct {
 	TaskID string `json:"task_id"`
 	TagID  string `json:"tag_id"`
-}
-
-type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	Name         string    `json:"name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	UserID string `json:"user_id"`
 }

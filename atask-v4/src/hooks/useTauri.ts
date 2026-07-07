@@ -1,6 +1,7 @@
 // Typed invoke() wrappers for all Tauri commands
 
 import { invoke } from "@tauri-apps/api/core";
+import type { AuthState } from "../store/auth";
 import type {
   AppState,
   Task,
@@ -313,4 +314,48 @@ export function testConnection(): Promise<boolean> {
 
 export function initialSync(mode: "fresh" | "merge" | "push"): Promise<void> {
   return invoke<void>("initial_sync", { params: { mode } });
+}
+
+// --- Auth commands ---
+//
+// NOTE: the auth token never crosses this boundary — these commands return
+// only `AuthState` (profile + `authenticated` boolean). See
+// src-tauri/src/auth.rs for the hard rule and src/store/auth.ts for the
+// frontend-side contract.
+
+export function login(
+  serverUrl: string,
+  email: string,
+  password: string,
+): Promise<AuthState> {
+  return invoke<AuthState>("login", { serverUrl, email, password });
+}
+
+export function logout(): Promise<void> {
+  return invoke<void>("logout");
+}
+
+// Called once on app startup to re-derive the in-memory session from the
+// keychain-stored token (see auth.rs::refresh_on_launch). There is no
+// separate "get_auth_state" command — this both refreshes and reports state.
+export function refreshOnLaunch(): Promise<AuthState> {
+  return invoke<AuthState>("refresh_on_launch");
+}
+
+export interface AuthProviders {
+  email: boolean;
+  google?: boolean;
+  github?: boolean;
+  [key: string]: boolean | undefined;
+}
+
+// Public endpoint (no auth) reporting which login providers are enabled —
+// fetched directly rather than via Tauri invoke since it's a plain HTTP call
+// to the atask server, not a local command.
+export async function getProviders(serverUrl: string): Promise<AuthProviders> {
+  const resp = await fetch(`${serverUrl.replace(/\/$/, "")}/auth/providers`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch providers: ${resp.status}`);
+  }
+  return resp.json() as Promise<AuthProviders>;
 }

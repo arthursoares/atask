@@ -31,6 +31,7 @@ func (h *ChecklistHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ChecklistHandler) AddItem(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	taskID := r.PathValue("id")
 	var body struct {
 		Title string `json:"title"`
@@ -40,7 +41,7 @@ func (h *ChecklistHandler) AddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.checklist.AddItem(r.Context(), body.Title, taskID, actorFromRequest(r))
+	item, err := h.checklist.AddItem(r.Context(), userID, body.Title, taskID, actorFromRequest(r))
 	if err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -50,9 +51,10 @@ func (h *ChecklistHandler) AddItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChecklistHandler) ListByTask(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	taskID := r.PathValue("id")
 
-	items, err := h.checklist.ListByTask(r.Context(), taskID)
+	items, err := h.checklist.ListByTask(r.Context(), userID, taskID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -61,6 +63,7 @@ func (h *ChecklistHandler) ListByTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChecklistHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	itemID := r.PathValue("itemId")
 	var body struct {
 		Title string `json:"title"`
@@ -70,7 +73,7 @@ func (h *ChecklistHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checklist.UpdateTitle(r.Context(), itemID, body.Title, actorFromRequest(r)); err != nil {
+	if err := h.checklist.UpdateTitle(r.Context(), userID, itemID, body.Title, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "checklist item not found")
 			return
@@ -83,9 +86,10 @@ func (h *ChecklistHandler) UpdateTitle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChecklistHandler) CompleteItem(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	itemID := r.PathValue("itemId")
 
-	if err := h.checklist.CompleteItem(r.Context(), itemID, actorFromRequest(r)); err != nil {
+	if err := h.checklist.CompleteItem(r.Context(), userID, itemID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "checklist item not found")
 			return
@@ -98,9 +102,10 @@ func (h *ChecklistHandler) CompleteItem(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ChecklistHandler) UncompleteItem(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	itemID := r.PathValue("itemId")
 
-	if err := h.checklist.UncompleteItem(r.Context(), itemID, actorFromRequest(r)); err != nil {
+	if err := h.checklist.UncompleteItem(r.Context(), userID, itemID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "checklist item not found")
 			return
@@ -113,6 +118,7 @@ func (h *ChecklistHandler) UncompleteItem(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ChecklistHandler) ReorderItem(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	itemID := r.PathValue("itemId")
 	var body struct {
 		Index int `json:"index"`
@@ -122,7 +128,7 @@ func (h *ChecklistHandler) ReorderItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checklist.ReorderItem(r.Context(), itemID, body.Index, actorFromRequest(r)); err != nil {
+	if err := h.checklist.ReorderItem(r.Context(), userID, itemID, body.Index, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "checklist item not found")
 			return
@@ -135,9 +141,10 @@ func (h *ChecklistHandler) ReorderItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChecklistHandler) RemoveItem(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
 	itemID := r.PathValue("itemId")
 
-	if err := h.checklist.RemoveItem(r.Context(), itemID, actorFromRequest(r)); err != nil {
+	if err := h.checklist.RemoveItem(r.Context(), userID, itemID, actorFromRequest(r)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "checklist item not found")
 			return

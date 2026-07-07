@@ -15,7 +15,7 @@ import (
 
 // setupTestServer creates an in-memory DB with migrations, wires up the AreaHandler,
 // and returns the mux and DB for use in tests.
-func setupTestServer(t *testing.T) (*http.ServeMux, *store.DB) {
+func setupTestServer(t *testing.T) (http.Handler, *store.DB) {
 	t.Helper()
 
 	db, err := store.NewDB(":memory:")
@@ -35,7 +35,7 @@ func setupTestServer(t *testing.T) (*http.ServeMux, *store.DB) {
 
 	mux := http.NewServeMux()
 	areaHandler.RegisterRoutes(mux)
-	return mux, db
+	return api.WithTestUser(testUserID)(mux), db
 }
 
 func TestAreaHandler_Create(t *testing.T) {

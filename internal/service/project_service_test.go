@@ -47,6 +47,7 @@ func createTaskInProject(t *testing.T, db *store.DB, projectID string) string {
 		ProjectID: sql.NullString{String: projectID, Valid: true},
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    testUserID,
 	})
 	if err != nil {
 		t.Fatalf("createTaskInProject: %v", err)
@@ -67,6 +68,7 @@ func createSectionInProject(t *testing.T, db *store.DB, projectID string) string
 		Index:     0,
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    testUserID,
 	})
 	if err != nil {
 		t.Fatalf("createSectionInProject: %v", err)
@@ -78,7 +80,7 @@ func TestProjectService_Create(t *testing.T) {
 	svc, _ := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Launch website", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Launch website", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestProjectService_Create(t *testing.T) {
 	}
 
 	// Verify it can be retrieved
-	got, err := svc.Get(ctx, project.ID)
+	got, err := svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -112,7 +114,7 @@ func TestProjectService_Create_EmptyTitle(t *testing.T) {
 	svc, _ := newTestProjectService(t)
 	ctx := context.Background()
 
-	_, err := svc.Create(ctx, "", "user-1")
+	_, err := svc.Create(ctx, testUserID, "", "user-1")
 	if err == nil {
 		t.Fatal("expected error for empty title, got nil")
 	}
@@ -122,16 +124,16 @@ func TestProjectService_List(t *testing.T) {
 	svc, _ := newTestProjectService(t)
 	ctx := context.Background()
 
-	_, err := svc.Create(ctx, "Project 1", "user-1")
+	_, err := svc.Create(ctx, testUserID, "Project 1", "user-1")
 	if err != nil {
 		t.Fatalf("Create project 1: %v", err)
 	}
-	_, err = svc.Create(ctx, "Project 2", "user-1")
+	_, err = svc.Create(ctx, testUserID, "Project 2", "user-1")
 	if err != nil {
 		t.Fatalf("Create project 2: %v", err)
 	}
 
-	projects, err := svc.List(ctx)
+	projects, err := svc.List(ctx, testUserID)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -144,7 +146,7 @@ func TestProjectService_Complete_CascadeTasks(t *testing.T) {
 	svc, db := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Q4 Goals", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Q4 Goals", "user-1")
 	if err != nil {
 		t.Fatalf("Create project: %v", err)
 	}
@@ -152,12 +154,12 @@ func TestProjectService_Complete_CascadeTasks(t *testing.T) {
 	taskID1 := createTaskInProject(t, db, project.ID)
 	taskID2 := createTaskInProject(t, db, project.ID)
 
-	if err := svc.Complete(ctx, project.ID, "user-1"); err != nil {
+	if err := svc.Complete(ctx, testUserID, project.ID, "user-1"); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 
 	// Verify project status
-	got, err := svc.Get(ctx, project.ID)
+	got, err := svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get project after Complete: %v", err)
 	}
@@ -170,7 +172,7 @@ func TestProjectService_Complete_CascadeTasks(t *testing.T) {
 
 	// Verify cascade: both tasks should be completed
 	q := sqlc.New(db.DB)
-	task1, err := q.GetTask(ctx, taskID1)
+	task1, err := q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID1, UserID: testUserID})
 	if err != nil {
 		t.Fatalf("GetTask 1: %v", err)
 	}
@@ -178,7 +180,7 @@ func TestProjectService_Complete_CascadeTasks(t *testing.T) {
 		t.Errorf("expected task1 status=completed, got %v", task1.Status)
 	}
 
-	task2, err := q.GetTask(ctx, taskID2)
+	task2, err := q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID2, UserID: testUserID})
 	if err != nil {
 		t.Fatalf("GetTask 2: %v", err)
 	}
@@ -191,7 +193,7 @@ func TestProjectService_Cancel_CascadeTasks(t *testing.T) {
 	svc, db := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Abandoned project", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Abandoned project", "user-1")
 	if err != nil {
 		t.Fatalf("Create project: %v", err)
 	}
@@ -199,12 +201,12 @@ func TestProjectService_Cancel_CascadeTasks(t *testing.T) {
 	taskID1 := createTaskInProject(t, db, project.ID)
 	taskID2 := createTaskInProject(t, db, project.ID)
 
-	if err := svc.Cancel(ctx, project.ID, "user-1"); err != nil {
+	if err := svc.Cancel(ctx, testUserID, project.ID, "user-1"); err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
 
 	// Verify project status
-	got, err := svc.Get(ctx, project.ID)
+	got, err := svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get project after Cancel: %v", err)
 	}
@@ -214,7 +216,7 @@ func TestProjectService_Cancel_CascadeTasks(t *testing.T) {
 
 	// Verify cascade: both tasks should be cancelled
 	q := sqlc.New(db.DB)
-	task1, err := q.GetTask(ctx, taskID1)
+	task1, err := q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID1, UserID: testUserID})
 	if err != nil {
 		t.Fatalf("GetTask 1: %v", err)
 	}
@@ -222,7 +224,7 @@ func TestProjectService_Cancel_CascadeTasks(t *testing.T) {
 		t.Errorf("expected task1 status=cancelled, got %v", task1.Status)
 	}
 
-	task2, err := q.GetTask(ctx, taskID2)
+	task2, err := q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID2, UserID: testUserID})
 	if err != nil {
 		t.Fatalf("GetTask 2: %v", err)
 	}
@@ -235,7 +237,7 @@ func TestProjectService_Delete_CascadeAll(t *testing.T) {
 	svc, db := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Big project", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Big project", "user-1")
 	if err != nil {
 		t.Fatalf("Create project: %v", err)
 	}
@@ -244,29 +246,29 @@ func TestProjectService_Delete_CascadeAll(t *testing.T) {
 	taskID2 := createTaskInProject(t, db, project.ID)
 	sectionID := createSectionInProject(t, db, project.ID)
 
-	if err := svc.Delete(ctx, project.ID, "user-1"); err != nil {
+	if err := svc.Delete(ctx, testUserID, project.ID, "user-1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
 	// Verify project is tombstoned (Get should return error)
-	_, err = svc.Get(ctx, project.ID)
+	_, err = svc.Get(ctx, testUserID, project.ID)
 	if err == nil {
 		t.Fatal("expected error for deleted project, got nil")
 	}
 
 	// Verify tasks are tombstoned
 	q := sqlc.New(db.DB)
-	_, err = q.GetTask(ctx, taskID1)
+	_, err = q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID1, UserID: testUserID})
 	if err == nil {
 		t.Error("expected error for deleted task1, got nil")
 	}
-	_, err = q.GetTask(ctx, taskID2)
+	_, err = q.GetTask(ctx, sqlc.GetTaskParams{ID: taskID2, UserID: testUserID})
 	if err == nil {
 		t.Error("expected error for deleted task2, got nil")
 	}
 
 	// Verify section is tombstoned
-	_, err = q.GetSection(ctx, sectionID)
+	_, err = q.GetSection(ctx, sqlc.GetSectionParams{ID: sectionID, UserID: testUserID})
 	if err == nil {
 		t.Error("expected error for deleted section, got nil")
 	}
@@ -276,16 +278,16 @@ func TestProjectService_UpdateTitle(t *testing.T) {
 	svc, _ := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Old title", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Old title", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.UpdateTitle(ctx, project.ID, "New title", "user-1"); err != nil {
+	if err := svc.UpdateTitle(ctx, testUserID, project.ID, "New title", "user-1"); err != nil {
 		t.Fatalf("UpdateTitle: %v", err)
 	}
 
-	got, err := svc.Get(ctx, project.ID)
+	got, err := svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get after UpdateTitle: %v", err)
 	}
@@ -298,17 +300,17 @@ func TestProjectService_SetDeadline(t *testing.T) {
 	svc, _ := newTestProjectService(t)
 	ctx := context.Background()
 
-	project, err := svc.Create(ctx, "Deadline project", "user-1")
+	project, err := svc.Create(ctx, testUserID, "Deadline project", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	deadline := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
-	if err := svc.SetDeadline(ctx, project.ID, &deadline, "user-1"); err != nil {
+	if err := svc.SetDeadline(ctx, testUserID, project.ID, &deadline, "user-1"); err != nil {
 		t.Fatalf("SetDeadline: %v", err)
 	}
 
-	got, err := svc.Get(ctx, project.ID)
+	got, err := svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get after SetDeadline: %v", err)
 	}
@@ -320,11 +322,11 @@ func TestProjectService_SetDeadline(t *testing.T) {
 	}
 
 	// Remove deadline
-	if err := svc.SetDeadline(ctx, project.ID, nil, "user-1"); err != nil {
+	if err := svc.SetDeadline(ctx, testUserID, project.ID, nil, "user-1"); err != nil {
 		t.Fatalf("SetDeadline (remove): %v", err)
 	}
 
-	got, err = svc.Get(ctx, project.ID)
+	got, err = svc.Get(ctx, testUserID, project.ID)
 	if err != nil {
 		t.Fatalf("Get after SetDeadline (remove): %v", err)
 	}

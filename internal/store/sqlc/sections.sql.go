@@ -13,11 +13,11 @@ import (
 
 const createSection = `-- name: CreateSection :one
 INSERT INTO sections (
-    id, title, project_id, "index", deleted, deleted_at, created_at, updated_at
+    id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
-    ?, ?, ?, ?, 0, NULL, ?, ?
+    ?, ?, ?, ?, 0, NULL, ?, ?, ?
 )
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type CreateSectionParams struct {
@@ -27,6 +27,7 @@ type CreateSectionParams struct {
 	Index     int64          `json:"index"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (Section, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (S
 		arg.Index,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Section
 	err := row.Scan(
@@ -50,17 +52,23 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (S
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getSection = `-- name: GetSection :one
-SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed FROM sections
-WHERE id = ? AND deleted = 0
+SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id FROM sections
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetSection(ctx context.Context, id string) (Section, error) {
-	row := q.db.QueryRowContext(ctx, getSection, id)
+type GetSectionParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetSection(ctx context.Context, arg GetSectionParams) (Section, error) {
+	row := q.db.QueryRowContext(ctx, getSection, arg.ID, arg.UserID)
 	var i Section
 	err := row.Scan(
 		&i.ID,
@@ -73,18 +81,24 @@ func (q *Queries) GetSection(ctx context.Context, id string) (Section, error) {
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listSectionsByProject = `-- name: ListSectionsByProject :many
-SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed FROM sections
-WHERE project_id = ? AND deleted = 0
+SELECT id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id FROM sections
+WHERE project_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListSectionsByProject(ctx context.Context, projectID sql.NullString) ([]Section, error) {
-	rows, err := q.db.QueryContext(ctx, listSectionsByProject, projectID)
+type ListSectionsByProjectParams struct {
+	ProjectID sql.NullString `json:"project_id"`
+	UserID    string         `json:"user_id"`
+}
+
+func (q *Queries) ListSectionsByProject(ctx context.Context, arg ListSectionsByProjectParams) ([]Section, error) {
+	rows, err := q.db.QueryContext(ctx, listSectionsByProject, arg.ProjectID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +117,7 @@ func (q *Queries) ListSectionsByProject(ctx context.Context, projectID sql.NullS
 			&i.UpdatedAt,
 			&i.Archived,
 			&i.Collapsed,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -119,50 +134,68 @@ func (q *Queries) ListSectionsByProject(ctx context.Context, projectID sql.NullS
 
 const softDeleteSection = `-- name: SoftDeleteSection :exec
 UPDATE sections SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteSectionParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteSection(ctx context.Context, arg SoftDeleteSectionParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteSection, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteSection,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const softDeleteSectionsByProject = `-- name: SoftDeleteSectionsByProject :exec
 UPDATE sections SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE project_id = ? AND deleted = 0
+WHERE project_id = ? AND user_id = ? AND deleted = 0
 `
 
 type SoftDeleteSectionsByProjectParams struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ProjectID sql.NullString `json:"project_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteSectionsByProject(ctx context.Context, arg SoftDeleteSectionsByProjectParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteSectionsByProject, arg.DeletedAt, arg.UpdatedAt, arg.ProjectID)
+	_, err := q.db.ExecContext(ctx, softDeleteSectionsByProject,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateSectionIndex = `-- name: UpdateSectionIndex :one
 UPDATE sections SET "index" = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type UpdateSectionIndexParams struct {
 	Index     int64     `json:"index"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateSectionIndex(ctx context.Context, arg UpdateSectionIndexParams) (Section, error) {
-	row := q.db.QueryRowContext(ctx, updateSectionIndex, arg.Index, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateSectionIndex,
+		arg.Index,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Section
 	err := row.Scan(
 		&i.ID,
@@ -175,24 +208,31 @@ func (q *Queries) UpdateSectionIndex(ctx context.Context, arg UpdateSectionIndex
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateSectionTitle = `-- name: UpdateSectionTitle :one
 UPDATE sections SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, project_id, "index", deleted, deleted_at, created_at, updated_at, archived, collapsed, user_id
 `
 
 type UpdateSectionTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateSectionTitle(ctx context.Context, arg UpdateSectionTitleParams) (Section, error) {
-	row := q.db.QueryRowContext(ctx, updateSectionTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateSectionTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Section
 	err := row.Scan(
 		&i.ID,
@@ -205,6 +245,7 @@ func (q *Queries) UpdateSectionTitle(ctx context.Context, arg UpdateSectionTitle
 		&i.UpdatedAt,
 		&i.Archived,
 		&i.Collapsed,
+		&i.UserID,
 	)
 	return i, err
 }

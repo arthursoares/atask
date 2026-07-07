@@ -13,64 +13,83 @@ import (
 
 const cancelTasksByProject = `-- name: CancelTasksByProject :exec
 UPDATE tasks SET status = 2, updated_at = ?
-WHERE project_id = ? AND status = 0 AND deleted = 0
+WHERE project_id = ? AND user_id = ? AND status = 0 AND deleted = 0
 `
 
 type CancelTasksByProjectParams struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	ProjectID sql.NullString `json:"project_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CancelTasksByProject(ctx context.Context, arg CancelTasksByProjectParams) error {
-	_, err := q.db.ExecContext(ctx, cancelTasksByProject, arg.UpdatedAt, arg.ProjectID)
+	_, err := q.db.ExecContext(ctx, cancelTasksByProject, arg.UpdatedAt, arg.ProjectID, arg.UserID)
 	return err
 }
 
 const cascadeDeleteTasksByArea = `-- name: CascadeDeleteTasksByArea :exec
 UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE area_id = ? AND deleted = 0
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 `
 
 type CascadeDeleteTasksByAreaParams struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	AreaID    sql.NullString `json:"area_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CascadeDeleteTasksByArea(ctx context.Context, arg CascadeDeleteTasksByAreaParams) error {
-	_, err := q.db.ExecContext(ctx, cascadeDeleteTasksByArea, arg.DeletedAt, arg.UpdatedAt, arg.AreaID)
+	_, err := q.db.ExecContext(ctx, cascadeDeleteTasksByArea,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.AreaID,
+		arg.UserID,
+	)
 	return err
 }
 
 const cascadeDeleteTasksBySection = `-- name: CascadeDeleteTasksBySection :exec
 UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE section_id = ? AND deleted = 0
+WHERE section_id = ? AND user_id = ? AND deleted = 0
 `
 
 type CascadeDeleteTasksBySectionParams struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	SectionID sql.NullString `json:"section_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) CascadeDeleteTasksBySection(ctx context.Context, arg CascadeDeleteTasksBySectionParams) error {
-	_, err := q.db.ExecContext(ctx, cascadeDeleteTasksBySection, arg.DeletedAt, arg.UpdatedAt, arg.SectionID)
+	_, err := q.db.ExecContext(ctx, cascadeDeleteTasksBySection,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.SectionID,
+		arg.UserID,
+	)
 	return err
 }
 
 const completeTasksByProject = `-- name: CompleteTasksByProject :exec
 UPDATE tasks SET status = 1, completed_at = ?, updated_at = ?
-WHERE project_id = ? AND status = 0 AND deleted = 0
+WHERE project_id = ? AND user_id = ? AND status = 0 AND deleted = 0
 `
 
 type CompleteTasksByProjectParams struct {
 	CompletedAt sql.NullTime   `json:"completed_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	ProjectID   sql.NullString `json:"project_id"`
+	UserID      string         `json:"user_id"`
 }
 
 func (q *Queries) CompleteTasksByProject(ctx context.Context, arg CompleteTasksByProjectParams) error {
-	_, err := q.db.ExecContext(ctx, completeTasksByProject, arg.CompletedAt, arg.UpdatedAt, arg.ProjectID)
+	_, err := q.db.ExecContext(ctx, completeTasksByProject,
+		arg.CompletedAt,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.UserID,
+	)
 	return err
 }
 
@@ -78,13 +97,13 @@ const createTask = `-- name: CreateTask :one
 INSERT INTO tasks (
     id, title, notes, status, schedule, start_date, deadline, completed_at,
     "index", today_index, project_id, section_id, area_id, location_id,
-    recurrence_rule, deleted, deleted_at, created_at, updated_at
+    recurrence_rule, deleted, deleted_at, created_at, updated_at, user_id
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?,
-    ?, 0, NULL, ?, ?
+    ?, 0, NULL, ?, ?, ?
 )
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type CreateTaskParams struct {
@@ -105,6 +124,7 @@ type CreateTaskParams struct {
 	RecurrenceRule sql.NullString `json:"recurrence_rule"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
+	UserID         string         `json:"user_id"`
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
@@ -126,6 +146,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		arg.RecurrenceRule,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.UserID,
 	)
 	var i Task
 	err := row.Scan(
@@ -149,17 +170,23 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE id = ? AND user_id = ? AND deleted = 0
 `
 
-func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
-	row := q.db.QueryRowContext(ctx, getTask, id)
+type GetTaskParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (Task, error) {
+	row := q.db.QueryRowContext(ctx, getTask, arg.ID, arg.UserID)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -182,18 +209,19 @@ func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasks)
+func (q *Queries) ListTasks(ctx context.Context, userID string) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasks, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +250,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -237,13 +266,18 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 }
 
 const listTasksByArea = `-- name: ListTasksByArea :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE area_id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasksByArea(ctx context.Context, areaID sql.NullString) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksByArea, areaID)
+type ListTasksByAreaParams struct {
+	AreaID sql.NullString `json:"area_id"`
+	UserID string         `json:"user_id"`
+}
+
+func (q *Queries) ListTasksByArea(ctx context.Context, arg ListTasksByAreaParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksByArea, arg.AreaID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -272,6 +306,7 @@ func (q *Queries) ListTasksByArea(ctx context.Context, areaID sql.NullString) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -287,13 +322,18 @@ func (q *Queries) ListTasksByArea(ctx context.Context, areaID sql.NullString) ([
 }
 
 const listTasksByLocation = `-- name: ListTasksByLocation :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE location_id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE location_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasksByLocation(ctx context.Context, locationID sql.NullString) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksByLocation, locationID)
+type ListTasksByLocationParams struct {
+	LocationID sql.NullString `json:"location_id"`
+	UserID     string         `json:"user_id"`
+}
+
+func (q *Queries) ListTasksByLocation(ctx context.Context, arg ListTasksByLocationParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksByLocation, arg.LocationID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +362,7 @@ func (q *Queries) ListTasksByLocation(ctx context.Context, locationID sql.NullSt
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -337,13 +378,18 @@ func (q *Queries) ListTasksByLocation(ctx context.Context, locationID sql.NullSt
 }
 
 const listTasksByProject = `-- name: ListTasksByProject :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE project_id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE project_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasksByProject(ctx context.Context, projectID sql.NullString) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksByProject, projectID)
+type ListTasksByProjectParams struct {
+	ProjectID sql.NullString `json:"project_id"`
+	UserID    string         `json:"user_id"`
+}
+
+func (q *Queries) ListTasksByProject(ctx context.Context, arg ListTasksByProjectParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksByProject, arg.ProjectID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +418,7 @@ func (q *Queries) ListTasksByProject(ctx context.Context, projectID sql.NullStri
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -387,13 +434,18 @@ func (q *Queries) ListTasksByProject(ctx context.Context, projectID sql.NullStri
 }
 
 const listTasksBySchedule = `-- name: ListTasksBySchedule :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE schedule = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE schedule = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasksBySchedule(ctx context.Context, schedule int64) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksBySchedule, schedule)
+type ListTasksByScheduleParams struct {
+	Schedule int64  `json:"schedule"`
+	UserID   string `json:"user_id"`
+}
+
+func (q *Queries) ListTasksBySchedule(ctx context.Context, arg ListTasksByScheduleParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksBySchedule, arg.Schedule, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,6 +474,7 @@ func (q *Queries) ListTasksBySchedule(ctx context.Context, schedule int64) ([]Ta
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -437,13 +490,18 @@ func (q *Queries) ListTasksBySchedule(ctx context.Context, schedule int64) ([]Ta
 }
 
 const listTasksBySection = `-- name: ListTasksBySection :many
-SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot FROM tasks
-WHERE section_id = ? AND deleted = 0
+SELECT id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id FROM tasks
+WHERE section_id = ? AND user_id = ? AND deleted = 0
 ORDER BY "index"
 `
 
-func (q *Queries) ListTasksBySection(ctx context.Context, sectionID sql.NullString) ([]Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksBySection, sectionID)
+type ListTasksBySectionParams struct {
+	SectionID sql.NullString `json:"section_id"`
+	UserID    string         `json:"user_id"`
+}
+
+func (q *Queries) ListTasksBySection(ctx context.Context, arg ListTasksBySectionParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksBySection, arg.SectionID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -472,6 +530,7 @@ func (q *Queries) ListTasksBySection(ctx context.Context, sectionID sql.NullStri
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TimeSlot,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -488,80 +547,100 @@ func (q *Queries) ListTasksBySection(ctx context.Context, sectionID sql.NullStri
 
 const orphanTasksByArea = `-- name: OrphanTasksByArea :exec
 UPDATE tasks SET area_id = NULL, updated_at = ?
-WHERE area_id = ? AND deleted = 0
+WHERE area_id = ? AND user_id = ? AND deleted = 0
 `
 
 type OrphanTasksByAreaParams struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	AreaID    sql.NullString `json:"area_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) OrphanTasksByArea(ctx context.Context, arg OrphanTasksByAreaParams) error {
-	_, err := q.db.ExecContext(ctx, orphanTasksByArea, arg.UpdatedAt, arg.AreaID)
+	_, err := q.db.ExecContext(ctx, orphanTasksByArea, arg.UpdatedAt, arg.AreaID, arg.UserID)
 	return err
 }
 
 const orphanTasksBySection = `-- name: OrphanTasksBySection :exec
 UPDATE tasks SET section_id = NULL, updated_at = ?
-WHERE section_id = ? AND deleted = 0
+WHERE section_id = ? AND user_id = ? AND deleted = 0
 `
 
 type OrphanTasksBySectionParams struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	SectionID sql.NullString `json:"section_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) OrphanTasksBySection(ctx context.Context, arg OrphanTasksBySectionParams) error {
-	_, err := q.db.ExecContext(ctx, orphanTasksBySection, arg.UpdatedAt, arg.SectionID)
+	_, err := q.db.ExecContext(ctx, orphanTasksBySection, arg.UpdatedAt, arg.SectionID, arg.UserID)
 	return err
 }
 
 const softDeleteTask = `-- name: SoftDeleteTask :exec
 UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND user_id = ?
 `
 
 type SoftDeleteTaskParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteTask(ctx context.Context, arg SoftDeleteTaskParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteTask, arg.DeletedAt, arg.UpdatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteTask,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
 const softDeleteTasksByProject = `-- name: SoftDeleteTasksByProject :exec
 UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ?
-WHERE project_id = ? AND deleted = 0
+WHERE project_id = ? AND user_id = ? AND deleted = 0
 `
 
 type SoftDeleteTasksByProjectParams struct {
 	DeletedAt sql.NullTime   `json:"deleted_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ProjectID sql.NullString `json:"project_id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) SoftDeleteTasksByProject(ctx context.Context, arg SoftDeleteTasksByProjectParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteTasksByProject, arg.DeletedAt, arg.UpdatedAt, arg.ProjectID)
+	_, err := q.db.ExecContext(ctx, softDeleteTasksByProject,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.UserID,
+	)
 	return err
 }
 
 const updateTaskArea = `-- name: UpdateTaskArea :one
 UPDATE tasks SET area_id = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskAreaParams struct {
 	AreaID    sql.NullString `json:"area_id"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskArea(ctx context.Context, arg UpdateTaskAreaParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskArea, arg.AreaID, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskArea,
+		arg.AreaID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -584,24 +663,31 @@ func (q *Queries) UpdateTaskArea(ctx context.Context, arg UpdateTaskAreaParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskDeadline = `-- name: UpdateTaskDeadline :one
 UPDATE tasks SET deadline = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskDeadlineParams struct {
 	Deadline  sql.NullString `json:"deadline"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskDeadline(ctx context.Context, arg UpdateTaskDeadlineParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskDeadline, arg.Deadline, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskDeadline,
+		arg.Deadline,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -624,24 +710,31 @@ func (q *Queries) UpdateTaskDeadline(ctx context.Context, arg UpdateTaskDeadline
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskIndex = `-- name: UpdateTaskIndex :one
 UPDATE tasks SET "index" = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskIndexParams struct {
 	Index     int64     `json:"index"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskIndex(ctx context.Context, arg UpdateTaskIndexParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskIndex, arg.Index, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskIndex,
+		arg.Index,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -664,24 +757,31 @@ func (q *Queries) UpdateTaskIndex(ctx context.Context, arg UpdateTaskIndexParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskLocation = `-- name: UpdateTaskLocation :one
 UPDATE tasks SET location_id = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskLocationParams struct {
 	LocationID sql.NullString `json:"location_id"`
 	UpdatedAt  time.Time      `json:"updated_at"`
 	ID         string         `json:"id"`
+	UserID     string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskLocation(ctx context.Context, arg UpdateTaskLocationParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskLocation, arg.LocationID, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskLocation,
+		arg.LocationID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -704,24 +804,31 @@ func (q *Queries) UpdateTaskLocation(ctx context.Context, arg UpdateTaskLocation
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskNotes = `-- name: UpdateTaskNotes :one
 UPDATE tasks SET notes = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskNotesParams struct {
 	Notes     string    `json:"notes"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskNotes(ctx context.Context, arg UpdateTaskNotesParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskNotes, arg.Notes, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskNotes,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -744,24 +851,31 @@ func (q *Queries) UpdateTaskNotes(ctx context.Context, arg UpdateTaskNotesParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskProject = `-- name: UpdateTaskProject :one
 UPDATE tasks SET project_id = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskProjectParams struct {
 	ProjectID sql.NullString `json:"project_id"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskProject(ctx context.Context, arg UpdateTaskProjectParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskProject, arg.ProjectID, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskProject,
+		arg.ProjectID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -784,24 +898,31 @@ func (q *Queries) UpdateTaskProject(ctx context.Context, arg UpdateTaskProjectPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskRecurrence = `-- name: UpdateTaskRecurrence :one
 UPDATE tasks SET recurrence_rule = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskRecurrenceParams struct {
 	RecurrenceRule sql.NullString `json:"recurrence_rule"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	ID             string         `json:"id"`
+	UserID         string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskRecurrence(ctx context.Context, arg UpdateTaskRecurrenceParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskRecurrence, arg.RecurrenceRule, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskRecurrence,
+		arg.RecurrenceRule,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -824,24 +945,31 @@ func (q *Queries) UpdateTaskRecurrence(ctx context.Context, arg UpdateTaskRecurr
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskSchedule = `-- name: UpdateTaskSchedule :one
 UPDATE tasks SET schedule = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskScheduleParams struct {
 	Schedule  int64     `json:"schedule"`
 	UpdatedAt time.Time `json:"updated_at"`
 	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskSchedule(ctx context.Context, arg UpdateTaskScheduleParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskSchedule, arg.Schedule, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskSchedule,
+		arg.Schedule,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -864,24 +992,31 @@ func (q *Queries) UpdateTaskSchedule(ctx context.Context, arg UpdateTaskSchedule
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskSection = `-- name: UpdateTaskSection :one
 UPDATE tasks SET section_id = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskSectionParams struct {
 	SectionID sql.NullString `json:"section_id"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskSection(ctx context.Context, arg UpdateTaskSectionParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskSection, arg.SectionID, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskSection,
+		arg.SectionID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -904,24 +1039,31 @@ func (q *Queries) UpdateTaskSection(ctx context.Context, arg UpdateTaskSectionPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskStartDate = `-- name: UpdateTaskStartDate :one
 UPDATE tasks SET start_date = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskStartDateParams struct {
 	StartDate sql.NullString `json:"start_date"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskStartDate(ctx context.Context, arg UpdateTaskStartDateParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskStartDate, arg.StartDate, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskStartDate,
+		arg.StartDate,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -944,14 +1086,15 @@ func (q *Queries) UpdateTaskStartDate(ctx context.Context, arg UpdateTaskStartDa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskStatusParams struct {
@@ -959,6 +1102,7 @@ type UpdateTaskStatusParams struct {
 	CompletedAt sql.NullTime `json:"completed_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 	ID          string       `json:"id"`
+	UserID      string       `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) (Task, error) {
@@ -967,6 +1111,7 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		arg.CompletedAt,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.UserID,
 	)
 	var i Task
 	err := row.Scan(
@@ -990,24 +1135,31 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskTitle = `-- name: UpdateTaskTitle :one
 UPDATE tasks SET title = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskTitleParams struct {
 	Title     sql.NullString `json:"title"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskTitle(ctx context.Context, arg UpdateTaskTitleParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskTitle, arg.Title, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskTitle,
+		arg.Title,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -1030,24 +1182,31 @@ func (q *Queries) UpdateTaskTitle(ctx context.Context, arg UpdateTaskTitleParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const updateTaskTodayIndex = `-- name: UpdateTaskTodayIndex :one
 UPDATE tasks SET today_index = ?, updated_at = ?
-WHERE id = ? AND deleted = 0
-RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot
+WHERE id = ? AND user_id = ? AND deleted = 0
+RETURNING id, title, notes, status, schedule, start_date, deadline, completed_at, "index", today_index, project_id, section_id, area_id, location_id, recurrence_rule, deleted, deleted_at, created_at, updated_at, time_slot, user_id
 `
 
 type UpdateTaskTodayIndexParams struct {
 	TodayIndex sql.NullInt64 `json:"today_index"`
 	UpdatedAt  time.Time     `json:"updated_at"`
 	ID         string        `json:"id"`
+	UserID     string        `json:"user_id"`
 }
 
 func (q *Queries) UpdateTaskTodayIndex(ctx context.Context, arg UpdateTaskTodayIndexParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskTodayIndex, arg.TodayIndex, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateTaskTodayIndex,
+		arg.TodayIndex,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
@@ -1070,6 +1229,7 @@ func (q *Queries) UpdateTaskTodayIndex(ctx context.Context, arg UpdateTaskTodayI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TimeSlot,
+		&i.UserID,
 	)
 	return i, err
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/atask/atask/internal/store"
 )
 
+const testUserID = "test-user-1"
+
 // newTestAreaService creates an in-memory DB, runs migrations, and returns an AreaService.
 func newTestAreaService(t *testing.T) *AreaService {
 	t.Helper()
@@ -31,7 +33,7 @@ func TestAreaService_Create(t *testing.T) {
 	svc := newTestAreaService(t)
 	ctx := context.Background()
 
-	area, err := svc.Create(ctx, "Work", "user-1")
+	area, err := svc.Create(ctx, testUserID, "Work", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -43,7 +45,7 @@ func TestAreaService_Create(t *testing.T) {
 	}
 
 	// Verify it can be retrieved
-	got, err := svc.Get(ctx, area.ID)
+	got, err := svc.Get(ctx, testUserID, area.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestAreaService_Create_EmptyTitle(t *testing.T) {
 	svc := newTestAreaService(t)
 	ctx := context.Background()
 
-	_, err := svc.Create(ctx, "", "user-1")
+	_, err := svc.Create(ctx, testUserID, "", "user-1")
 	if err == nil {
 		t.Fatal("expected error for empty title, got nil")
 	}
@@ -69,16 +71,16 @@ func TestAreaService_Archive(t *testing.T) {
 	svc := newTestAreaService(t)
 	ctx := context.Background()
 
-	area, err := svc.Create(ctx, "Personal", "user-1")
+	area, err := svc.Create(ctx, testUserID, "Personal", "user-1")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := svc.Archive(ctx, area.ID, "user-1"); err != nil {
+	if err := svc.Archive(ctx, testUserID, area.ID, "user-1"); err != nil {
 		t.Fatalf("Archive: %v", err)
 	}
 
-	got, err := svc.Get(ctx, area.ID)
+	got, err := svc.Get(ctx, testUserID, area.ID)
 	if err != nil {
 		t.Fatalf("Get after Archive: %v", err)
 	}

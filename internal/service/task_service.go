@@ -119,7 +119,7 @@ func taskFromRow(row sqlc.Task) *domain.Task {
 func (s *TaskService) publishEvent(
 	ctx context.Context,
 	eventType domain.EventType,
-	taskID, actorID string,
+	taskID, actorID, userID string,
 	now time.Time,
 	payload map[string]any,
 	deltaAction domain.DeltaAction,
@@ -133,13 +133,14 @@ func (s *TaskService) publishEvent(
 		Field:      field,
 		NewValue:   newValue,
 		ActorID:    actorID,
+		UserID:     userID,
 		Timestamp:  now,
 	}); err != nil {
 		return err
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "task", taskID, actorID, payloadJSON)
+	eventID, err := s.events.AppendDomainEvent(ctx, eventType, "task", taskID, actorID, userID, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -150,6 +151,7 @@ func (s *TaskService) publishEvent(
 		EntityType: "task",
 		EntityID:   taskID,
 		ActorID:    actorID,
+		UserID:     userID,
 		Payload:    payload,
 		Timestamp:  now,
 	})
@@ -158,7 +160,7 @@ func (s *TaskService) publishEvent(
 }
 
 // Create creates a new task in inbox with the given title.
-func (s *TaskService) Create(ctx context.Context, title, actorID string, opts ...string) (*domain.Task, error) {
+func (s *TaskService) Create(ctx context.Context, userID, title, actorID string, opts ...string) (*domain.Task, error) {
 	if title == "" {
 		return nil, errors.New("task title must not be empty")
 	}
@@ -179,6 +181,7 @@ func (s *TaskService) Create(ctx context.Context, title, actorID string, opts ..
 		Schedule:  int64(domain.ScheduleInbox),
 		CreatedAt: now,
 		UpdatedAt: now,
+		UserID:    userID,
 	})
 	if err != nil {
 		return nil, err
@@ -187,7 +190,7 @@ func (s *TaskService) Create(ctx context.Context, title, actorID string, opts ..
 	task := taskFromRow(row)
 
 	payload := map[string]any{"title": title}
-	if err := s.publishEvent(ctx, domain.TaskCreated, task.ID, actorID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
+	if err := s.publishEvent(ctx, domain.TaskCreated, task.ID, actorID, userID, now, payload, domain.DeltaCreated, nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -195,8 +198,8 @@ func (s *TaskService) Create(ctx context.Context, title, actorID string, opts ..
 }
 
 // hydrateTags queries and populates the Tags field on a task.
-func (s *TaskService) hydrateTags(ctx context.Context, task *domain.Task) error {
-	tags, err := s.queries.ListTaskTags(ctx, task.ID)
+func (s *TaskService) hydrateTags(ctx context.Context, userID string, task *domain.Task) error {
+	tags, err := s.queries.ListTaskTags(ctx, sqlc.ListTaskTagsParams{TaskID: task.ID, UserID: userID})
 	if err != nil {
 		return err
 	}
@@ -208,8 +211,8 @@ func (s *TaskService) hydrateTags(ctx context.Context, task *domain.Task) error 
 }
 
 // hydrateLinks queries and populates the LinkedTaskIDs field on a task.
-func (s *TaskService) hydrateLinks(ctx context.Context, task *domain.Task) error {
-	links, err := s.queries.ListTaskLinks(ctx, task.ID)
+func (s *TaskService) hydrateLinks(ctx context.Context, userID string, task *domain.Task) error {
+	links, err := s.queries.ListTaskLinks(ctx, sqlc.ListTaskLinksParams{TaskID: task.ID, UserID: userID})
 	if err != nil {
 		return err
 	}
@@ -221,24 +224,24 @@ func (s *TaskService) hydrateLinks(ctx context.Context, task *domain.Task) error
 }
 
 // Get fetches a task by ID, including its tags and links.
-func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) {
-	row, err := s.queries.GetTask(ctx, id)
+func (s *TaskService) Get(ctx context.Context, userID, id string) (*domain.Task, error) {
+	row, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
 	task := taskFromRow(row)
-	if err := s.hydrateTags(ctx, task); err != nil {
+	if err := s.hydrateTags(ctx, userID, task); err != nil {
 		return nil, err
 	}
-	if err := s.hydrateLinks(ctx, task); err != nil {
+	if err := s.hydrateLinks(ctx, userID, task); err != nil {
 		return nil, err
 	}
 	return task, nil
 }
 
 // List returns all non-deleted tasks.
-func (s *TaskService) List(ctx context.Context) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasks(ctx)
+func (s *TaskService) List(ctx context.Context, userID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +249,11 @@ func (s *TaskService) List(ctx context.Context) ([]*domain.Task, error) {
 }
 
 // ListByProject returns non-deleted tasks belonging to the given project.
-func (s *TaskService) ListByProject(ctx context.Context, projectID string) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasksByProject(ctx, sql.NullString{String: projectID, Valid: true})
+func (s *TaskService) ListByProject(ctx context.Context, userID, projectID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByProject(ctx, sqlc.ListTasksByProjectParams{
+		ProjectID: sql.NullString{String: projectID, Valid: true},
+		UserID:    userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +261,11 @@ func (s *TaskService) ListByProject(ctx context.Context, projectID string) ([]*d
 }
 
 // ListByArea returns non-deleted tasks belonging to the given area.
-func (s *TaskService) ListByArea(ctx context.Context, areaID string) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasksByArea(ctx, sql.NullString{String: areaID, Valid: true})
+func (s *TaskService) ListByArea(ctx context.Context, userID, areaID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByArea(ctx, sqlc.ListTasksByAreaParams{
+		AreaID: sql.NullString{String: areaID, Valid: true},
+		UserID: userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +273,11 @@ func (s *TaskService) ListByArea(ctx context.Context, areaID string) ([]*domain.
 }
 
 // ListBySection returns non-deleted tasks belonging to the given section.
-func (s *TaskService) ListBySection(ctx context.Context, sectionID string) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasksBySection(ctx, sql.NullString{String: sectionID, Valid: true})
+func (s *TaskService) ListBySection(ctx context.Context, userID, sectionID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksBySection(ctx, sqlc.ListTasksBySectionParams{
+		SectionID: sql.NullString{String: sectionID, Valid: true},
+		UserID:    userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -273,8 +285,11 @@ func (s *TaskService) ListBySection(ctx context.Context, sectionID string) ([]*d
 }
 
 // ListBySchedule returns non-deleted tasks with the given schedule.
-func (s *TaskService) ListBySchedule(ctx context.Context, schedule domain.Schedule) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasksBySchedule(ctx, int64(schedule))
+func (s *TaskService) ListBySchedule(ctx context.Context, userID string, schedule domain.Schedule) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksBySchedule(ctx, sqlc.ListTasksByScheduleParams{
+		Schedule: int64(schedule),
+		UserID:   userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +297,11 @@ func (s *TaskService) ListBySchedule(ctx context.Context, schedule domain.Schedu
 }
 
 // ListByLocation returns non-deleted tasks at the given location.
-func (s *TaskService) ListByLocation(ctx context.Context, locationID string) ([]*domain.Task, error) {
-	rows, err := s.queries.ListTasksByLocation(ctx, sql.NullString{String: locationID, Valid: true})
+func (s *TaskService) ListByLocation(ctx context.Context, userID, locationID string) ([]*domain.Task, error) {
+	rows, err := s.queries.ListTasksByLocation(ctx, sqlc.ListTasksByLocationParams{
+		LocationID: sql.NullString{String: locationID, Valid: true},
+		UserID:     userID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -299,41 +317,43 @@ func tasksFromRows(rows []sqlc.Task) []*domain.Task {
 }
 
 // Complete sets a task's status to completed and emits task.completed.
-func (s *TaskService) Complete(ctx context.Context, id, actorID string) error {
+func (s *TaskService) Complete(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateTaskStatus(ctx, sqlc.UpdateTaskStatusParams{
 		Status:      int64(domain.StatusCompleted),
 		CompletedAt: sql.NullTime{Time: now, Valid: true},
 		UpdatedAt:   now,
 		ID:          id,
+		UserID:      userID,
 	})
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishEvent(ctx, domain.TaskCompleted, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"completed"`))
+	return s.publishEvent(ctx, domain.TaskCompleted, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"completed"`))
 }
 
 // Cancel sets a task's status to cancelled and emits task.cancelled.
-func (s *TaskService) Cancel(ctx context.Context, id, actorID string) error {
+func (s *TaskService) Cancel(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateTaskStatus(ctx, sqlc.UpdateTaskStatusParams{
 		Status:      int64(domain.StatusCancelled),
 		CompletedAt: sql.NullTime{Time: now, Valid: true},
 		UpdatedAt:   now,
 		ID:          id,
+		UserID:      userID,
 	})
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishEvent(ctx, domain.TaskCancelled, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"cancelled"`))
+	return s.publishEvent(ctx, domain.TaskCancelled, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"cancelled"`))
 }
 
 // UpdateTitle validates and updates the task title, then emits task.title_changed.
-func (s *TaskService) UpdateTitle(ctx context.Context, id, title, actorID string) error {
+func (s *TaskService) UpdateTitle(ctx context.Context, userID, id, title, actorID string) error {
 	if title == "" {
 		return errors.New("task title must not be empty")
 	}
@@ -343,6 +363,7 @@ func (s *TaskService) UpdateTitle(ctx context.Context, id, title, actorID string
 		Title:     sql.NullString{String: title, Valid: true},
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -350,16 +371,17 @@ func (s *TaskService) UpdateTitle(ctx context.Context, id, title, actorID string
 
 	payload := map[string]any{"title": title}
 	titleJSON, _ := json.Marshal(title)
-	return s.publishEvent(ctx, domain.TaskTitleChanged, id, actorID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
+	return s.publishEvent(ctx, domain.TaskTitleChanged, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("title"), titleJSON)
 }
 
 // UpdateNotes updates the task notes and emits task.notes_changed.
-func (s *TaskService) UpdateNotes(ctx context.Context, id, notes, actorID string) error {
+func (s *TaskService) UpdateNotes(ctx context.Context, userID, id, notes, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateTaskNotes(ctx, sqlc.UpdateTaskNotesParams{
 		Notes:     notes,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -367,17 +389,18 @@ func (s *TaskService) UpdateNotes(ctx context.Context, id, notes, actorID string
 
 	payload := map[string]any{"notes": notes}
 	notesJSON, _ := json.Marshal(notes)
-	return s.publishEvent(ctx, domain.TaskNotesChanged, id, actorID, now, payload, domain.DeltaModified, strPtr("notes"), notesJSON)
+	return s.publishEvent(ctx, domain.TaskNotesChanged, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("notes"), notesJSON)
 }
 
 // UpdateSchedule updates the task schedule and emits the appropriate event.
 // Emits: task.scheduled_today (anytime), task.deferred (someday), task.moved_to_inbox (inbox).
-func (s *TaskService) UpdateSchedule(ctx context.Context, id string, schedule domain.Schedule, actorID string) error {
+func (s *TaskService) UpdateSchedule(ctx context.Context, userID, id string, schedule domain.Schedule, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateTaskSchedule(ctx, sqlc.UpdateTaskScheduleParams{
 		Schedule:  int64(schedule),
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -395,11 +418,11 @@ func (s *TaskService) UpdateSchedule(ctx context.Context, id string, schedule do
 
 	payload := map[string]any{"schedule": schedule.String()}
 	schedJSON, _ := json.Marshal(schedule.String())
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("schedule"), schedJSON)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("schedule"), schedJSON)
 }
 
 // SetStartDate sets the task start date and emits task.start_date_set.
-func (s *TaskService) SetStartDate(ctx context.Context, id string, date *time.Time, actorID string) error {
+func (s *TaskService) SetStartDate(ctx context.Context, userID, id string, date *time.Time, actorID string) error {
 	now := timeNow()
 
 	var startDate sql.NullString
@@ -411,6 +434,7 @@ func (s *TaskService) SetStartDate(ctx context.Context, id string, date *time.Ti
 		StartDate: startDate,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -420,11 +444,11 @@ func (s *TaskService) SetStartDate(ctx context.Context, id string, date *time.Ti
 	if date != nil {
 		payload["start_date"] = date.Format("2006-01-02")
 	}
-	return s.publishEvent(ctx, domain.TaskStartDateSet, id, actorID, now, payload, domain.DeltaModified, strPtr("start_date"), nil)
+	return s.publishEvent(ctx, domain.TaskStartDateSet, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("start_date"), nil)
 }
 
 // SetDeadline sets the task deadline and emits task.deadline_set or task.deadline_removed if nil.
-func (s *TaskService) SetDeadline(ctx context.Context, id string, date *time.Time, actorID string) error {
+func (s *TaskService) SetDeadline(ctx context.Context, userID, id string, date *time.Time, actorID string) error {
 	now := timeNow()
 
 	var deadline sql.NullString
@@ -436,6 +460,7 @@ func (s *TaskService) SetDeadline(ctx context.Context, id string, date *time.Tim
 		Deadline:  deadline,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -449,16 +474,20 @@ func (s *TaskService) SetDeadline(ctx context.Context, id string, date *time.Tim
 	} else {
 		eventType = domain.TaskDeadlineRemoved
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("deadline"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("deadline"), nil)
 }
 
 // MoveToProject sets the task project. If nil, clears project and section and emits task.removed_from_project.
-// If set, emits task.moved_to_project.
-func (s *TaskService) MoveToProject(ctx context.Context, id string, projectID *string, actorID string) error {
+// If set, emits task.moved_to_project. Verifies the target project belongs to userID (spec §2.4)
+// before mutating, returning domain.ErrNotFound if it does not.
+func (s *TaskService) MoveToProject(ctx context.Context, userID, id string, projectID *string, actorID string) error {
 	now := timeNow()
 
 	var projectNullStr sql.NullString
 	if projectID != nil {
+		if _, err := s.queries.GetProject(ctx, sqlc.GetProjectParams{ID: *projectID, UserID: userID}); err != nil {
+			return mapNotFound(err)
+		}
 		projectNullStr = sql.NullString{String: *projectID, Valid: true}
 	}
 
@@ -466,6 +495,7 @@ func (s *TaskService) MoveToProject(ctx context.Context, id string, projectID *s
 		ProjectID: projectNullStr,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -477,6 +507,7 @@ func (s *TaskService) MoveToProject(ctx context.Context, id string, projectID *s
 			SectionID: sql.NullString{},
 			UpdatedAt: now,
 			ID:        id,
+			UserID:    userID,
 		}); err != nil {
 			return err
 		}
@@ -490,15 +521,28 @@ func (s *TaskService) MoveToProject(ctx context.Context, id string, projectID *s
 	} else {
 		eventType = domain.TaskRemovedFromProject
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("project_id"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("project_id"), nil)
 }
 
 // MoveToSection sets the task section and emits task.moved_to_section or task.removed_from_section.
-func (s *TaskService) MoveToSection(ctx context.Context, id string, sectionID *string, actorID string) error {
+// Verifies the target section belongs to userID and that its project_id matches the task's
+// current project_id (spec §2.4) before mutating, returning domain.ErrNotFound otherwise.
+func (s *TaskService) MoveToSection(ctx context.Context, userID, id string, sectionID *string, actorID string) error {
 	now := timeNow()
 
 	var sectionNullStr sql.NullString
 	if sectionID != nil {
+		section, err := s.queries.GetSection(ctx, sqlc.GetSectionParams{ID: *sectionID, UserID: userID})
+		if err != nil {
+			return mapNotFound(err)
+		}
+		task, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID})
+		if err != nil {
+			return mapNotFound(err)
+		}
+		if !section.ProjectID.Valid || !task.ProjectID.Valid || section.ProjectID.String != task.ProjectID.String {
+			return domain.ErrNotFound
+		}
 		sectionNullStr = sql.NullString{String: *sectionID, Valid: true}
 	}
 
@@ -506,6 +550,7 @@ func (s *TaskService) MoveToSection(ctx context.Context, id string, sectionID *s
 		SectionID: sectionNullStr,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -519,15 +564,20 @@ func (s *TaskService) MoveToSection(ctx context.Context, id string, sectionID *s
 	} else {
 		eventType = domain.TaskRemovedFromSection
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("section_id"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("section_id"), nil)
 }
 
 // MoveToArea sets the task area and emits task.moved_to_area or task.removed_from_area.
-func (s *TaskService) MoveToArea(ctx context.Context, id string, areaID *string, actorID string) error {
+// Verifies the target area belongs to userID (spec §2.4) before mutating, returning
+// domain.ErrNotFound if it does not.
+func (s *TaskService) MoveToArea(ctx context.Context, userID, id string, areaID *string, actorID string) error {
 	now := timeNow()
 
 	var areaNullStr sql.NullString
 	if areaID != nil {
+		if _, err := s.queries.GetArea(ctx, sqlc.GetAreaParams{ID: *areaID, UserID: userID}); err != nil {
+			return mapNotFound(err)
+		}
 		areaNullStr = sql.NullString{String: *areaID, Valid: true}
 	}
 
@@ -535,6 +585,7 @@ func (s *TaskService) MoveToArea(ctx context.Context, id string, areaID *string,
 		AreaID:    areaNullStr,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -548,15 +599,20 @@ func (s *TaskService) MoveToArea(ctx context.Context, id string, areaID *string,
 	} else {
 		eventType = domain.TaskRemovedFromArea
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("area_id"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("area_id"), nil)
 }
 
 // SetLocation sets the task location and emits task.location_set or task.location_removed.
-func (s *TaskService) SetLocation(ctx context.Context, id string, locationID *string, actorID string) error {
+// Verifies the target location belongs to userID (spec §2.4) before mutating, returning
+// domain.ErrNotFound if it does not.
+func (s *TaskService) SetLocation(ctx context.Context, userID, id string, locationID *string, actorID string) error {
 	now := timeNow()
 
 	var locationNullStr sql.NullString
 	if locationID != nil {
+		if _, err := s.queries.GetLocation(ctx, sqlc.GetLocationParams{ID: *locationID, UserID: userID}); err != nil {
+			return mapNotFound(err)
+		}
 		locationNullStr = sql.NullString{String: *locationID, Valid: true}
 	}
 
@@ -564,6 +620,7 @@ func (s *TaskService) SetLocation(ctx context.Context, id string, locationID *st
 		LocationID: locationNullStr,
 		UpdatedAt:  now,
 		ID:         id,
+		UserID:     userID,
 	})
 	if err != nil {
 		return err
@@ -577,11 +634,11 @@ func (s *TaskService) SetLocation(ctx context.Context, id string, locationID *st
 	} else {
 		eventType = domain.TaskLocationRemoved
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("location_id"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("location_id"), nil)
 }
 
 // SetRecurrence validates and sets the recurrence rule, then emits task.recurrence_set or task.recurrence_removed.
-func (s *TaskService) SetRecurrence(ctx context.Context, id string, rule *domain.RecurrenceRule, actorID string) error {
+func (s *TaskService) SetRecurrence(ctx context.Context, userID, id string, rule *domain.RecurrenceRule, actorID string) error {
 	now := timeNow()
 
 	var recurrenceNullStr sql.NullString
@@ -600,6 +657,7 @@ func (s *TaskService) SetRecurrence(ctx context.Context, id string, rule *domain
 		RecurrenceRule: recurrenceNullStr,
 		UpdatedAt:      now,
 		ID:             id,
+		UserID:         userID,
 	})
 	if err != nil {
 		return err
@@ -613,37 +671,49 @@ func (s *TaskService) SetRecurrence(ctx context.Context, id string, rule *domain
 	} else {
 		eventType = domain.TaskRecurrenceRemoved
 	}
-	return s.publishEvent(ctx, eventType, id, actorID, now, payload, domain.DeltaModified, strPtr("recurrence_rule"), nil)
+	return s.publishEvent(ctx, eventType, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("recurrence_rule"), nil)
 }
 
-// AddTag adds a tag to the task and emits task.tag_added.
-func (s *TaskService) AddTag(ctx context.Context, id, tagID, actorID string) error {
+// AddTag adds a tag to the task and emits task.tag_added. Verifies both the task and
+// the tag belong to userID (spec §2.4) before mutating, returning domain.ErrNotFound
+// if either does not.
+func (s *TaskService) AddTag(ctx context.Context, userID, id, tagID, actorID string) error {
 	now := timeNow()
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID}); err != nil {
+		return mapNotFound(err)
+	}
+
+	if _, err := s.queries.GetTag(ctx, sqlc.GetTagParams{ID: tagID, UserID: userID}); err != nil {
+		return mapNotFound(err)
+	}
 
 	if err := s.queries.AddTaskTag(ctx, sqlc.AddTaskTagParams{
 		TaskID: id,
 		TagID:  tagID,
+		UserID: userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{"tag_id": tagID}
-	return s.publishEvent(ctx, domain.TaskTagAdded, id, actorID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
+	return s.publishEvent(ctx, domain.TaskTagAdded, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
 }
 
 // RemoveTag removes a tag from the task and emits task.tag_removed.
-func (s *TaskService) RemoveTag(ctx context.Context, id, tagID, actorID string) error {
+func (s *TaskService) RemoveTag(ctx context.Context, userID, id, tagID, actorID string) error {
 	now := timeNow()
 
 	if err := s.queries.RemoveTaskTag(ctx, sqlc.RemoveTaskTagParams{
 		TaskID: id,
 		TagID:  tagID,
+		UserID: userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{"tag_id": tagID}
-	return s.publishEvent(ctx, domain.TaskTagRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
+	return s.publishEvent(ctx, domain.TaskTagRemoved, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("tags"), nil)
 }
 
 // ErrSelfLink is returned by AddLink when a task is asked to link to
@@ -656,9 +726,19 @@ var ErrSelfLink = errors.New("task cannot link to itself")
 // task.link_added for both tasks so clients viewing either task receive the
 // delta. The link is stored as two mirrored rows in task_links so that
 // hydrateLinks (which reads only outgoing) works symmetrically.
-func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID string) error {
+// Verifies both the primary task and the related task belong to userID
+// (spec §2.4) before linking, returning domain.ErrNotFound if either does not.
+func (s *TaskService) AddLink(ctx context.Context, userID, id, relatedTaskID, actorID string) error {
 	if id == relatedTaskID {
 		return ErrSelfLink
+	}
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID}); err != nil {
+		return mapNotFound(err)
+	}
+
+	if _, err := s.queries.GetTask(ctx, sqlc.GetTaskParams{ID: relatedTaskID, UserID: userID}); err != nil {
+		return mapNotFound(err)
 	}
 
 	now := timeNow()
@@ -670,6 +750,7 @@ func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID st
 		RelatedTaskID:    relatedTaskID,
 		RelationshipType: "related",
 		CreatedAt:        sql.NullTime{Time: now, Valid: true},
+		UserID:           userID,
 	}); err != nil {
 		return err
 	}
@@ -678,53 +759,57 @@ func (s *TaskService) AddLink(ctx context.Context, id, relatedTaskID, actorID st
 		RelatedTaskID:    id,
 		RelationshipType: "related",
 		CreatedAt:        sql.NullTime{Time: now, Valid: true},
+		UserID:           userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{"related_task_id": relatedTaskID}
-	if err := s.publishEvent(ctx, domain.TaskLinkAdded, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
+	if err := s.publishEvent(ctx, domain.TaskLinkAdded, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
 		return err
 	}
 	// Mirror delta for the peer so a client viewing the peer also refreshes.
 	peerPayload := map[string]any{"related_task_id": id}
-	return s.publishEvent(ctx, domain.TaskLinkAdded, relatedTaskID, actorID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
+	return s.publishEvent(ctx, domain.TaskLinkAdded, relatedTaskID, actorID, userID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
 }
 
 // RemoveLink removes both directions of a link between two tasks and emits
 // task.link_removed for both peers.
-func (s *TaskService) RemoveLink(ctx context.Context, id, relatedTaskID, actorID string) error {
+func (s *TaskService) RemoveLink(ctx context.Context, userID, id, relatedTaskID, actorID string) error {
 	now := timeNow()
 
 	if err := s.queries.RemoveTaskLink(ctx, sqlc.RemoveTaskLinkParams{
 		TaskID:        id,
 		RelatedTaskID: relatedTaskID,
+		UserID:        userID,
 	}); err != nil {
 		return err
 	}
 	if err := s.queries.RemoveTaskLink(ctx, sqlc.RemoveTaskLinkParams{
 		TaskID:        relatedTaskID,
 		RelatedTaskID: id,
+		UserID:        userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{"related_task_id": relatedTaskID}
-	if err := s.publishEvent(ctx, domain.TaskLinkRemoved, id, actorID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
+	if err := s.publishEvent(ctx, domain.TaskLinkRemoved, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("links"), nil); err != nil {
 		return err
 	}
 	peerPayload := map[string]any{"related_task_id": id}
-	return s.publishEvent(ctx, domain.TaskLinkRemoved, relatedTaskID, actorID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
+	return s.publishEvent(ctx, domain.TaskLinkRemoved, relatedTaskID, actorID, userID, now, peerPayload, domain.DeltaModified, strPtr("links"), nil)
 }
 
 // Reorder sets the task index and emits task.reordered.
-func (s *TaskService) Reorder(ctx context.Context, id string, newIndex int, actorID string) error {
+func (s *TaskService) Reorder(ctx context.Context, userID, id string, newIndex int, actorID string) error {
 	now := timeNow()
 
 	_, err := s.queries.UpdateTaskIndex(ctx, sqlc.UpdateTaskIndexParams{
 		Index:     int64(newIndex),
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	})
 	if err != nil {
 		return err
@@ -732,11 +817,11 @@ func (s *TaskService) Reorder(ctx context.Context, id string, newIndex int, acto
 
 	payload := map[string]any{"index": newIndex}
 	idxJSON, _ := json.Marshal(newIndex)
-	return s.publishEvent(ctx, domain.TaskReordered, id, actorID, now, payload, domain.DeltaModified, strPtr("index"), idxJSON)
+	return s.publishEvent(ctx, domain.TaskReordered, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("index"), idxJSON)
 }
 
 // SetTodayIndex sets or clears the today_index for a task and emits task.today_index_set.
-func (s *TaskService) SetTodayIndex(ctx context.Context, id string, todayIndex *int, actorID string) error {
+func (s *TaskService) SetTodayIndex(ctx context.Context, userID, id string, todayIndex *int, actorID string) error {
 	now := timeNow()
 
 	var todayIndexNull sql.NullInt64
@@ -748,6 +833,7 @@ func (s *TaskService) SetTodayIndex(ctx context.Context, id string, todayIndex *
 		TodayIndex: todayIndexNull,
 		UpdatedAt:  now,
 		ID:         id,
+		UserID:     userID,
 	})
 	if err != nil {
 		return err
@@ -758,28 +844,29 @@ func (s *TaskService) SetTodayIndex(ctx context.Context, id string, todayIndex *
 		payload["today_index"] = *todayIndex
 	}
 	idxJSON, _ := json.Marshal(todayIndex)
-	return s.publishEvent(ctx, domain.TaskTodayIndexSet, id, actorID, now, payload, domain.DeltaModified, strPtr("today_index"), idxJSON)
+	return s.publishEvent(ctx, domain.TaskTodayIndexSet, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("today_index"), idxJSON)
 }
 
 // Reopen sets a completed or cancelled task back to pending and emits task.reopened.
-func (s *TaskService) Reopen(ctx context.Context, id, actorID string) error {
+func (s *TaskService) Reopen(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	_, err := s.queries.UpdateTaskStatus(ctx, sqlc.UpdateTaskStatusParams{
 		Status:      int64(domain.StatusPending),
 		CompletedAt: sql.NullTime{},
 		UpdatedAt:   now,
 		ID:          id,
+		UserID:      userID,
 	})
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishEvent(ctx, domain.TaskReopened, id, actorID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
+	return s.publishEvent(ctx, domain.TaskReopened, id, actorID, userID, now, payload, domain.DeltaModified, strPtr("status"), json.RawMessage(`"pending"`))
 }
 
 // Delete soft-deletes the task and emits task.deleted.
-func (s *TaskService) Delete(ctx context.Context, id, actorID string) error {
+func (s *TaskService) Delete(ctx context.Context, userID, id, actorID string) error {
 	now := timeNow()
 	deletedAt := sql.NullTime{Time: now, Valid: true}
 
@@ -787,10 +874,11 @@ func (s *TaskService) Delete(ctx context.Context, id, actorID string) error {
 		DeletedAt: deletedAt,
 		UpdatedAt: now,
 		ID:        id,
+		UserID:    userID,
 	}); err != nil {
 		return err
 	}
 
 	payload := map[string]any{}
-	return s.publishEvent(ctx, domain.TaskDeleted, id, actorID, now, payload, domain.DeltaDeleted, nil, nil)
+	return s.publishEvent(ctx, domain.TaskDeleted, id, actorID, userID, now, payload, domain.DeltaDeleted, nil, nil)
 }
