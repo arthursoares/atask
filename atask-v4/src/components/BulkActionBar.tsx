@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react';
 import { todayLocal } from '../lib/dates';
-import { $selectedTaskIds, completeTask, deleteTask, updateTask, cancelTask } from '../store/index';
+import { $selectedTaskIds, completeTask, deleteTasksWithUndo, updateTask, cancelTask } from '../store/index';
 
 export default function BulkActionBar() {
   const selectedTaskIds = useStore($selectedTaskIds);
@@ -16,7 +16,8 @@ export default function BulkActionBar() {
   };
 
   const handleDelete = async () => {
-    for (const id of ids) await deleteTask(id);
+    // One grace-period toast for the whole batch — Undo restores all of them.
+    await deleteTasksWithUndo(ids);
     $selectedTaskIds.set(new Set());
   };
 
@@ -49,14 +50,14 @@ export default function BulkActionBar() {
     <div className="bulk-action-bar">
       <span className="bulk-action-count">{count} selected</span>
       <span className="bulk-action-separator" />
-      <button className="bulk-bar-btn" onClick={handleComplete}>✓ Complete</button>
-      <button className="bulk-bar-btn" onClick={handleScheduleToday}>★ Today</button>
-      <button className="bulk-bar-btn" onClick={handleScheduleSomeday}>Someday</button>
-      <button className="bulk-bar-btn" onClick={handleMoveToInbox}>Inbox</button>
-      <button className="bulk-bar-btn" onClick={handleCancel}>Cancel</button>
+      <button className="bulk-bar-btn" onClick={handleComplete} aria-label="Complete selected tasks">✓ Complete</button>
+      <button className="bulk-bar-btn" onClick={handleScheduleToday} aria-label="Schedule selected tasks for today">★ Today</button>
+      <button className="bulk-bar-btn" onClick={handleScheduleSomeday} aria-label="Schedule selected tasks for someday">Someday</button>
+      <button className="bulk-bar-btn" onClick={handleMoveToInbox} aria-label="Move selected tasks to inbox">Inbox</button>
+      <button className="bulk-bar-btn" onClick={handleCancel} aria-label="Mark selected tasks as cancelled">Mark Cancelled</button>
       <span className="bulk-action-separator" />
-      <button className="bulk-bar-btn danger" onClick={handleDelete}>Delete</button>
-      <button className="bulk-bar-btn" onClick={handleClearSelection} title="Clear selection">✕</button>
+      <button className="bulk-bar-btn danger" onClick={handleDelete} aria-label="Delete selected tasks">Delete</button>
+      <button className="bulk-bar-btn" onClick={handleClearSelection} title="Clear selection" aria-label="Clear selection">✕</button>
     </div>
   );
 }

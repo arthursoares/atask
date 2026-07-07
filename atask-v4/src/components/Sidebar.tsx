@@ -5,6 +5,8 @@ import {
   $areas,
   $projects,
   $tasks,
+  $inbox,
+  $today,
   $taskPointerDrag,
   completeProject,
   reopenProject,
@@ -193,17 +195,13 @@ function SidebarProjectGroup({
     const project = projects.find((p) => p.id === id);
     if (!project) return null;
     return (
-      <div
-        style={{
-          background: 'var(--sidebar-hover)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: '8px 12px',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
-          {project.title}
-        </span>
+      <div className="drag-clone drag-clone-compact">
+        <span
+          className="drag-clone-dot"
+          style={{ background: project.color || 'var(--accent)' }}
+          aria-hidden="true"
+        />
+        <span className="drag-clone-title">{project.title}</span>
       </div>
     );
   };
@@ -262,6 +260,9 @@ function SidebarProjectGroup({
       {renderDropZone(projects.length)}
       <DragOverlay
         activeId={reorderState.activeId}
+        grabOffsetX={reorderState.grabOffsetX}
+        grabOffsetY={reorderState.grabOffsetY}
+        settleTo={reorderState.settleTo}
         cursorX={reorderState.cursorX}
         cursorY={reorderState.cursorY}
         itemWidth={itemWidth}
@@ -276,6 +277,8 @@ export default function Sidebar() {
   const allProjects = useStore($projects);
   const allAreas = useStore($areas);
   const tasks = useStore($tasks);
+  const inboxTasks = useStore($inbox);
+  const todayTasks = useStore($today);
   const setActiveView = (view: ActiveView) => $activeView.set(view);
 
   const projects = [...allProjects].filter((project) => project.status === 0).sort((a, b) => a.index - b.index);
@@ -352,7 +355,17 @@ export default function Sidebar() {
       items.push({
         label: "Delete",
         danger: true,
-        onClick: () => deleteProject(project.id),
+        onClick: () => {
+          // Deleting a project cascades to its tasks and sections, and
+          // there is no undo path for it yet — confirm first.
+          const taskCount = $tasks.get().filter((t) => t.projectId === project.id && t.status === 0).length;
+          const detail = taskCount > 0
+            ? ` and the ${taskCount === 1 ? '1 task' : `${taskCount} tasks`} in it`
+            : '';
+          if (window.confirm(`Delete "${project.title}"${detail}? This cannot be undone.`)) {
+            deleteProject(project.id);
+          }
+        },
       });
 
       return items;
@@ -377,7 +390,11 @@ export default function Sidebar() {
       {
         label: "Delete",
         danger: true,
-        onClick: () => deleteArea(area.id),
+        onClick: () => {
+          if (window.confirm(`Delete the area "${area.title}"? This cannot be undone.`)) {
+            deleteArea(area.id);
+          }
+        },
       },
     ],
     [],
@@ -398,8 +415,11 @@ export default function Sidebar() {
     setRenamingProjectId(null);
   }, []);
 
-  const inboxCount = tasks.filter((task) => task.schedule === 0 && task.status === 0 && task.projectId === null).length;
-  const todayCount = tasks.filter((task) => task.schedule === 1 && task.status === 0).length;
+  // Derive badge counts from the same selectors the views render, so the
+  // badge can never disagree with what the user sees in the list. Completed
+  // tasks linger in those views until end of day — exclude them here.
+  const inboxCount = inboxTasks.filter((task) => task.status === 0).length;
+  const todayCount = todayTasks.filter((task) => task.status === 0).length;
 
   const projectTaskCounts = new Map<string, number>();
   for (const task of tasks) {
@@ -503,17 +523,8 @@ export default function Sidebar() {
     const area = areas.find((a) => a.id === id);
     if (!area) return null;
     return (
-      <div
-        style={{
-          background: 'var(--sidebar-hover)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: '8px 12px',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-primary)' }}>
-          {area.title}
-        </span>
+      <div className="drag-clone drag-clone-compact">
+        <span className="drag-clone-title">{area.title}</span>
       </div>
     );
   };
@@ -740,6 +751,9 @@ export default function Sidebar() {
 
       <DragOverlay
         activeId={areaReorder.reorderState.activeId}
+        grabOffsetX={areaReorder.reorderState.grabOffsetX}
+        grabOffsetY={areaReorder.reorderState.grabOffsetY}
+        settleTo={areaReorder.reorderState.settleTo}
         cursorX={areaReorder.reorderState.cursorX}
         cursorY={areaReorder.reorderState.cursorY}
         itemWidth={areaItemWidth}

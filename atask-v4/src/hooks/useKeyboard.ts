@@ -28,6 +28,9 @@ export default function useKeyboard() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // A component already handled this key (e.g. Space/Enter activating
+      // a focused control) — don't double-fire a global shortcut.
+      if (e.defaultPrevented) return;
       const meta = e.metaKey || e.ctrlKey;
       const shift = e.shiftKey;
       const key = e.key;
@@ -44,13 +47,6 @@ export default function useKeyboard() {
       if (meta && !shift && key === '3') { e.preventDefault(); setActiveView('upcoming'); return; }
       if (meta && !shift && key === '4') { e.preventDefault(); setActiveView('someday'); return; }
       if (meta && !shift && key === '5') { e.preventDefault(); setActiveView('logbook'); return; }
-
-      // ⇧⌘O: Toggle command palette (Things-compatible — NOT ⌘K which is Complete)
-      if (meta && shift && (key === 'o' || key === 'O')) {
-        e.preventDefault();
-        $showPalette.set(!showPalette);
-        return;
-      }
 
       // ⌘F: Open search
       if (meta && !shift && key === 'f') {
@@ -95,14 +91,14 @@ export default function useKeyboard() {
         return;
       }
 
-      // ⌘K: Open command palette (alternative to ⇧⌘O)
+      // ⌘K: Open command palette
       if (meta && !shift && key === 'k') {
         e.preventDefault();
         $showPalette.set(!showPalette);
         return;
       }
 
-      // ⇧⌘P: Open command palette (VS Code convention)
+      // ⇧⌘P: Open command palette (VS Code convention, alias for ⌘K)
       if (meta && shift && (key === 'p' || key === 'P')) {
         e.preventDefault();
         $showPalette.set(!showPalette);
@@ -145,8 +141,10 @@ export default function useKeyboard() {
         return;
       }
 
-      // ⌘O: Schedule selected task for Someday (without shift)
-      if (meta && !shift && (key === 'o')) {
+      // ⌘S: Schedule selected task for Someday (Things convention).
+      // Deliberately NOT ⌘O — that's the universal "Open" shortcut, and
+      // silently rescheduling a task on it surprised users.
+      if (meta && !shift && key === 's') {
         e.preventDefault();
         if (selectedTaskId) updateTask({ id: selectedTaskId, schedule: 2 });
         return;

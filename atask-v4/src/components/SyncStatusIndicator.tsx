@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react';
-import { $syncStatus } from '../store';
+import { $syncStatus, setActiveView } from '../store';
+import { triggerSync } from '../hooks/useTauri';
 
 /**
  * Sync status indicator. Reads the phase-based atom and renders one of
@@ -12,6 +13,9 @@ import { $syncStatus } from '../store';
  *   synced        green dot — successful last sync
  *   error         red warning
  *   (pending)     upload arrow + count (any phase can have pending ops)
+ *
+ * The indicator is a button: error/pending states retry the sync,
+ * unconfigured opens Settings — the tooltip alone was a dead end.
  */
 export default function SyncStatusIndicator() {
   const sync = useStore($syncStatus);
@@ -20,15 +24,18 @@ export default function SyncStatusIndicator() {
   // when something is actively wrong.
   if (sync.phase === 'error' || sync.lastError) {
     return (
-      <span
-        title={`Sync error: ${sync.lastError ?? 'unknown'}`}
+      <button
+        type="button"
+        title={`Sync error: ${sync.lastError ?? 'unknown'} — click to retry`}
+        aria-label="Sync error — retry sync"
         className="sync-status sync-status-error"
+        onClick={() => { void triggerSync().catch(() => {}); }}
       >
         <svg viewBox="0 0 16 16" className="sync-status-icon sync-status-icon-error" fill="var(--deadline-red)" stroke="none">
           <polygon points="8 2 15 14 1 14" />
           <text x="8" y="12.5" textAnchor="middle" fill="white" fontSize="7" fontWeight="700" fontFamily="system-ui">!</text>
         </svg>
-      </span>
+      </button>
     );
   }
 
@@ -36,24 +43,33 @@ export default function SyncStatusIndicator() {
   // represent concrete work that hasn't been flushed yet.
   if (sync.pendingOpsCount > 0) {
     return (
-      <span
-        title={`${sync.pendingOpsCount} pending operation${sync.pendingOpsCount !== 1 ? 's' : ''}`}
+      <button
+        type="button"
+        title={`${sync.pendingOpsCount} pending operation${sync.pendingOpsCount !== 1 ? 's' : ''} — click to sync now`}
+        aria-label={`${sync.pendingOpsCount} pending sync operations — sync now`}
         className="sync-status sync-status-pending"
+        onClick={() => { void triggerSync().catch(() => {}); }}
       >
         <svg viewBox="0 0 16 16" className="sync-status-icon sync-status-icon-pending" fill="none" stroke="var(--ink-tertiary)" strokeWidth={1.5}>
           <line x1="8" y1="13" x2="8" y2="4" />
           <polyline points="4 7 8 3 12 7" />
         </svg>
         <span className="sync-status-count">{sync.pendingOpsCount}</span>
-      </span>
+      </button>
     );
   }
 
   if (sync.phase === 'unconfigured') {
     return (
-      <span title="Sync not configured — enable in Settings" className="sync-status sync-status-unconfigured">
+      <button
+        type="button"
+        title="Sync not configured — click to open Settings"
+        aria-label="Sync not configured — open Settings"
+        className="sync-status sync-status-unconfigured"
+        onClick={() => setActiveView('settings')}
+      >
         <span className="sync-status-dot sync-status-dot-unconfigured" aria-hidden="true">—</span>
-      </span>
+      </button>
     );
   }
 

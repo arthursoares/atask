@@ -32,12 +32,20 @@ pub fn task_patch_body(task: &Task) -> String {
         section_id: &'a str,
         area_id: &'a str,
     }
+    // The Go handler parses these as plain "YYYY-MM-DD" and 400s on RFC3339.
+    // Rows synced before upsert_task normalized dates may still hold the
+    // full "YYYY-MM-DDT00:00:00Z" form — truncate to the date part here so
+    // the PATCH is never rejected (and the local edit silently lost).
+    fn date_only(v: Option<&str>) -> &str {
+        let s = v.unwrap_or("");
+        if s.len() > 10 { &s[..10] } else { s }
+    }
     let body = Body {
         title: &task.title,
         notes: &task.notes,
         schedule: task.schedule,
-        start_date: task.start_date.as_deref().unwrap_or(""),
-        deadline: task.deadline.as_deref().unwrap_or(""),
+        start_date: date_only(task.start_date.as_deref()),
+        deadline: date_only(task.deadline.as_deref()),
         project_id: task.project_id.as_deref().unwrap_or(""),
         section_id: task.section_id.as_deref().unwrap_or(""),
         area_id: task.area_id.as_deref().unwrap_or(""),
@@ -162,6 +170,20 @@ mod tests {
             keys, expected,
             "task PATCH body keys must exactly match Go handler's allowed fields"
         );
+    }
+
+    #[test]
+    fn task_patch_body_truncates_rfc3339_dates_to_date_only() {
+        // Rows synced from the Go API before upsert normalization stored
+        // dates as RFC3339; the PATCH body must still emit "YYYY-MM-DD"
+        // or the Go handler rejects the whole update with 400.
+        let mut task = sample_task();
+        task.start_date = Some("2026-06-10T00:00:00Z".into());
+        task.deadline = Some("2026-06-12T00:00:00Z".into());
+        let body = task_patch_body(&task);
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["startDate"], "2026-06-10");
+        assert_eq!(v["deadline"], "2026-06-12");
     }
 
     #[test]

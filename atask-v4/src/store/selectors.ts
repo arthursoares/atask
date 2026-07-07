@@ -2,18 +2,20 @@ import { computed } from 'nanostores';
 import { useStore } from '@nanostores/react';
 import { $tasks, $tagsByTaskId } from './tasks';
 import { $activeTagFilters } from './ui';
+import { todayLocal, localDateOf } from '../lib/dates';
 import type { Task } from '../types';
 
 // --- Helpers ---
 
 function todayDateStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return todayLocal();
 }
 
 function isCompletedToday(task: Task): boolean {
   if (!task.completedAt) return false;
-  return task.completedAt.slice(0, 10) === todayDateStr();
+  // completedAt is a full UTC timestamp — compare its *local* date,
+  // otherwise tasks completed after midnight UTC vanish from Today.
+  return localDateOf(task.completedAt) === todayDateStr();
 }
 
 function passesTagFilter(

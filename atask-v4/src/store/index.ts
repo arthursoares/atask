@@ -70,6 +70,7 @@ export {
   updateTask,
   duplicateTask,
   deleteTask,
+  deleteTasksWithUndo,
   reorderTasks,
   setTodayIndex,
   moveTaskToSection,
@@ -114,3 +115,7 @@ export {
   setTaskLocation,
   initialSync,
 } from './mutations';
+
+// Toasts
+export { $toasts, showToast, showErrorToast, dismissToast } from './toasts';
+export type { Toast } from './toasts';

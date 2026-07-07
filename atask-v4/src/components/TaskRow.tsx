@@ -7,6 +7,7 @@ import {
   $tagsByTaskId,
   $selectedTaskIds,
   $checklistCountsByTaskId,
+  $showQuickMove,
   completeTask,
   reopenTask,
   selectTask,
@@ -136,7 +137,7 @@ export default function TaskRow({
         </div>
 
         <div className="task-content">
-          <span className={`task-title${isCompleted ? ' completed' : ''}`}>
+          <span className={`task-title${isCompleted ? ' completed' : ''}`} title={task.title}>
             {task.title}
           </span>
 
@@ -153,45 +154,46 @@ export default function TaskRow({
           <div className="task-actions" data-reorder-ignore>
             <button
               className="task-action-btn today-btn"
-              title="Schedule for Today"
+              title="Schedule for Today (⌘T)"
+              aria-label="Schedule for Today"
               onClick={(e) => {
                 e.stopPropagation();
                 const today = todayLocal();
                 updateTask({ id: task.id, schedule: 1, startDate: today });
               }}
             >
-              ★
-            </button>
-            <button
-              className="task-action-btn"
-              title="Schedule"
-              onClick={(e) => {
-                e.stopPropagation();
-                const today = todayLocal();
-                updateTask({ id: task.id, schedule: 1, startDate: today });
-              }}
-            >
-              📅
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="none" aria-hidden="true">
+                <polygon points="8 2 9.8 5.6 14 6.2 11 9 11.8 13 8 11.2 4.2 13 5 9 2 6.2 6.2 5.6" />
+              </svg>
             </button>
             <button
               className="task-action-btn someday-btn"
-              title="Someday"
+              title="Schedule for Someday (⌘S)"
+              aria-label="Schedule for Someday"
               onClick={(e) => {
                 e.stopPropagation();
                 updateTask({ id: task.id, schedule: 2 });
               }}
             >
-              💤
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <circle cx="8" cy="8" r="5.5" />
+                <line x1="8" y1="5" x2="8" y2="8" />
+                <line x1="8" y1="8" x2="10.5" y2="10" />
+              </svg>
             </button>
             <button
               className="task-action-btn"
-              title="Move to Project"
+              title="Move to Project (⇧⌘M)"
+              aria-label="Move to project"
               onClick={(e) => {
                 e.stopPropagation();
-                // noop for now
+                selectTask(task.id);
+                $showQuickMove.set(true);
               }}
             >
-              📁
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <path d="M2 4.5c0-.8.7-1.5 1.5-1.5h3l1.5 2h4.5c.8 0 1.5.7 1.5 1.5v5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z" />
+              </svg>
             </button>
           </div>
         )}

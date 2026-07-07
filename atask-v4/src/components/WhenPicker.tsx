@@ -167,24 +167,28 @@ export default function WhenPicker({
   return (
     <PopoverPanel title="When" className="when-popover" popoverRef={popoverRef}>
 
-      <div
+      <button
+        type="button"
         className={`when-option${isToday ? ' selected' : ''}`}
+        aria-pressed={isToday}
         onClick={handleToday}
       >
         <span className="when-icon">★</span>
         <span>Today</span>
         {isToday && <span className="when-check">✓</span>}
-      </div>
+      </button>
 
       {/* This Evening */}
-      <div
+      <button
+        type="button"
         className={`when-option${isEvening ? ' selected' : ''}`}
+        aria-pressed={isEvening}
         onClick={handleEvening}
       >
         <span className="when-icon">🌙</span>
         <span>This Evening</span>
         {isEvening && <span className="when-check">✓</span>}
-      </div>
+      </button>
 
       {/* Mini Calendar */}
       <div className="when-cal">
@@ -230,14 +234,16 @@ export default function WhenPicker({
               if (isSelected) cls += ' selected-day';
               if (isPast) cls += ' past';
               return (
-                <div
+                <button
+                  type="button"
                   key={ci}
                   className={cls}
                   onClick={() => handleDay(day)}
-                  aria-disabled={isPast ? true : undefined}
+                  disabled={isPast}
+                  aria-label={`${MONTH_NAMES[viewMonth]} ${day}, ${viewYear}`}
                 >
                   {day}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -245,14 +251,16 @@ export default function WhenPicker({
       </div>
 
       {/* Someday */}
-      <div
+      <button
+        type="button"
         className={`when-option${isSomeday ? ' selected' : ''}`}
+        aria-pressed={isSomeday}
         onClick={handleSomeday}
       >
         <span className="when-icon">📦</span>
         <span>Someday</span>
         {isSomeday && <span className="when-check">✓</span>}
-      </div>
+      </button>
 
       {/* Add Reminder (disabled) */}
       <div className="when-option when-disabled">
@@ -261,7 +269,7 @@ export default function WhenPicker({
       </div>
 
       <div className="when-sep" />
-      <div className="when-clear" onClick={handleClear}>Clear</div>
+      <button type="button" className="when-clear" onClick={handleClear}>Clear</button>
     </PopoverPanel>
   );
 }

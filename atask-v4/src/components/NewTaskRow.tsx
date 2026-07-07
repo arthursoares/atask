@@ -40,7 +40,23 @@ export default function NewTaskRow({ onCreate }: NewTaskRowProps) {
   };
 
   return (
-    <div className="new-task-inline" onClick={!editing ? startEditing : undefined}>
+    <div
+      className="new-task-inline"
+      role={!editing ? 'button' : undefined}
+      tabIndex={!editing ? 0 : undefined}
+      aria-label={!editing ? 'Create new task' : undefined}
+      onClick={!editing ? startEditing : undefined}
+      onKeyDown={
+        !editing
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEditing();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="new-task-plus">+</div>
       {editing ? (
         <input

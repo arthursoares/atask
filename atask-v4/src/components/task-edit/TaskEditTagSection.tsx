@@ -45,12 +45,14 @@ export default function TaskEditTagSection({
             )}
           </span>
         ))}
-        <span
+        <button
+          type="button"
           className="task-edit-add-link"
+          aria-label="Add tag"
           onClick={onTogglePicker}
         >
           {addLabel}
-        </span>
+        </button>
       </div>
       {showPicker ? picker : null}
     </TaskEditField>

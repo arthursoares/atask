@@ -28,10 +28,10 @@ export default function MenuList({
   onItemClick,
 }: MenuListProps) {
   return (
-    <div className="ui-menu-list">
+    <div className="ui-menu-list" role="menu">
       {items.map((item, i) => {
         if ("separator" in item) {
-          return <div key={i} className="ui-menu-separator" />;
+          return <div key={i} className="ui-menu-separator" role="separator" />;
         }
 
         const isActive = activeIndex === i;
@@ -40,6 +40,8 @@ export default function MenuList({
           <button
             key={i}
             type="button"
+            role="menuitem"
+            aria-current={isActive || undefined}
             className={[
               "ui-menu-item",
               isActive ? "is-active" : "",

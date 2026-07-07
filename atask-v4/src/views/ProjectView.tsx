@@ -151,6 +151,9 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
         </Button>
       </div>
 
+      {/* Project notes — the data model has them; don't hide them. */}
+      {project.notes && <p className="project-notes">{project.notes}</p>}
+
       {/* Sectionless tasks */}
       <ProjectTaskList
         tasks={sectionlessTasks}

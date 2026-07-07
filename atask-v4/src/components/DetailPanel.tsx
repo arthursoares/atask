@@ -137,11 +137,13 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
   const repeatLabel = repeatRuleLabel(task.repeatRule);
 
   return (
-    <div className="detail-panel">
+    <div className="detail-panel" role="complementary" aria-label="Task details">
       <div className="detail-header">
         <input
           className="detail-title"
           value={titleValue}
+          aria-label="Task title"
+          title={titleValue}
           onChange={(e) => setTitleValue(e.target.value)}
         />
       </div>
@@ -183,12 +185,14 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
 
         <TaskEditField label="Repeat" popover>
           <div className="task-edit-inline-row">
-            <span
+            <button
+              type="button"
               className="task-edit-add-link"
+              aria-label={repeatLabel ? 'Change repeat rule' : 'Add repeat rule'}
               onClick={() => setShowRepeatPicker((v) => !v)}
             >
               {repeatLabel ?? '+ Add'}
-            </span>
+            </button>
             {repeatLabel && (
               <button
                 type="button"
@@ -211,12 +215,14 @@ export default function DetailPanel({ taskId }: DetailPanelProps) {
 
         <TaskEditField label="Location" popover>
           <div className="task-edit-inline-row">
-            <span
+            <button
+              type="button"
               className="task-edit-add-link"
+              aria-label={currentLocation ? 'Change location' : 'Add location'}
               onClick={() => setShowLocationPicker((v) => !v)}
             >
               {currentLocation?.name ?? '+ Add'}
-            </span>
+            </button>
             {currentLocation && (
               <button
                 type="button"
